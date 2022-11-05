@@ -5,13 +5,13 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v2
     - name: add custom deb repository
       uses: myci-actions/add-deb-repo@10
       with:
-        repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ focal main restricted universe multiverse
+        repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
         repo-name: sources
     - name: Install build dependencies
       run: |
