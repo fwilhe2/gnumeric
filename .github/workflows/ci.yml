@@ -17,19 +17,21 @@ jobs:
       run: |
         sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
     - run: mkdir mybuild
-    - name: Configure
+    - name: Autogen
       run: |
         ./autogen.sh
     - name: Configure
       run: |
-        ./configure --prefix=/home/runner/work/gnumeric/mybuild
+        ./configure --prefix=/home/runner/work/gnumeric/gnumeric/mybuild
     - name: Make
       run: |
         make
     - name: Make install
       run: |
         sudo make install
+    - run: ls -l
+    - run: ls -l mybuild
     - uses: actions/upload-artifact@v3
       with:
-        name: my-artifact
+        name: my-gnumeric-build
         path: mybuild
