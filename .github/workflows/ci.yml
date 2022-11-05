@@ -15,7 +15,7 @@ jobs:
         repo-name: sources
     - name: Install build dependencies
       run: |
-        sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools
+        sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
     - name: Configure
       run: |
         ./autogen.sh
