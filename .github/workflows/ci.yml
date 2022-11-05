@@ -16,13 +16,20 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
+    - run: make mybuild
     - name: Configure
       run: |
         ./autogen.sh
     - name: Configure
       run: |
-        ./configure
+        ./configure --prefix=/home/runner/work/gnumeric/mybuild
     - name: Make
       run: |
         make
-
+    - name: Make install
+      run: |
+        make install
+    - uses: actions/upload-artifact@v3
+      with:
+        name: my-artifact
+        path: mybuild
