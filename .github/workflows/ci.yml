@@ -5,14 +5,33 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: add custom deb repository
       uses: myci-actions/add-deb-repo@10
       with:
-        repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ focal main restricted universe multiverse
+        repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
         repo-name: sources
     - name: Install build dependencies
       run: |
-        sudo apt-get update -y && sudo apt-get -y build-dep gnumeric
+        sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
+    - run: mkdir mybuild
+    - name: Autogen
+      run: |
+        ./autogen.sh
+    - name: Configure
+      run: |
+        ./configure --prefix=/home/runner/work/gnumeric/gnumeric/mybuild
+    - name: Make
+      run: |
+        make
+    - name: Make install
+      run: |
+        sudo make install
+    - run: ls -l
+    - run: ls -l mybuild
+    - uses: actions/upload-artifact@v3
+      with:
+        name: my-gnumeric-build
+        path: mybuild
