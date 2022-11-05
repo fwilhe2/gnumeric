@@ -7,7 +7,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: add custom deb repository
       uses: myci-actions/add-deb-repo@10
       with:
@@ -16,7 +16,7 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
-    - run: make mybuild
+    - run: mkdir mybuild
     - name: Configure
       run: |
         ./autogen.sh
