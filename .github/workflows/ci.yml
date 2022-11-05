@@ -18,6 +18,9 @@ jobs:
         sudo apt-get update -y && sudo apt-get -y build-dep gnumeric
     - name: Configure
       run: |
+        ./autogen.sh
+    - name: Configure
+      run: |
         ./configure
     - name: Make
       run: |
