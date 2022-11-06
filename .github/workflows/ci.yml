@@ -14,24 +14,22 @@ jobs:
         repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
         repo-name: sources
     - name: Install build dependencies
-      run: |
-        sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
+      run: sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
     - run: mkdir mybuild
     - name: Autogen
-      run: |
-        ./autogen.sh
+      run: ./autogen.sh
     - name: Configure
-      run: |
-        ./configure --prefix=/home/runner/work/gnumeric/gnumeric/mybuild
+      run: ./configure --prefix=$PWD/mybuild
     - name: Make
-      run: |
-        make
-    - name: Make install
-      run: |
-        sudo make install
-    - run: ls -l
-    - run: ls -l mybuild
-    - uses: actions/upload-artifact@v3
+      run: make
+    - name: Make install to a local directory
+      run: sudo make install
+    - run: echo 'LD_LIBRARY_PATH=$PWD/lib ./bin/gnumeric' > $PWD/mybuild/run.sh
+    - run: chmod +x $PWD/mybuild/run.sh
+    - name: Tar files to preserve file permissions
+      run: tar -cvf my-gnumeric-build.tar mybuild
+    - name: Upload built Artifact
+      uses: actions/upload-artifact@v3
       with:
         name: my-gnumeric-build
-        path: mybuild
+        path: my-gnumeric-build.tar
