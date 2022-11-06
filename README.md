@@ -10,7 +10,21 @@ This is a fork of http://www.gnumeric.org/ used for educational purposes.
 ## Building
 
 ```
-./autogen.sh 
+./autogen.sh
 ./configure
 make
 ```
+
+## Running the locally built version
+
+```
+LD_LIBRARY_PATH=$PWD/src/.libs ./src/gnumeric
+```
+
+## License
+
+Gnumeric is available under your choice of two licenses:
+
+    GPL version 2 -- see the file COPYING-gpl2
+    GPL version 3 -- see the file COPYING-gpl3
+
