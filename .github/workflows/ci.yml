@@ -19,15 +19,15 @@ jobs:
     - name: Autogen
       run: ./autogen.sh
     - name: Configure
-      run: ./configure --prefix=/home/runner/work/gnumeric/gnumeric/mybuild
+      run: ./configure --prefix=$PWD/mybuild
     - name: Make
       run: make
     - name: Make install to a local directory
       run: sudo make install
-    - run: echo 'LD_LIBRARY_PATH=$PWD/lib ./bin/gnumeric' > /home/runner/work/gnumeric/gnumeric/mybuild/run.sh
-    - run: chmod +x /home/runner/work/gnumeric/gnumeric/mybuild/run.sh
+    - run: echo 'LD_LIBRARY_PATH=$PWD/lib ./bin/gnumeric' > $PWD/mybuild/run.sh
+    - run: chmod +x $PWD/mybuild/run.sh
     - name: Tar files to preserve file permissions
-      run: tar -cvf my-gnumeric-build.tar /home/runner/work/gnumeric/gnumeric/mybuild
+      run: tar -cvf my-gnumeric-build.tar mybuild
     - name: Upload built Artifact
       uses: actions/upload-artifact@v3
       with:
