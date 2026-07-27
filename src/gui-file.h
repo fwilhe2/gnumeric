@@ -1,5 +1,5 @@
-#ifndef _GNM_GUI_FILE_H_
-# define _GNM_GUI_FILE_H_
+#ifndef GNM_GUI_FILE_H_
+#define GNM_GUI_FILE_H_
 
 #include <gnumeric-fwd.h>
 
@@ -17,17 +17,18 @@ typedef enum {
 
 gboolean gui_file_save_as   (WBCGtk *wbcg, WorkbookView *wbv,
 			     GnmFileSaveAsStyle type,
-			     char const *default_format);
+			     char const *default_format,
+			     gboolean from_save);
 gboolean gui_file_save      (WBCGtk *wbcg, WorkbookView *wbv);
 gboolean gui_file_export_repeat (WBCGtk *wbcg);
 void     gui_file_open      (WBCGtk *wbcg, GnmFileOpenStyle type,
 			     char const *default_format);
 void     gui_wb_view_show   (WBCGtk *wbcg, WorkbookView *wbv);
-WorkbookView *gui_file_read (WBCGtk *wbcg, char const *file_name,
+WorkbookView *gui_file_read (WBCGtk *wbcg, char const *uri,
 			     GOFileOpener const *optional_format,
 			     gchar const *optional_encoding);
 gboolean gnm_gui_file_template  (WBCGtk *wbcg, char const *uri);
 
 G_END_DECLS
 
-#endif /* _GNM_GUI_FILE_H_ */
+#endif /* GNM_GUI_FILE_H_ */

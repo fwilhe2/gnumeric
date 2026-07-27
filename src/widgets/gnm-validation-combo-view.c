@@ -1,4 +1,3 @@
-
 /*
  * gnm-validation-combo-view.c: A canvas object for Validate from list
  * 				in cell combos
@@ -191,7 +190,7 @@ vcombo_set_bounds (SheetObjectView *sov, double const *coords, gboolean visible)
 		goc_item_set (sheet_object_view_get_item (sov),
 			/* put it outside the cell */
 			"x",	  ((coords[2] >= 0.)? coords[2] / scale: (coords[0] / scale - h + 1.)),
-			"y",	  coords [3] / scale - h + 1.,
+			"y",	  coords[3] / scale - h + 1.,
 			"width",  h,	/* force a square, use h for width too */
 			"height", h,
 			NULL);

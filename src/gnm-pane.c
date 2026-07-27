@@ -68,7 +68,7 @@ static GtkTargetEntry const drag_types_out[] = {
 static gboolean
 gnm_pane_guru_key (WBCGtk const *wbcg, GdkEvent *event)
 {
-	GtkWidget *entry, *guru = wbc_gtk_get_guru (wbcg);
+	GtkWidget *entry, *guru = wbcg_get_guru (wbcg);
 
 	if (guru == NULL)
 		return FALSE;
@@ -148,8 +148,8 @@ gnm_pane_key_mode_sheet (GnmPane *pane, GdkEventKey *kevent,
 	SheetView *sv = sc->view;
 	Sheet *sheet = sv->sheet;
 	WBCGtk *wbcg = scg->wbcg;
-	WorkbookControl * wbc = scg_wbc(scg);
-	Workbook * wb = wb_control_get_workbook(wbc);
+	WorkbookControl * wbc = scg_wbc (scg);
+	Workbook * wb = wb_control_get_workbook (wbc);
 	gboolean delayed_movement = FALSE;
 	gboolean jump_to_bounds;
 	gboolean is_enter = FALSE;
@@ -585,7 +585,7 @@ gnm_pane_key_press (GtkWidget *widget, GdkEventKey *event)
 	/* Object manipulation */
 	if (scg->selected_objects != NULL ||
 	     scg->wbcg->new_object != NULL) {
-		if (wbc_gtk_get_guru (scg->wbcg) == NULL &&
+		if (wbcg_get_guru (scg->wbcg) == NULL &&
 		    gnm_pane_object_key_press (pane, event))
 			return TRUE;
 	}
@@ -822,14 +822,18 @@ cb_pane_init_objs (GnmPane *pane)
 	GSList *ptr, *list;
 
 	if (sheet != NULL) {
+		sheet_freeze_object_views (sheet, TRUE);
+
 		/* List is stored in reverse stacking order.  Top of stack is
-		 * first.  On creation new foocanvas item get added to
+		 * first.  On creation new canvas item get added to
 		 * the front, so we need to create the views in reverse order */
 		list = g_slist_reverse (g_slist_copy (sheet->sheet_objects));
 		for (ptr = list; ptr != NULL ; ptr = ptr->next)
 			sheet_object_new_view (ptr->data,
 				(SheetObjectViewContainer *)pane);
 		g_slist_free (list);
+
+		sheet_freeze_object_views (sheet, FALSE);
 	}
 }
 
@@ -996,9 +1000,7 @@ gnm_pane_class_init (GnmPaneClass *klass)
 	widget_class->key_release_event	   = gnm_pane_key_release;
 	widget_class->focus_in_event	   = gnm_pane_focus_in;
 	widget_class->focus_out_event	   = gnm_pane_focus_out;
-#ifdef HAVE_GTK_WIDGET_CLASS_SET_CSS_NAME
 	gtk_widget_class_set_css_name (widget_class, "pane");
-#endif
 
 	gtk_widget_class_install_style_property
 		(widget_class,
@@ -1248,6 +1250,15 @@ gnm_pane_drag_dest_init (GnmPane *pane, SheetControlGUI *scg)
 		NULL);
 }
 
+/**
+ * gnm_pane_new:
+ * @scg: #SheetControlGUI
+ * @col_headers: whether to show column headers
+ * @row_headers: whether to show row headers
+ * @index: the pane index
+ *
+ * Returns: (transfer full): a new #GnmPane.
+ **/
 GnmPane *
 gnm_pane_new (SheetControlGUI *scg,
 	      gboolean col_headers, gboolean row_headers, int index)
@@ -1304,7 +1315,7 @@ gnm_pane_new (SheetControlGUI *scg,
  * @x: In canvas coords
  * @col_origin: optionally return the canvas coord of the col
  *
- * Returns the column containing canvas coord @x
+ * Returns: the column containing canvas coord @x
  **/
 int
 gnm_pane_find_col (GnmPane const *pane, gint64 x, gint64 *col_origin)
@@ -1354,7 +1365,7 @@ gnm_pane_find_col (GnmPane const *pane, gint64 x, gint64 *col_origin)
  * @y: In canvas coords
  * @row_origin: optionally return the canvas coord of the row
  *
- * Returns the column containing canvas coord @y
+ * Returns: the column containing canvas coord @y
  **/
 int
 gnm_pane_find_row (GnmPane const *pane, gint64 y, gint64 *row_origin)
@@ -1544,11 +1555,11 @@ gnm_pane_redraw_range (GnmPane *pane, GnmRange const *r)
 	x2 = (tmp.end.col < gnm_sheet_get_last_col (sheet))
 		? 4 + 1 + x1 + scg_colrow_distance_get (scg, TRUE,
 							tmp.start.col, tmp.end.col+1)
-		: G_MAXINT64;
+		: GNM_CANVAS_INF;
 	y2 = (tmp.end.row < gnm_sheet_get_last_row (sheet))
 		? 4 + 1 + y1 + scg_colrow_distance_get (scg, FALSE,
 							tmp.start.row, tmp.end.row+1)
-		: G_MAXINT64;
+		: GNM_CANVAS_INF;
 
 	goc_canvas_invalidate (&pane->simple.canvas, (x1-2) / scale, (y1-2) / scale, x2 / scale, y2 / scale);
 }
@@ -1755,8 +1766,10 @@ cb_pane_sliding (GnmPane *pane)
  * gnm_pane_handle_motion:
  * @pane: The GnmPane managing the scroll
  * @canvas: The Canvas the event comes from
- * @slide_flags:
- * @handler: (scope async): The handler when sliding
+ * @x: x coordinate
+ * @y: y coordinate
+ * @slide_flags: #GnmPaneSlideFlags
+ * @slide_handler: (scope async): The handler when sliding
  * @user_data: closure data
  *
  * Handle a motion event from a @canvas and scroll the @pane
@@ -2061,8 +2074,8 @@ gnm_pane_display_obj_size_tip (GnmPane *pane, GocItem *ctrl_pt)
 	msg = g_strdup_printf (_("%.1f x %.1f pts\n%d x %d pixels"),
 		MAX (fabs (pts[2] - pts[0]), 0),
 		MAX (fabs (pts[3] - pts[1]), 0),
-		MAX ((int)floor (fabs (coords [2] - coords [0]) + 0.5), 0),
-		MAX ((int)floor (fabs (coords [3] - coords [1]) + 0.5), 0));
+		MAX ((int)floor (fabs (coords[2] - coords[0]) + 0.5), 0),
+		MAX ((int)floor (fabs (coords[3] - coords[1]) + 0.5), 0));
 	gtk_label_set_text (GTK_LABEL (pane->size_tip), msg);
 	g_free (msg);
 }
@@ -2423,12 +2436,6 @@ cb_slide_handler (GnmPane *pane, GnmPaneSlideInfo const *info)
 	return TRUE;
 }
 
-static void
-cb_ptr_array_free (GPtrArray *actions)
-{
-	g_ptr_array_free (actions, TRUE);
-}
-
 /* event and so can be NULL */
 void
 gnm_pane_display_object_menu (GnmPane *pane, SheetObject *so, GdkEvent *event)
@@ -2453,7 +2460,7 @@ gnm_pane_display_object_menu (GnmPane *pane, SheetObject *so, GdkEvent *event)
 		(sheet_object_get_view (so, (SheetObjectViewContainer *) pane),
 		 actions, &i);
 	g_object_set_data_full (G_OBJECT (menu), "actions", actions,
-		(GDestroyNotify)cb_ptr_array_free);
+				(GDestroyNotify)g_ptr_array_unref);
 	gtk_widget_show_all (menu);
 	gnumeric_popup_menu (GTK_MENU (menu), event);
 }
@@ -2511,8 +2518,8 @@ control_point_set_cursor (SheetControlGUI const *scg, GocItem *ctrl_pt)
 	SheetObject *so = g_object_get_data (G_OBJECT (ctrl_pt), "so");
 	int idx = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (ctrl_pt), "index"));
 	double const *coords = g_hash_table_lookup (scg->selected_objects, so);
-	gboolean invert_h = coords [0] > coords [2];
-	gboolean invert_v = coords [1] > coords [3];
+	gboolean invert_h = coords[0] > coords[2];
+	gboolean invert_v = coords[1] > coords[3];
 	GdkCursorType cursor;
 
 	if (goc_canvas_get_direction (ctrl_pt->canvas) == GOC_DIRECTION_RTL)
@@ -2890,6 +2897,7 @@ static GSF_CLASS (ItemAcetate, item_acetate,
 /**
  * new_control_point:
  * @pane: #GnmPane
+ * @so: #SheetObject
  * @idx:    control point index to be created
  * @x:      x coordinate of control point
  * @y:      y coordinate of control point
@@ -3015,7 +3023,7 @@ set_acetate_coords (GnmPane *pane, SheetObject *so, GocItem **ctrl_pts,
 		if (NULL == sov)
 			sov = sheet_object_new_view (so, (SheetObjectViewContainer *)pane);
 
-		coords [0] = l; coords [2] = r; coords [1] = t; coords [3] = b;
+		coords[0] = l; coords[2] = r; coords[1] = t; coords[3] = b;
 		if (NULL != sov)
 			sheet_object_view_set_bounds (sov, coords, TRUE);
 		normalize_high_low (r, l);

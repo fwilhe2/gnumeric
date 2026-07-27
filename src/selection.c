@@ -35,8 +35,7 @@
 
 /**
  * sv_selection_calc_simplification:
- * @sv:
- * @mode:
+ * @sv: #SheetView
  *
  * Create the simplified selection list if necessary
  *
@@ -175,7 +174,7 @@ sv_is_full_range_selected (SheetView const *sv, GnmRange const *r)
 	return FALSE;
 }
 
-/*
+/**
  * sv_is_colrow_selected:
  * @sv: containing the selection
  * @colrow: The column or row number we are interested in.
@@ -183,12 +182,14 @@ sv_is_full_range_selected (SheetView const *sv, GnmRange const *r)
  *
  * Searches the selection list to see whether the entire col/row specified is
  * contained by the section regions.  Since the selection is stored as the set
- * overlapping user specifed regions we can safely search for the range directly.
+ * overlapping user specified regions we can safely search for the range directly.
  *
  * Eventually to be completely correct and deal with the case of someone manually
  * selection an entire col/row, in separate chunks,  we will need to do something
  * more advanced.
- */
+ *
+ * Returns: %TRUE if the col/row is selected.
+ **/
 gboolean
 sv_is_colrow_selected (SheetView const *sv, int colrow, gboolean is_col)
 {
@@ -325,7 +326,7 @@ sv_selection_row_type (SheetView const *sv, int row)
 
 /*
  * Quick utility routine to test intersect of line segments.
- * Returns : 5 sA == sb eA == eb	a == b
+ * Returns:  5 sA == sb eA == eb	a == b
  *           4 --sA--sb--eb--eA--	a contains b
  *           3 --sA--sb--eA--eb--	overlap left
  *           2 --sb--sA--eA--eb--	b contains a
@@ -414,7 +415,7 @@ selection_first_range (SheetView const *sv,
 
 	r = l->data;
 	if (cc != NULL && l->next != NULL) {
-		GError *msg = g_error_new (go_error_invalid(), 0,
+		GError *msg = g_error_new (go_error_invalid (), 0,
 			_("%s does not support multiple ranges"), cmd_name);
 		go_cmd_context_error (cc, msg);
 		g_error_free (msg);
@@ -634,6 +635,17 @@ set_menu_flags:
 	 */
 }
 
+/**
+ * sv_selection_set:
+ * @sv: #SheetView
+ * @edit: #GnmCellPos
+ * @base_col: column
+ * @base_row: row
+ * @move_col: column
+ * @move_row: row
+ *
+ * Sets the selection.
+ **/
 void
 sv_selection_set (SheetView *sv, GnmCellPos const *edit,
 		  int base_col, int base_row,
@@ -646,6 +658,12 @@ sv_selection_set (SheetView *sv, GnmCellPos const *edit,
 		move_col, move_row, FALSE);
 }
 
+/**
+ * sv_selection_simplify:
+ * @sv: #SheetView
+ *
+ * Simplifies the selection.
+ **/
 void
 sv_selection_simplify (SheetView *sv)
 {
@@ -672,12 +690,13 @@ sv_selection_simplify (SheetView *sv)
 /**
  * sv_selection_add_full:
  * @sv: #SheetView whose selection is append to.
- * @edit_col:
+ * @edit_col: column
  * @edit_row: cell to mark as the new edit cursor.
- * @base_col:
+ * @base_col: column
  * @base_row: stationary corner of the newly selected range.
- * @move_col:
+ * @move_col: column
  * @move_row: moving corner of the newly selected range.
+ * @mode: #GnmSelectionMode
  *
  * Prepends a range to the selection list and sets the edit position.
  **/
@@ -705,6 +724,13 @@ sv_selection_add_full (SheetView *sv,
 		move_col, move_row, TRUE);
 }
 
+/**
+ * sv_selection_add_range:
+ * @sv: #SheetView
+ * @range: #GnmRange
+ *
+ * Adds a range to the selection.
+ **/
 void
 sv_selection_add_range (SheetView *sv, GnmRange const *r)
 {
@@ -712,6 +738,16 @@ sv_selection_add_range (SheetView *sv, GnmRange const *r)
 			       r->start.col, r->start.row, r->end.col, r->end.row,
 			       GNM_SELECTION_MODE_ADD);
 }
+
+/**
+ * sv_selection_add_pos:
+ * @sv: #SheetView
+ * @col: column
+ * @row: row
+ * @mode: #GnmSelectionMode
+ *
+ * Adds a position to the selection.
+ **/
 void
 sv_selection_add_pos (SheetView *sv, int col, int row, GnmSelectionMode mode)
 {
@@ -788,9 +824,9 @@ sv_selection_reset (SheetView *sv)
 /**
  * selection_get_ranges:
  * @sv: #SheetView
- * @allow_intersection: Divide the selection into nonoverlapping subranges.
+ * @allow_intersection: Divide the selection into non-overlapping subranges.
  *
- * Caller is responsible for free the list and the content.
+ * Caller is responsible for freeing the list and the content.
  * Returns: (element-type GnmRange) (transfer full):
  **/
 GSList *
@@ -852,12 +888,12 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 						    b->start.col, b->end.col);
 
 #ifdef DEBUG_SELECTION
-			g_printerr ("col = %d\na = %s", col_intersect, col_name(a->start.col));
+			g_printerr ("col = %d\na = %s", col_intersect, col_name (a->start.col));
 			if (a->start.col != a->end.col)
-				g_printerr (" -> %s", col_name(a->end.col));
-			g_printerr ("\nb = %s", col_name(b->start.col));
+				g_printerr (" -> %s", col_name (a->end.col));
+			g_printerr ("\nb = %s", col_name (b->start.col));
 			if (b->start.col != b->end.col)
-				g_printerr (" -> %s\n", col_name(b->end.col));
+				g_printerr (" -> %s\n", col_name (b->end.col));
 			else
 				g_printerr ("\n");
 #endif
@@ -905,9 +941,9 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 
 			/* Cross product of intersection cases */
 			switch (col_intersect) {
-			case 4 : /* a contains b */
+			case 4: /* a contains b */
 				switch (row_intersect) {
-				case 4 : /* a contains b */
+				case 4: /* a contains b */
 					/* Old region contained by new region */
 
 					/* remove old region */
@@ -915,12 +951,12 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 					b = NULL;
 					break;
 
-				case 3 : /* overlap top */
+				case 3: /* overlap top */
 					/* Shrink existing range */
 					b->start.row = a->end.row + 1;
 					break;
 
-				case 2 : /* b contains a */
+				case 2: /* b contains a */
 					if (a->end.col == b->end.col) {
 						/* Shrink existing range */
 						a->end.col = b->start.col - 1;
@@ -936,7 +972,7 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 					a->start.col = b->end.col + 1;
 					break;
 
-				case 1 : /* overlap bottom */
+				case 1: /* overlap bottom */
 					/* Shrink existing range */
 					a->start.row = b->end.row + 1;
 					break;
@@ -946,14 +982,14 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 				}
 				break;
 
-			case 3 : /* overlap left */
+			case 3: /* overlap left */
 				switch (row_intersect) {
-				case 4 : /* a contains b */
+				case 4: /* a contains b */
 					/* Shrink old region */
 					b->start.col = a->end.col + 1;
 					break;
 
-				case 3 : /* overlap top */
+				case 3: /* overlap top */
 					/* Split region */
 					if (b->start.row > 0) {
 						tmp = gnm_range_dup (a);
@@ -963,12 +999,12 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 					}
 					/* fall through */
 
-				case 2 : /* b contains a */
+				case 2: /* b contains a */
 					/* shrink the left segment */
 					a->end.col = b->start.col - 1;
 					break;
 
-				case 1 : /* overlap bottom */
+				case 1: /* overlap bottom */
 					/* Split region */
 					if (b->end.row < gnm_sheet_get_last_row (sv->sheet)) {
 						tmp = gnm_range_dup (a);
@@ -991,20 +1027,20 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 				}
 				break;
 
-			case 2 : /* b contains a */
+			case 2: /* b contains a */
 				switch (row_intersect) {
-				case 3 : /* overlap top */
+				case 3: /* overlap top */
 					/* shrink the top segment */
 					a->end.row = b->start.row - 1;
 					break;
 
-				case 2 : /* b contains a */
+				case 2: /* b contains a */
 					/* remove the selection */
 					g_free (a);
 					a = NULL;
 					continue;
 
-				case 4 : /* a contains b */
+				case 4: /* a contains b */
 					if (a->end.row == b->end.row) {
 						/* Shrink existing range */
 						a->end.row = b->start.row - 1;
@@ -1018,7 +1054,7 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 					}
 					/* fall through */
 
-				case 1 : /* overlap bottom */
+				case 1: /* overlap bottom */
 					/* shrink the top segment */
 					a->start.row = b->end.row + 1;
 					break;
@@ -1028,14 +1064,14 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 				}
 				break;
 
-			case 1 : /* overlap right */
+			case 1: /* overlap right */
 				switch (row_intersect) {
-				case 4 : /* a contains b */
+				case 4: /* a contains b */
 					/* Shrink old region */
 					b->end.col = a->start.col - 1;
 					break;
 
-				case 3 : /* overlap top */
+				case 3: /* overlap top */
 					/* Split region */
 					tmp = gnm_range_dup (a);
 					tmp->end.col = b->end.col;
@@ -1043,12 +1079,12 @@ selection_get_ranges (SheetView const *sv, gboolean allow_intersection)
 					clear = g_slist_prepend (clear, tmp);
 					/* fall through */
 
-				case 2 : /* b contains a */
+				case 2: /* b contains a */
 					/* shrink the right segment */
 					a->start.col = b->end.col + 1;
 					break;
 
-				case 1 : /* overlap bottom */
+				case 1: /* overlap bottom */
 					/* Split region */
 					tmp = gnm_range_dup (a);
 					tmp->end.col = b->end.col;
@@ -1170,10 +1206,16 @@ sv_selection_apply_in_order (SheetView *sv, SelectionApplyFunc const func,
 }
 
 
+/**
+ * selection_to_string:
+ * @sv: #SheetView
+ * @include_sheet_name_prefix: boolean
+ *
+ * Returns: (transfer full): the selection as a string.
+ **/
 char *
 selection_to_string (SheetView *sv, gboolean include_sheet_name_prefix)
 {
-	char    *output;
 	selection_to_string_closure res;
 
 	res.str = g_string_new (NULL);
@@ -1181,9 +1223,7 @@ selection_to_string (SheetView *sv, gboolean include_sheet_name_prefix)
 
 	sv_selection_apply_in_order (sv, &cb_range_to_string, &res);
 
-	output = res.str->str;
-	g_string_free (res.str, FALSE);
-	return output;
+	return g_string_free (res.str, FALSE);
 }
 
 /**
@@ -1215,8 +1255,16 @@ sv_selection_foreach (SheetView *sv,
 	return TRUE;
 }
 
-/* A protected sheet can limit whether locked and unlocked cells can be
- * selected */
+/**
+ * sheet_selection_is_allowed:
+ * @sheet: #Sheet
+ * @pos: #GnmCellPos
+ *
+ * A protected sheet can limit whether locked and unlocked cells can be
+ * selected.
+ *
+ * Returns: %TRUE if the selection is allowed.
+ **/
 gboolean
 sheet_selection_is_allowed (Sheet const *sheet, GnmCellPos const *pos)
 {
@@ -1327,7 +1375,7 @@ loop:
  * @horizontal:
  *
  * Move the edit_pos of @sv 1 step according to @forward and @horizontal.  The
- * behavior depends several factors
+ * behavior depends on several factors
  *	- How many ranges are selected
  *	- The shape of the selected ranges
  *	- Previous movements (A sequence of tabs followed by an enter can jump
@@ -1447,8 +1495,7 @@ characterize_vec (Sheet *sheet, GnmRange *vector,
 			cell = sheet_cell_get (sheet, tmp.end.col+dx, tmp.end.row+dy);
 			if (cell == NULL)
 				return is_string;
-			gnm_cell_eval (cell);
-			v = cell->value;
+			v = gnm_cell_eval (cell);
 
 			if (v == NULL || !VALUE_IS_STRING(v))
 				return is_string;
@@ -1473,6 +1520,13 @@ characterize_vec (Sheet *sheet, GnmRange *vector,
 	return is_string; /* NOTREACHED */
 }
 
+/**
+ * sv_selection_to_plot:
+ * @sv: #SheetView
+ * @plot: #GogPlot
+ *
+ * Adds the selection to @go_plot.
+ **/
 void
 sv_selection_to_plot (SheetView *sv, GogPlot *go_plot)
 {

@@ -11263,7 +11263,7 @@ msgstr ""
 #: schemas/gnumeric-general.schemas.in.h:44
 msgid ""
 "This value determines the length of the undo chain. Each editing action has "
-"a size associate with it, to compare it with the memory requirements of a "
+"a size associated with it, to compare it with the memory requirements of a "
 "simple one-cell edit (size of 1). The undo list will be truncated when its "
 "total size exceeds this configurable value."
 msgstr ""
@@ -17617,7 +17617,7 @@ msgid "You should introduce a valid number as maximum"
 msgstr ""
 
 #: src/dialogs/dialog-tabulate.c:232
-msgid "The maximum value should be bigger than the minimum"
+msgid "The maximum value should be greater than the minimum"
 msgstr ""
 
 #: src/dialogs/dialog-tabulate.c:240
@@ -20537,7 +20537,7 @@ msgid ""
 "and that new features have been added in the meantime.\n"
 "\n"
 "Please consider upgrading before reporting any bugs.\n"
-"Consult http://www.gnome.org/projects/gnumeric/ for details.\n"
+"Consult https://www.gnumeric.org/ for details.\n"
 "\n"
 "-- The Gnumeric Team."
 msgstr ""

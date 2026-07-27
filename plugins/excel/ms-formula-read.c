@@ -36,7 +36,7 @@
 #define d(level, code)
 #endif
 
-ExcelFuncDesc const excel_func_desc [] = {
+ExcelFuncDesc const excel_func_desc[] = {
 	{ 0,   "COUNT",             0, 30, XL_STD, 1, 'V', "R" },
 	{ 1,   "IF",                2,  3, XL_STD, 3, 'V', "VRR" },
 	{ 2,   "ISNA",              1,  1, XL_STD,  1, 'V', "V" },
@@ -672,7 +672,7 @@ parse_list_last_n (GnmExprList **list, gint n)
 {
 	GnmExprList *l = NULL;
 	while (n-->0)
-		l = gnm_expr_list_prepend (l, parse_list_pop(list));
+		l = gnm_expr_list_prepend (l, parse_list_pop (list));
 	return l;
 }
 
@@ -681,7 +681,7 @@ static void
 parse_list_free (GnmExprList **list)
 {
 	while (*list)
-		gnm_expr_free (parse_list_pop(list));
+		gnm_expr_free (parse_list_pop (list));
 }
 
 static gboolean
@@ -761,12 +761,12 @@ make_function (GnmExprList **stack, int fn_idx, int numargs, Workbook *wb)
 		}
 
 		if (fd->flags & XL_UNKNOWN)
-			g_warning("This sheet uses an Excel function "
-				  "('%s') for which we do \n"
-				  "not have adequate documentation.  "
-				  "Please forward a copy (if possible) to\n"
-				  "gnumeric-list@gnome.org.  Thanks",
-				  fd->name);
+			g_warning ("This sheet uses an Excel function "
+				   "('%s') for which we do \n"
+				   "not have adequate documentation.  "
+				   "Please forward a copy (if possible) to\n"
+				   "gnumeric-list@gnome.org.  Thanks",
+				   fd->name);
 
 		args = parse_list_last_n (stack, numargs);
 		if (fd->name) {
@@ -849,11 +849,11 @@ ms_excel_dump_cellname (GnmXLImporter const *importer, ExcelReadSheet const *esh
 		g_printerr ("[%s]", go_doc_get_uri (GO_DOC (importer->wb)));
 		return;
 	}
-	g_printerr ("%s%d : ", col_name(fn_col), fn_row+1);
+	g_printerr ("%s%d : ", col_name (fn_col), fn_row+1);
 }
 
 /* Binary operator tokens */
-static GnmExprOp const binary_ops [] = {
+static GnmExprOp const binary_ops[] = {
 	GNM_EXPR_OP_ADD,	/* 0x03, ptgAdd */
 	GNM_EXPR_OP_SUB,	/* 0x04, ptgSub */
 	GNM_EXPR_OP_MULT,	/* 0x05, ptgMul */
@@ -872,7 +872,7 @@ static GnmExprOp const binary_ops [] = {
 	GNM_EXPR_OP_RANGE_CTOR	/* 0x11, ptgRange : Range */
 };
 
-static GnmExprOp const unary_ops [] = {
+static GnmExprOp const unary_ops[] = {
 	GNM_EXPR_OP_UNARY_PLUS,/* 0x12, ptgU_PLUS  */
 	GNM_EXPR_OP_UNARY_NEG,	/* 0x13, ptgU_MINUS */
 	GNM_EXPR_OP_PERCENTAGE,	/* 0x14, ptgPERCENT */
@@ -943,7 +943,7 @@ excel_formula_parses_ref_sheets (MSContainer const *container, guint8 const *dat
 	return FALSE;
 }
 
-static char const *ptg_name[] = {
+static char const * const ptg_name[] = {
 	"PTG ZERO ???",	"PTG_EXPR",	"PTG_TBL",	"PTG_ADD",
 	"PTG_SUB",	"PTG_MULT",	"PTG_DIV",	"PTG_EXP",
 	"PTG_CONCAT",	"PTG_LT",	"PTG_LTE",	"PTG_EQUAL",
@@ -1049,7 +1049,7 @@ excel_parse_formula1 (MSContainer const *container,
 		if (ptg > FORMULA_PTG_MAX)
 			break;
 		d (2, {
-			g_printerr ("Ptg : %s 0x%02x", ptg_name [ptgbase], ptg);
+			g_printerr ("Ptg : %s 0x%02x", ptg_name[ptgbase], ptg);
 			if (ptg != ptgbase)
 				g_printerr ("(0x%02x)", ptgbase);
 			g_printerr ("\n");
@@ -1533,7 +1533,7 @@ excel_parse_formula1 (MSContainer const *container,
 
 					default:
 						g_printerr ("FIXME: Duff array item type %d @ %s%d:%d,%d\n",
-							val_type, col_name(fn_col), fn_row+1, lpx, lpy);
+							val_type, col_name (fn_col), fn_row+1, lpx, lpy);
 						CHECK_FORMULA_ARRAY_LEN(8);
 						gsf_mem_dump (array_data-1, 9);
 						elem = value_new_empty ();
@@ -1614,10 +1614,10 @@ excel_parse_formula1 (MSContainer const *container,
 				 * names in a file just to be safe */
 				if (1 <= name_idx && name_idx < 256) {
 					char *stub_name = g_strdup_printf ("FwdDecl%d", name_idx);
+					nexpr = expr_name_new (stub_name);
 					if (name_idx >= names->len)
 						g_ptr_array_set_size (names, name_idx);
-					nexpr = g_ptr_array_index (names, name_idx-1) =
-						expr_name_new (stub_name);
+					g_ptr_array_index (names, name_idx - 1) = nexpr;
 					name = gnm_expr_new_name (nexpr, NULL, NULL);
 					d (1, g_printerr ("creating stub '%s'", stub_name););
 					g_free (stub_name);

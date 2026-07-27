@@ -52,7 +52,7 @@ static GOMemChunk *gnm_style_pool;
 #endif
 
 
-struct _GnmStyle {
+struct GnmStyle_ {
 	unsigned int	changed;
 	unsigned int	set;
 
@@ -70,7 +70,7 @@ struct _GnmStyle {
 	PangoContext  *font_context;
 
 /* public */
-	struct _GnmStyleColor {
+	struct GnmStyleColor_ {
 		GnmColor *font;
 		GnmColor *back;
 		GnmColor *pattern;
@@ -79,7 +79,7 @@ struct _GnmStyle {
 	guint32          pattern;
 
 	/* FIXME: TODO use GOFont */
-	struct _GnmStyleFontDetails {
+	struct GnmStyleFontDetails_ {
 		GOString	*name;
 		gboolean	bold;
 		gboolean	italic;
@@ -107,10 +107,18 @@ struct _GnmStyle {
 	GPtrArray		*cond_styles;
 };
 
-#define elem_changed(style, elem) do { (style)->changed |= (1u << (elem)); } while(0)
-#define elem_set(style, elem)	  do { (style)->set |=  (1u << (elem)); } while(0)
-#define elem_unset(style, elem)	  do { (style)->set &= ~(1u << (elem)); } while(0)
-#define elem_is_set(style, elem)  (((style)->set & (1u << (elem))) != 0)
+static inline void elem_changed (GnmStyle *style, GnmStyleElement elem) {
+	style->changed |= (1u << elem);
+}
+static inline void elem_set (GnmStyle *style, GnmStyleElement elem) {
+	style->set |= (1u << elem);
+}
+static inline void elem_unset (GnmStyle *style, GnmStyleElement elem) {
+	style->set &= ~(1u << elem);
+}
+static inline gboolean elem_is_set (GnmStyle const *style, GnmStyleElement elem) {
+	return (style->set & (1u << elem)) != 0;
+}
 
 #define MSTYLE_ANY_BORDER            MSTYLE_BORDER_TOP: \
 				case MSTYLE_BORDER_BOTTOM: \
@@ -118,65 +126,6 @@ struct _GnmStyle {
 				case MSTYLE_BORDER_RIGHT: \
 				case MSTYLE_BORDER_DIAGONAL: \
 				case MSTYLE_BORDER_REV_DIAGONAL
-
-
-#define UNROLLED_FOR(init_,cond_,step_,code_)			\
-do {								\
-	init_;							\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	if (cond_) { code_; step_;				\
-	g_assert_not_reached ();				\
-	}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}	\
-} while (0)
-
 
 
 static char const * const
@@ -497,14 +446,14 @@ elem_assign_contents (GnmStyle *dst, GnmStyle const *src, GnmStyleElement elem)
 	g_return_if_fail (elem_is_set (src, elem));
 #endif
 	switch (elem) {
-	case MSTYLE_COLOR_BACK :	style_color_ref (dst->color.back = src->color.back); return;
-	case MSTYLE_COLOR_PATTERN :	style_color_ref (dst->color.pattern = src->color.pattern); return;
+	case MSTYLE_COLOR_BACK:	style_color_ref (dst->color.back = src->color.back); return;
+	case MSTYLE_COLOR_PATTERN:	style_color_ref (dst->color.pattern = src->color.pattern); return;
 	case MSTYLE_ANY_BORDER:
 		elem -= MSTYLE_BORDER_TOP;
 		gnm_style_border_ref (dst->borders[elem] = src->borders[elem]);
 		return;
 	case MSTYLE_PATTERN:		dst->pattern = src->pattern; return;
-	case MSTYLE_FONT_COLOR :	style_color_ref (dst->color.font = src->color.font); return;
+	case MSTYLE_FONT_COLOR:	style_color_ref (dst->color.font = src->color.font); return;
 	case MSTYLE_FONT_NAME:		go_string_ref (dst->font_detail.name = src->font_detail.name); return;
 	case MSTYLE_FONT_BOLD:		dst->font_detail.bold = src->font_detail.bold; return;
 	case MSTYLE_FONT_ITALIC:	dst->font_detail.italic = src->font_detail.italic; return;
@@ -553,12 +502,12 @@ elem_clear_contents (GnmStyle *style, GnmStyleElement elem)
 		return;
 
 	switch (elem) {
-	case MSTYLE_COLOR_BACK :	style_color_unref (style->color.back); return;
-	case MSTYLE_COLOR_PATTERN :	style_color_unref (style->color.pattern); return;
+	case MSTYLE_COLOR_BACK:	style_color_unref (style->color.back); return;
+	case MSTYLE_COLOR_PATTERN:	style_color_unref (style->color.pattern); return;
 	case MSTYLE_ANY_BORDER:
 		gnm_style_border_unref (style->borders[elem - MSTYLE_BORDER_TOP]);
 		return;
-	case MSTYLE_FONT_COLOR :	style_color_unref (style->color.font); return;
+	case MSTYLE_FONT_COLOR:	style_color_unref (style->color.font); return;
 	case MSTYLE_FONT_NAME:		go_string_unref (style->font_detail.name); return;
 	case MSTYLE_FORMAT:		go_format_unref (style->format); return;
 	case MSTYLE_VALIDATION:
@@ -594,7 +543,7 @@ elem_clear_contents (GnmStyle *style, GnmStyleElement elem)
  * Copy any items from @overlay that do not conflict with the values in @accum.
  * If an element had a previous conflict (flagged via @conflicts) it is ignored.
  *
- * Returns @conflicts with any new conflicts added.
+ * Returns: @conflicts with any new conflicts added.
  **/
 unsigned int
 gnm_style_find_conflicts (GnmStyle *accum, GnmStyle const *overlay,
@@ -637,7 +586,7 @@ gnm_style_find_conflicts (GnmStyle *accum, GnmStyle const *overlay,
  *
  * Determine how two fully-qualified styles differ.
  *
- * Returns differences as a bitset of #GnmStyleElement.
+ * Returns: differences as a bitset of #GnmStyleElement.
  **/
 unsigned int
 gnm_style_find_differences (GnmStyle const *a, GnmStyle const *b,
@@ -762,6 +711,13 @@ gnm_style_new_default (void)
 	return new_style;
 }
 
+
+/**
+ * gnm_style_dup:
+ * @src: a #GnmStyle
+ *
+ * Returns: (transfer full): a new style that is a copy of @src
+ **/
 GnmStyle *
 gnm_style_dup (GnmStyle const *src)
 {
@@ -1013,7 +969,7 @@ gnm_style_linked_sheet_changed (GnmStyle *style)
  * Returns: (transfer full): new style which may or may not be identical
  * to the incoming.
  *
- * ABSORBS a reference to the style and sets the link count to 1.
+ * Sets the style's link count to 1.
  *
  * Where auto pattern color occurs in the style (it may for pattern and
  * borders), it is replaced with the sheet's auto pattern color. We make
@@ -1095,12 +1051,26 @@ gnm_style_abandon_link (GnmStyle *style)
 	style->linked_sheet = NULL;
 }
 
+/**
+ * gnm_style_eq:
+ * @a: (nullable): #GnmStyle
+ * @b: (nullable): #GnmStyle
+ *
+ * Returns: %TRUE, if @a and @b are the same style object.
+ **/
 gboolean
 gnm_style_eq (GnmStyle const *a, GnmStyle const *b)
 {
 	return a == b;
 }
 
+/**
+ * gnm_style_equal:
+ * @a: #GnmStyle
+ * @b: #GnmStyle
+ *
+ * Returns: %TRUE, if the two styles have identical contents.
+ **/
 gboolean
 gnm_style_equal (GnmStyle const *a, GnmStyle const *b)
 {
@@ -1110,10 +1080,10 @@ gnm_style_equal (GnmStyle const *a, GnmStyle const *b)
 		return TRUE;
 	if (a->set != b->set || !gnm_style_equal_XL (a, b))
 		return FALSE;
-	UNROLLED_FOR (i = MSTYLE_VALIDATION, i < MSTYLE_ELEMENT_MAX, i++, {
+	for (i = MSTYLE_VALIDATION; i < MSTYLE_ELEMENT_MAX; i++) {
 		if (elem_is_set (a, i) && !ELEM_IS_EQ (a, b, i))
 			return FALSE;
-	});
+	}
 
 	return TRUE;
 }
@@ -1132,10 +1102,10 @@ gnm_style_equal_XL (GnmStyle const *a, GnmStyle const *b)
 	if ((a->set ^ b->set) & ((1u << MSTYLE_VALIDATION) - 1))
 		return FALSE;
 
-	UNROLLED_FOR (i = MSTYLE_COLOR_BACK, i < MSTYLE_VALIDATION, i++, {
+	for (i = MSTYLE_COLOR_BACK; i < MSTYLE_VALIDATION; i++) {
 		if (elem_is_set (a, i) && !ELEM_IS_EQ (a, b, i))
 			return FALSE;
-	});
+	}
 	return TRUE;
 }
 
@@ -1287,6 +1257,13 @@ gnm_style_equal_header (GnmStyle const *a, GnmStyle const *b, gboolean top)
 }
 
 
+/**
+ * gnm_style_is_element_set:
+ * @style: #GnmStyle
+ * @elem: a style element
+ *
+ * Returns: %TRUE, if the style has a value for the given element.
+ */
 gboolean
 gnm_style_is_element_set (GnmStyle const *style, GnmStyleElement elem)
 {
@@ -1309,6 +1286,14 @@ gnm_style_is_complete (GnmStyle const *style)
 	return style->set == ((1u << MSTYLE_ELEMENT_MAX) - 1);
 }
 
+/**
+ * gnm_style_unset_element:
+ * @style: #GnmStyle
+ * @elem: a style element
+ *
+ * Unset the style element @elem from @style.  If the style does not
+ * have the element set, no action is taken.
+ */
 void
 gnm_style_unset_element (GnmStyle *style, GnmStyleElement elem)
 {
@@ -1533,6 +1518,8 @@ gnm_style_get_border (GnmStyle const *style, GnmStyleElement elem)
  * gnm_style_set_pattern:
  * @style: #GnmStyle to change
  * @pattern: pattern code
+ *
+ * Set the pattern of the style.
  **/
 void
 gnm_style_set_pattern (GnmStyle *style, int pattern)
@@ -1546,6 +1533,12 @@ gnm_style_set_pattern (GnmStyle *style, int pattern)
 	style->pattern = pattern;
 }
 
+/**
+ * gnm_style_get_pattern:
+ * @style: #GnmStyle to query
+ *
+ * Returns: the pattern set for the style.
+ **/
 int
 gnm_style_get_pattern (GnmStyle const *style)
 {
@@ -2189,7 +2182,8 @@ gnm_style_set_validation (GnmStyle *style, GnmValidation *v)
  * gnm_style_get_validation:
  * @style: #GnmStyle to query
  *
- * Returns: (transfer none) (nullable):
+ * Returns: (transfer none) (nullable): the validation object for the
+ * style.
  **/
 GnmValidation const *
 gnm_style_get_validation (GnmStyle const *style)
@@ -2581,7 +2575,7 @@ gnm_style_set_from_pango_attribute (GnmStyle *style, PangoAttribute const *attr)
 		gnm_style_set_font_strike (style,
 			((PangoAttrInt *)attr)->value != 0);
 		break;
-	default : {
+	default: {
 		gboolean script_seen = FALSE, script_set = FALSE;
 		if (attr->klass->type == go_pango_attr_superscript_get_attr_type ()) {
 			script_seen = TRUE;
@@ -2613,13 +2607,13 @@ gnm_style_dump_color (GnmColor *color, GnmStyleElement elem)
 {
 	if (color)
 		g_printerr ("\t%s: %x:%x:%x%s\n",
-			    gnm_style_element_name [elem],
+			    gnm_style_element_name[elem],
 			    GO_COLOR_UINT_R (color->go_color),
 			    GO_COLOR_UINT_G (color->go_color),
 			    GO_COLOR_UINT_B (color->go_color),
 			    color->is_auto ? " auto" : "");
 	else
-		g_printerr ("\t%s: (NULL)\n", gnm_style_element_name [elem]);
+		g_printerr ("\t%s: (NULL)\n", gnm_style_element_name[elem]);
 }
 
 static void

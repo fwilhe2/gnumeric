@@ -15,12 +15,16 @@ Requirements
 
 You need:				Debian package name
 	glib		>= 2.40.0	libglib2.0-dev
-	gtk+		>= 3.8.7	libgtk3.0-dev
-	libgsf		>= 1.14.33	libgsf-1-dev
-	libgoffice	>= 0.10.42	libgoffice-0-8-dev
+	gtk+		>= 3.20.0	libgtk3.0-dev
+	libgsf		>= 1.14.45	libgsf-1-dev
+	libgoffice	>= 0.10.57	libgoffice-0-10-dev
 	gnome-xml   	>= 2.4.12	libxml2-dev
-	pango		>= 1.24.0	libpango1.0-dev
+	pango		>= 1.46.0	libpango1.0-dev
 	NOTE: gnome-xml is also known as libxml
+	yelp                            yelp-tools
+
+Additionally you need a C development setup: a C compiler, bison, make,
+autoconf, automake, libtool, etc.
 
 Optionally:
 	python		>= 2.0		python-dev
@@ -36,23 +40,31 @@ Currently disabled:
 Runtime suggestions:
 	'yelp' for help
 
-Mailing lists
--------------
 
-   There is a mailing list used to discuss Gnumeric, to subscribe
-send a mail to:
+Configuration for releases:
+	We use a standard "configure" setup.  See INSTALL
 
-	gnumeric-list-request@gnome.org
-
-   And in the body of the message write "subscribe"
-
-   An archive of the mailing lists is available in:
-
-	http://mail.gnome.org/archives/gnumeric-list/
+Configuration from repository:
+	Use the autogen.sh script.  Options will be forwarded to configure.
 
 
-Random notes:
--------------
+
+Support
+-------
+
+   There is a support forum to discuss Gnumeric:
+
+	https://discourse.gnome.org/tag/gnumeric
+
+   An archive of the defunct former mailing list is available in:
+
+	https://mail.gnome.org/archives/gnumeric-list/
+
+
+Random notes
+------------
+[Hopelessly outdated -- ignore for now]
+
 
 This is a partial list of Features implemented in Gnumeric, we need
 documentation for these:

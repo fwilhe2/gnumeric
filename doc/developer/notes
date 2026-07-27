@@ -1,4 +1,3 @@
-
 Control-Enter after finishing entering some data into a cell
 sets the whole range of selected cells to that value.
 
@@ -103,7 +102,7 @@ Alt-down arrow pops up a list of available choices for the autofill
 	DDE and external functions
 	Engineering functions
 	Financial functions
-	Information functons
+	Information functions
 	Logical functions
 	Lookup and reference functions
 	Math and trigonometric functions

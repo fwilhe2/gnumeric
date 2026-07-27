@@ -1,3 +1,36 @@
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.61
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.60
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.59
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.57
+
+2024-01-22  Morten Welinder  <terra@gnome.org>
+
+	* plugin.xml.in: Make name unique (for the benefit of the plugin
+	dialog).
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.56
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.55
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.54
+
 2022-09-17  Morten Welinder <terra@gnome.org>
 
 	* Release 1.12.53

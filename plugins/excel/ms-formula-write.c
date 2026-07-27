@@ -16,7 +16,6 @@
 #include "formula-types.h"
 #include "excel.h"
 #include "ms-biff.h"
-#include "formula-types.h"
 #include "boot.h"
 
 #include <sheet.h>
@@ -535,7 +534,7 @@ static void
 write_funcall (PolishData *pd, GnmExpr const *expr,
 	       XLOpType target_type)
 {
-	static guint8 const zeros [12];
+	static guint8 const zeros[12];
 
 	int arg, min_args, max_args, name_arg = 0;
 	gboolean prompt   = FALSE;
@@ -629,7 +628,7 @@ static void
 excel_formula_write_NAME_v8 (PolishData *pd, GnmExpr const *expr,
 			     XLOpType target_type)
 {
-	guint8 data [7];
+	guint8 data[7];
 	gpointer tmp;
 	unsigned name_idx;
 
@@ -660,7 +659,7 @@ static void
 excel_formula_write_NAME_v7 (PolishData *pd, GnmExpr const *expr,
 			     XLOpType target_type)
 {
-	guint8 data [25];
+	guint8 data[25];
 	gpointer tmp;
 	unsigned name_idx;
 
@@ -699,9 +698,9 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 {
 	static struct {
 		guint8 xl_op;
-		int prec;		      /* Precedences -- should match parser.y  */
-		int assoc_left, assoc_right;  /* 0: no, 1: yes.  */
-	} const operations [] = {
+		guint8 prec;		      /* Precedences -- should match parser.y  */
+		guint8 assoc_left, assoc_right;  /* 0: no, 1: yes.  */
+	} const operations[] = {
 		{ FORMULA_PTG_PAREN,	 0, 0, 0 }, /* Parentheses for clarity  */
 		{ FORMULA_PTG_EQUAL,	 1, 1, 0 },
 		{ FORMULA_PTG_GT,	 1, 1, 0 },
@@ -731,7 +730,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 	const GnmExprOp op = GNM_EXPR_GET_OPER (expr);
 
 	switch (op) {
-	case GNM_EXPR_OP_ANY_BINARY :
+	case GNM_EXPR_OP_ANY_BINARY:
 		if (target_type != XL_ARRAY)
 			target_type = XL_VAL;
 		/* Fall through.  */
@@ -751,11 +750,11 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 		break;
 	}
 
-	case GNM_EXPR_OP_FUNCALL :
+	case GNM_EXPR_OP_FUNCALL:
 		write_funcall (pd, expr, target_type);
 		break;
 
-        case GNM_EXPR_OP_CONSTANT : {
+        case GNM_EXPR_OP_CONSTANT: {
 		GnmValue const *v = expr->constant.value;
 		switch (v->v_any.type) {
 
@@ -775,7 +774,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 			}
 			break;
 		}
-		case VALUE_BOOLEAN : {
+		case VALUE_BOOLEAN: {
 			guint8 data[2];
 			GSF_LE_SET_GUINT8 (data, FORMULA_PTG_BOOL);
 			GSF_LE_SET_GUINT8 (data+1, value_get_as_int (v));
@@ -783,7 +782,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 			break;
 		}
 
-		case VALUE_ERROR : {
+		case VALUE_ERROR: {
 			guint8 data[2];
 			GSF_LE_SET_GUINT8 (data, FORMULA_PTG_ERR);
 			GSF_LE_SET_GUINT8 (data+1, excel_write_map_errcode (v));
@@ -791,7 +790,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 			break;
 		}
 
-		case VALUE_EMPTY : {
+		case VALUE_EMPTY: {
 			guint8 data = FORMULA_PTG_MISSARG;
 			ms_biff_put_var_write (pd->ewb->bp, &data, 1);
 			break;
@@ -807,7 +806,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 				target_type);
 			break;
 
-		case VALUE_ARRAY : {
+		case VALUE_ARRAY: {
 			guint8 data[8];
 
 			if (v->v_array.x > 256 || v->v_array.y > 65536)
@@ -829,7 +828,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 			break;
 		}
 
-		default : {
+		default: {
 			write_string (pd, "(Unknown value)");
 			g_warning ("Unhandled value type %d", v->v_any.type);
 			break;
@@ -837,7 +836,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 		}
 		break;
 	}
-	case GNM_EXPR_OP_ANY_UNARY : {
+	case GNM_EXPR_OP_ANY_UNARY: {
 		int const prec = operations[op].prec;
 
 		write_node (pd, expr->unary.value, operations[op].prec,
@@ -848,20 +847,20 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 		break;
 	}
 
-	case GNM_EXPR_OP_CELLREF :
+	case GNM_EXPR_OP_CELLREF:
 		excel_formula_write_CELLREF (pd,
 			&expr->cellref.ref, NULL, target_type);
 		break;
 
-	case GNM_EXPR_OP_NAME :
+	case GNM_EXPR_OP_NAME:
 		if (pd->ewb->bp->version >= MS_BIFF_V8)
 			excel_formula_write_NAME_v8 (pd, expr, target_type);
 		else
 			excel_formula_write_NAME_v7 (pd, expr, target_type);
 		break;
 
-	case GNM_EXPR_OP_ARRAY_CORNER :
-	case GNM_EXPR_OP_ARRAY_ELEM : {
+	case GNM_EXPR_OP_ARRAY_CORNER:
+	case GNM_EXPR_OP_ARRAY_ELEM: {
 		guint8 data[5];
 		int x, y, ptg;
 
@@ -909,7 +908,7 @@ write_node (PolishData *pd, GnmExpr const *expr, int paren_level,
 		}
 		/* Fall through for now.  */
 
-	default : {
+	default: {
 		gchar *err = g_strdup_printf ("Unknown Operator %d",
 					      GNM_EXPR_GET_OPER (expr));
 		write_string (pd, err);

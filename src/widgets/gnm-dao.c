@@ -28,7 +28,7 @@
 #include <gsf/gsf-impl-utils.h>
 #include <glib/gi18n-lib.h>
 
-struct  _GnmDao {
+struct GnmDao_ {
 	GtkBox		box;
 	GtkBuilder      *gui;
 
@@ -40,6 +40,7 @@ struct  _GnmDao {
         GtkWidget *clear_outputrange_button;
         GtkWidget *retain_format_button;
         GtkWidget *retain_comments_button;
+        GtkWidget *autofit_button;
         GtkWidget *put_menu;
 
 	WBCGtk *wbcg;
@@ -88,6 +89,8 @@ gnm_dao_init (GnmDao *gdao)
 		(gdao->gui, "retain_format_button");
 	gdao->retain_comments_button = go_gtk_builder_get_widget
 		(gdao->gui, "retain_comments_button");
+	gdao->autofit_button = go_gtk_builder_get_widget
+		(gdao->gui, "autofit_button");
 	gdao->put_menu = go_gtk_builder_get_widget
 		(gdao->gui, "put_menu");
 	gtk_combo_box_set_active
@@ -136,13 +139,14 @@ gnm_dao_class_init (GObjectClass *klass)
 GSF_CLASS (GnmDao, gnm_dao,
 	   gnm_dao_class_init, gnm_dao_init, GTK_TYPE_BOX)
 
-static void
+static gboolean
 tool_set_focus_output_range (G_GNUC_UNUSED GtkWidget *widget,
 			     G_GNUC_UNUSED GdkEventFocus *event,
 			     GnmDao *gdao)
 {
-	    gtk_toggle_button_set_active
-		    (GTK_TOGGLE_BUTTON (gdao->output_range), TRUE);
+	gtk_toggle_button_set_active
+		(GTK_TOGGLE_BUTTON (gdao->output_range), TRUE);
+	return FALSE;
 }
 
 static void
@@ -154,7 +158,7 @@ cb_focus_on_entry (GtkWidget *widget, GtkWidget *entry)
 				     (GNM_EXPR_ENTRY (entry))));
 }
 
-static const char *dao_group[] = {
+static const char * const dao_group[] = {
 	"newsheet-button",
 	"newworkbook-button",
 	"outputrange-button",
@@ -185,7 +189,6 @@ cb_set_sensitivity (G_GNUC_UNUSED GtkWidget *dummy, GnmDao *gdao)
 				  (grp_val == 2));
 	gtk_widget_set_sensitive (gdao->retain_comments_button,
 				  (grp_val == 2));
-
 }
 
 static void
@@ -195,11 +198,10 @@ gnm_dao_setup_signals (GnmDao *gdao)
 			  "toggled",
 			  G_CALLBACK (cb_focus_on_entry),
 			  gdao->output_entry);
-	g_signal_connect
-		(G_OBJECT (gnm_expr_entry_get_entry
-			   (GNM_EXPR_ENTRY (gdao->output_entry))),
-		 "focus-in-event",
-		 G_CALLBACK (tool_set_focus_output_range), gdao);
+	g_signal_connect (G_OBJECT (gnm_expr_entry_get_entry
+				    (GNM_EXPR_ENTRY (gdao->output_entry))),
+			  "focus-in-event",
+			  G_CALLBACK (tool_set_focus_output_range), gdao);
 	g_signal_connect_after (G_OBJECT (gdao->output_entry),
 				"changed",
 				G_CALLBACK (cb_set_sensitivity), gdao);
@@ -208,7 +210,7 @@ gnm_dao_setup_signals (GnmDao *gdao)
 				G_CALLBACK (cb_emit_readiness_changed),
 				gdao);
 	g_signal_connect (G_OBJECT (gdao->output_entry),
-				  "activate",
+			  "activate",
 			  G_CALLBACK (cb_emit_activate), gdao);
 	g_signal_connect_after (G_OBJECT (gdao->output_range),
 				"toggled",
@@ -219,8 +221,15 @@ gnm_dao_setup_signals (GnmDao *gdao)
 				gdao);
 }
 
+/**
+ * gnm_dao_new:
+ * @wbcg: #WBCGtk
+ * @inplace_str: (nullable): label for in-place button
+ *
+ * Returns: (transfer full): a new #GnmDao.
+ **/
 GtkWidget *
-gnm_dao_new (WBCGtk *wbcg, gchar *inplace_str)
+gnm_dao_new (WBCGtk *wbcg, const char *inplace_str)
 {
 	GnmDao *gdao = GNM_DAO (g_object_new (GNM_DAO_TYPE, NULL));
 	GtkGrid *grid;
@@ -249,7 +258,7 @@ gnm_dao_new (WBCGtk *wbcg, gchar *inplace_str)
 }
 
 void
-gnm_dao_set_inplace (GnmDao *gdao, gchar *inplace_str)
+gnm_dao_set_inplace (GnmDao *gdao, const char *inplace_str)
 {
 	g_return_if_fail (gdao != NULL);
 
@@ -261,54 +270,49 @@ gnm_dao_set_inplace (GnmDao *gdao, gchar *inplace_str)
 		gtk_widget_hide (gdao->in_place);
 }
 
-gboolean
-gnm_dao_get_data (GnmDao *gdao, data_analysis_output_t **dao)
+static gboolean
+gnm_dao_create_dao_impl (GnmDao *gdao, data_analysis_output_t **dao)
 {
-	gboolean dao_ready  = FALSE;
+	gboolean dao_ready;
 	int grp_val;
+	GnmExprEntry *output;
+	Sheet *sheet;
 
 	g_return_val_if_fail (gdao != NULL, FALSE);
 
+	output = GNM_EXPR_ENTRY (gdao->output_entry);
+	sheet = wb_control_cur_sheet (GNM_WBC (gdao->wbcg));
 	grp_val = gnm_gui_group_value (gdao->gui, dao_group);
 
-	dao_ready =  ((grp_val  != 2) ||
-		      gnm_expr_entry_is_cell_ref
-		      (GNM_EXPR_ENTRY (gdao->output_entry),
-		       wb_control_cur_sheet (GNM_WBC (gdao->wbcg)),
-		       TRUE));
+	dao_ready = (grp_val != 2 ||
+		     gnm_expr_entry_is_cell_ref (output, sheet, TRUE));
 
 	if (dao_ready && NULL != dao) {
-		GtkWidget *button;
-		GnmValue *output_range = NULL;
-
 		switch (grp_val) {
 		case 0:
 		default:
-			*dao = dao_init_new_sheet (*dao);
+			*dao = dao_init_new_sheet (sheet);
 			break;
 		case 1:
-			*dao = dao_init (*dao, NewWorkbookOutput);
+			*dao = dao_init (GNM_DAO_OUTPUT_NEWWORKBOOK);
+			(*dao)->ref_sheet = sheet;
 			break;
-		case 2:
-			output_range = gnm_expr_entry_parse_as_value
-				(GNM_EXPR_ENTRY (gdao->output_entry),
-				 wb_control_cur_sheet (GNM_WBC
-						       (gdao->wbcg)));
-			*dao = dao_init (*dao, RangeOutput);
+		case 2: {
+			GnmValue *output_range = gnm_expr_entry_parse_as_value (output, sheet);
+			*dao = dao_init (GNM_DAO_OUTPUT_RANGE);
 			dao_load_from_value (*dao, output_range);
 			value_release (output_range);
 			break;
+		}
 		case 3:
-			(*dao) = dao_init ((*dao), InPlaceOutput);
-			/* It is the callers responsibility to fill the */
+			*dao = dao_init (GNM_DAO_OUTPUT_INPLACE);
+			/* It is the caller's responsibility to fill the */
 			/* dao with the appropriate range. */
 			break;
 		}
 
-		button = go_gtk_builder_get_widget (gdao->gui, "autofit_button");
 		(*dao)->autofit_flag = gtk_toggle_button_get_active (
-			GTK_TOGGLE_BUTTON (button));
-
+			GTK_TOGGLE_BUTTON (gdao->autofit_button));
 		(*dao)->clear_outputrange = gtk_toggle_button_get_active (
 			GTK_TOGGLE_BUTTON (gdao->clear_outputrange_button));
 		(*dao)->retain_format = gtk_toggle_button_get_active (
@@ -325,10 +329,30 @@ gnm_dao_get_data (GnmDao *gdao, data_analysis_output_t **dao)
 	return dao_ready;
 }
 
+/**
+ * gnm_dao_create_dao: (skip)
+ * @gdao: #GnmDao
+ *
+ * Returns: (transfer full) (nullable): new #data_analysis_output_t
+ **/
+data_analysis_output_t *
+gnm_dao_create_dao (GnmDao *gdao)
+{
+	data_analysis_output_t *res = NULL;
+	(void)gnm_dao_create_dao_impl (gdao, &res);
+	return res;
+}
+
+/**
+ * gnm_dao_is_ready:
+ * @gdao: #GnmDao
+ *
+ * Returns: %TRUE if @gdao is filled-out enough to be functional.
+ **/
 gboolean
 gnm_dao_is_ready (GnmDao *gdao)
 {
-	return gnm_dao_get_data (gdao, NULL);
+	return gnm_dao_create_dao_impl (gdao, NULL);
 }
 
 gboolean

@@ -1,5 +1,5 @@
-#ifndef _GNM_GNUMERIC_H_
-# define _GNM_GNUMERIC_H_
+#ifndef GNM_GNUMERIC_H_
+#define GNM_GNUMERIC_H_
 
 #include <glib.h>
 #include <goffice/goffice.h>
@@ -21,7 +21,7 @@ G_BEGIN_DECLS
 
 // Note: more than 364238 columns will introduce a column named TRUE.
 
-struct _GnmSheetSize {
+struct GnmSheetSize_ {
 	int max_cols, max_rows;
 };
 
@@ -44,6 +44,8 @@ typedef enum {
 	GNM_ERROR_NAME,
 	GNM_ERROR_NUM,
 	GNM_ERROR_NA,
+	GNM_ERROR_GETTING_DATA,
+	GNM_ERROR_SPILL,
 	GNM_ERROR_UNKNOWN
 } GnmStdError;
 
@@ -70,7 +72,7 @@ typedef enum {
 	/* hidden row in a filter */
 	CELL_ITER_IGNORE_FILTERED	= 1 << 4
 } CellIterFlags;
-typedef struct _GnmCellIter GnmCellIter;
+typedef struct GnmCellIter_ GnmCellIter;
 typedef GnmValue *(*CellIterFunc) (GnmCellIter const *iter, gpointer user);
 
 typedef enum {
@@ -90,4 +92,4 @@ typedef enum {
 
 G_END_DECLS
 
-#endif /* _GNM_GNUMERIC_H_ */
+#endif /* GNM_GNUMERIC_H_ */

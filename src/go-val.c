@@ -81,7 +81,7 @@ go_val_bucketer_validate (GOValBucketer *bucketer)
  *
  * Calculate which bucket @v falls into.
  *
- * Returns -1 on general failure, and 0 for out of range below the start of the domain.
+ * Returns: -1 on general failure, and 0 for out of range below the start of the domain.
  *	Some bucketer types will also create a bucket on the high end for out of range above.
  **/
 int
@@ -100,7 +100,7 @@ go_val_bucketer_apply (GOValBucketer const *bucketer, GOVal const *v)
 			break;
 		case GO_VAL_BUCKET_MINUTE:
 			break;
-		default : g_assert_not_reached ();
+		default: g_assert_not_reached ();
 		}
 	}
 	/* date based */
@@ -111,11 +111,11 @@ go_val_bucketer_apply (GOValBucketer const *bucketer, GOVal const *v)
 			return -1;
 
 		switch (bucketer->type) {
-		case GO_VAL_BUCKET_DAY_OF_YEAR :	return 1 + g_date_get_day_of_year (&d);
-		case GO_VAL_BUCKET_MONTH :		return g_date_get_month (&d);
-		case GO_VAL_BUCKET_CALENDAR_QUARTER :	return 1 + ((g_date_get_month (&d)-1) / 3);
-		case GO_VAL_BUCKET_YEAR :		return 1 + g_date_get_year (&d);
-		default : g_assert_not_reached ();
+		case GO_VAL_BUCKET_DAY_OF_YEAR:	return 1 + g_date_get_day_of_year (&d);
+		case GO_VAL_BUCKET_MONTH:		return g_date_get_month (&d);
+		case GO_VAL_BUCKET_CALENDAR_QUARTER:	return 1 + ((g_date_get_month (&d)-1) / 3);
+		case GO_VAL_BUCKET_YEAR:		return 1 + g_date_get_year (&d);
+		default: g_assert_not_reached ();
 		}
 	}
 

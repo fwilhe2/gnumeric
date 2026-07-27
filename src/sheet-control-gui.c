@@ -42,7 +42,6 @@
 #include <gui-util.h>
 #include <gutils.h>
 #include <parse-util.h>
-#include <selection.h>
 #include <application.h>
 #include <cellspan.h>
 #include <cmd-edit.h>
@@ -51,7 +50,6 @@
 #include <clipboard.h>
 #include <dialogs/dialogs.h>
 #include <gui-file.h>
-#include <sheet-merge.h>
 #include <ranges.h>
 #include <xml-sax.h>
 #include <style-color.h>
@@ -163,14 +161,17 @@ scg_redraw_all (SheetControl *sc, gboolean headers)
 
 	SCG_FOREACH_PANE (scg, pane, {
 		goc_canvas_invalidate (GOC_CANVAS (pane),
-			G_MININT64, 0, G_MAXINT64, G_MAXINT64);
+				       -GNM_CANVAS_INF, 0,
+				       GNM_CANVAS_INF, GNM_CANVAS_INF);
 		if (headers) {
 			if (NULL != pane->col.canvas)
 				goc_canvas_invalidate (pane->col.canvas,
-					0, 0, G_MAXINT64, G_MAXINT64);
+						       0, 0,
+						       GNM_CANVAS_INF, GNM_CANVAS_INF);
 			if (NULL != pane->row.canvas)
 				goc_canvas_invalidate (pane->row.canvas,
-					0, 0, G_MAXINT64, G_MAXINT64);
+						       0, 0,
+						       GNM_CANVAS_INF, GNM_CANVAS_INF);
 		}
 	});
 }
@@ -248,11 +249,11 @@ scg_redraw_headers (SheetControl *sc,
 				}
 			}
 			goc_canvas_invalidate (col_canvas,
-				left / scale, 0, right / scale, G_MAXINT64);
+				left / scale, 0, right / scale, GNM_CANVAS_INF);
 		}
 
 		if (row && pane->row.canvas != NULL) {
-			gint64 top = 0, bottom = G_MAXINT64 - 1;
+			gint64 top = 0, bottom = GNM_CANVAS_INF - 1;
 			scale = goc_canvas_get_pixels_per_unit (pane->row.canvas);
 			if (r != NULL) {
 				int const size = r->end.row - r->start.row;
@@ -266,7 +267,7 @@ scg_redraw_headers (SheetControl *sc,
 				}
 			}
 			goc_canvas_invalidate (GOC_CANVAS (pane->row.canvas),
-				0, top / scale, G_MAXINT64, bottom / scale);
+				0, top / scale, GNM_CANVAS_INF, bottom / scale);
 		}
 	}
 }
@@ -585,7 +586,7 @@ scg_select_all (SheetControlGUI *scg)
 			0, 0, gnm_sheet_get_last_col (sheet), gnm_sheet_get_last_row (sheet));
 		gnm_expr_entry_signal_update (
 			wbcg_get_entry_logical (scg->wbcg), TRUE);
-	} else if (wbc_gtk_get_guru (scg->wbcg) == NULL) {
+	} else if (wbcg_get_guru (scg->wbcg) == NULL) {
 		SheetView *sv = scg_view (scg);
 
 		scg_mode_edit (scg);
@@ -1569,11 +1570,11 @@ sheet_object_key_pressed (G_GNUC_UNUSED GtkWidget *w, GdkEventKey *event, SheetC
 	case GDK_KEY_Page_Up:
 		if ((event->state & GDK_CONTROL_MASK) != 0){
 			if ((event->state & GDK_SHIFT_MASK) != 0){
-				WorkbookSheetState * old_state = workbook_sheet_state_new(wb);
+				WorkbookSheetState * old_state = workbook_sheet_state_new (wb);
 				int old_pos = sheet->index_in_wb;
 
 				if (old_pos > 0){
-					workbook_sheet_move(sheet, -1);
+					workbook_sheet_move (sheet, -1);
 					cmd_reorganize_sheets (wbc, old_state, sheet);
 				}
 			} else {
@@ -1587,12 +1588,12 @@ sheet_object_key_pressed (G_GNUC_UNUSED GtkWidget *w, GdkEventKey *event, SheetC
 
 		if ((event->state & GDK_CONTROL_MASK) != 0){
 			if ((event->state & GDK_SHIFT_MASK) != 0){
-				WorkbookSheetState * old_state = workbook_sheet_state_new(wb);
-				int num_sheets = workbook_sheet_count(wb);
+				WorkbookSheetState * old_state = workbook_sheet_state_new (wb);
+				int num_sheets = workbook_sheet_count (wb);
 				gint old_pos = sheet->index_in_wb;
 
 				if (old_pos < num_sheets - 1){
-					workbook_sheet_move(sheet, 1);
+					workbook_sheet_move (sheet, 1);
 					cmd_reorganize_sheets (wbc, old_state, sheet);
 				}
 			} else {
@@ -2088,14 +2089,14 @@ context_menu_handler (GnmPopupMenuElement const *element,
 		workbook_cmd_autofit_selection
 			(wbc, wb_control_cur_sheet (wbc), TRUE);
 		break;
-	case CONTEXT_CELL_MERGE : {
+	case CONTEXT_CELL_MERGE: {
 		GSList *range_list = selection_get_ranges
 			(wb_control_cur_sheet_view (wbc), FALSE);
 		cmd_merge_cells (wbc, wb_control_cur_sheet (wbc), range_list, FALSE);
 		range_fragment_free (range_list);
 	}
 		break;
-	case CONTEXT_CELL_UNMERGE : {
+	case CONTEXT_CELL_UNMERGE: {
 		GSList *range_list = selection_get_ranges
 			(wb_control_cur_sheet_view (wbc), FALSE);
 		cmd_unmerge_cells (wbc, wb_control_cur_sheet (wbc), range_list);
@@ -2154,7 +2155,7 @@ context_menu_handler (GnmPopupMenuElement const *element,
 
 			styles = sheet_style_collect_hlinks (sheet, r);
 			n_links += g_slist_length (styles);
-			style_list_free (styles);
+			sheet_style_list_free (styles);
 		}
 		format = ngettext ("Remove %d Link", "Remove %d Links", n_links);
 		name = g_strdup_printf (format, n_links);
@@ -2437,7 +2438,7 @@ scg_context_menu (SheetControlGUI *scg, GdkEvent *event,
 
 		styles = sheet_style_collect_hlinks (sheet, r);
 		n_links += g_slist_length (styles);
-		style_list_free (styles);
+		sheet_style_list_free (styles);
 
 		objs = sheet_objects_get (sheet, r, GNM_CELL_COMMENT_TYPE);
 		n_comments += g_slist_length (objs);
@@ -2593,7 +2594,7 @@ scg_mode_edit (SheetControlGUI *scg)
 		scg_cursor_visible (scg, TRUE);
 	}
 
-	if (wbcg != NULL && wbc_gtk_get_guru (wbcg) != NULL &&
+	if (wbcg != NULL && wbcg_get_guru (wbcg) != NULL &&
 	    scg == wbcg_cur_scg	(wbcg))
 		wbcg_edit_finish (wbcg, WBC_EDIT_REJECT, NULL);
 
@@ -2685,10 +2686,10 @@ cb_scg_object_unselect (SheetObject *so, G_GNUC_UNUSED double *coords, SheetCont
 /**
  * scg_object_unselect:
  * @scg: #SheetControlGUI
- * @so: #SheetObject (optionally NULL)
+ * @so: #SheetObject (nullable)
  *
- * unselect the supplied object, and drop out of edit mode if this is the last
- * one.  If @so == NULL unselect _all_ objects.
+ * Unselect the supplied object, and drop out of edit mode if this is the last
+ * one.  If @so is %NULL unselect _all_ objects.
  **/
 void
 scg_object_unselect (SheetControlGUI *scg, SheetObject *so)
@@ -2878,11 +2879,14 @@ cb_drag_selected_objects (SheetObject *so, double *coords, ObjDragInfo *info)
 /**
  * scg_objects_drag:
  * @scg: #SheetControlGUI
+ * @pane: #GnmPane
  * @primary: #SheetObject (optionally NULL)
- * @dx:
- * @dy:
- * @drag_type:
- * @symmetric:
+ * @dx: (inout): horizontal distance
+ * @dy: (inout): vertical distance
+ * @drag_type: what part of the object is being dragged
+ * @symmetric: if %TRUE, move symmetrically
+ * @snap_to_grid: if %TRUE, snap to grid
+ * @is_mouse_move: if %TRUE, this is a real mouse move
  *
  * Move the control points and drag views of the currently selected objects to
  * a new position.  This movement is only made in @scg not in the actual
@@ -3181,6 +3185,8 @@ scg_comment_display_filter_cb (PangoAttribute *attribute, gboolean *state)
  * scg_comment_display:
  * @scg: The SheetControl
  * @cc: A cell comment
+ * @x: x coordinate
+ * @y: y coordinate
  *
  */
 void
@@ -3291,6 +3297,8 @@ cb_cell_comment_timer (SheetControlGUI *scg)
  * scg_comment_select:
  * @scg: The SheetControl
  * @cc: A cell comment
+ * @x: x coordinate
+ * @y: y coordinate
  *
  * Prepare @cc for display.
  */
@@ -3384,6 +3392,10 @@ scg_edit_stop (SheetControlGUI *scg)
 /**
  * scg_rangesel_changed:
  * @scg:   The scg
+ * @base_col: column
+ * @base_row: row
+ * @move_col: column
+ * @move_row: row
  *
  * Notify expr_entry that the expression range has changed.
  **/
@@ -3960,7 +3972,7 @@ cb_scg_queued_movement (SheetControlGUI *scg)
  * @handler: (scope async): The movement handler
  * @n:		how far
  * @jump:	TRUE jump to bound
- * @horiz:	TRUE move by cols
+ * @horiz:	TRUE to move by columns
  *
  * Do motion compression when possible to avoid redrawing an area that will
  * disappear when we scroll again.
@@ -4162,13 +4174,13 @@ scg_drag_receive_uri_list (SheetControlGUI *scg, double x, double y,
 		gchar *mime = go_get_mime_type (uri_str);
 		/* Note that we have imperfect detection of mime-type with some
 		 * platforms, e.g. Win32. In the worst case if
-		 * go_get_mime_type() doesn't return "application/x-gnumeric"
+		 * go_get_mime_type () doesn't return "application/x-gnumeric"
 		 * (registry corruption?) it will give "text/plain" and a
 		 * spreadsheet file is assumed. */
 		if (!mime)
 			continue;
 
-		if (!strncmp (mime, "image/", 6))
+		if (g_str_has_prefix (mime, "image/"))
 			scg_drag_receive_img_uri (scg, x, y, uri_str);
 		else if (!strcmp (mime, "application/x-gnumeric") ||
 			 !strcmp (mime, "application/vnd.ms-excel") ||
@@ -4286,7 +4298,7 @@ scg_drag_receive_same_process (SheetControlGUI *scg, GtkWidget *source_widget,
 	}
 }
 
-/*  Keep in sync with gtk_selection_data_targets_include_text() */
+/*  Keep in sync with gtk_selection_data_targets_include_text */
 static gboolean
 is_text_target (gchar *target_type)
 {
@@ -4318,7 +4330,7 @@ scg_drag_data_received (SheetControlGUI *scg, GtkWidget *source_widget,
 	if (!strcmp (target_type, "text/uri-list")) {
 		scg_drag_receive_uri_list (scg, x, y, sel_data, sel_len);
 
-	} else if (!strncmp (target_type, "image/", 6)) {
+	} else if (g_str_has_prefix (target_type, "image/")) {
 		scg_drag_receive_img_data (scg, x, y, sel_data, sel_len);
 	} else if (!strcmp (target_type, "GNUMERIC_SAME_PROC")) {
 		scg_drag_receive_same_process (scg, source_widget, x, y);
@@ -4495,7 +4507,7 @@ scg_drag_data_get (SheetControlGUI *scg, GtkSelectionData *selection_data)
 			selection_data, objects);
 	else if (strcmp (target_name, "application/x-goffice-graph") == 0)
 		scg_drag_send_graph (scg, selection_data, objects, target_name);
-	else if (strncmp (target_name, "image/", 6) == 0)
+	else if (g_str_has_prefix (target_name, "image/"))
 		scg_drag_send_image (scg, selection_data, objects, target_name);
 	else if (strcmp (target_name, "UTF8_STRING") == 0)
 		scg_drag_send_text (scg, selection_data);

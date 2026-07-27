@@ -1,5 +1,5 @@
-#ifndef _GNM_GUTILS_H_
-# define _GNM_GUTILS_H_
+#ifndef GNM_GUTILS_H_
+#define GNM_GUTILS_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
@@ -30,7 +30,7 @@ int gnm_excel_search_impl (const char *needle, const char *haystack,
 gboolean gnm_pango_attr_list_equal (PangoAttrList const *l1, PangoAttrList const *l2);
 
 /* Locale utilities */
-typedef struct _GnmLocale GnmLocale;
+typedef struct GnmLocale_ GnmLocale;
 GnmLocale *gnm_push_C_locale (void);
 void	   gnm_pop_C_locale  (GnmLocale *locale);
 
@@ -76,6 +76,18 @@ gboolean gnm_file_saver_common_export_option (GOFileSaver const *fs,
 
 char *gnm_cpp (const char *src, GHashTable *vars);
 
+gboolean gnm_shortest_rep_in_files (void);
+
+#ifdef GNM_SUPPLIES_GNM_SSCANF
+int gnm_sscanf (const char *str, const char *fmt, ...);
+#endif
+
+// Interface for ssconvert --export-range
+int gnm_export_range_for_sheet (Sheet const *sheet, GnmRange *dest);
+
+
+
+
 G_END_DECLS
 
-#endif /* _GNM_GUTILS_H_ */
+#endif /* GNM_GUTILS_H_ */

@@ -1,3 +1,51 @@
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.61
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.60
+
+2025-03-01  Morten Welinder  <terra@gnome.org>
+
+	* openoffice-write.c (odf_write_gog_style_graphic): Write opacity
+	for marker fill and outline.
+
+	* openoffice-read.c (oo_cellref_parse): Parse whole-column references.
+	(odf_apply_style_props): Read opacity for marker fill and outline.
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.59
+
+2024-04-03  Morten Welinder  <terra@gnome.org>
+
+	* openoffice-read.c (oo_iteration): Read tolerance.
+
+	* openoffice-write.c (odf_print_spreadsheet_content_prelude):
+	Store iteration tolerance with full precision.
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.57
+
+2023-12-05  Morten Welinder  <terra@gnome.org>
+
+	* openoffice-read.c (oo_filter_cond): Fix auto-filter import
+	problems.
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.56
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.55
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.54
+
 2022-09-17  Morten Welinder <terra@gnome.org>
 
 	* Release 1.12.53
@@ -1187,7 +1235,7 @@
 
 	* openoffice-read.c (oo_cell_start): watch for fake spans
 	* openoffice-write.c (odf_cellspan_is_empty): new
-	(odf_write_cell): simulate center-accross-selection as merges
+	(odf_write_cell): simulate center-across-selection as merges
 
 2014-04-18  Andreas J. Guelzow <aguelzow@pyrshep.ca>
 
@@ -3956,8 +4004,8 @@
 	(odf_write_interpolation_attribute): add argument and change all callers
 	(odf_write_scatter_series_style): deleted
 	(odf_write_scatter_series_style_graphic): deleted
-	(odf_write_gog_style_graphic): new atributes
-	(odf_write_gog_style_chart): new atributes
+	(odf_write_gog_style_graphic): new attributes
+	(odf_write_gog_style_chart): new attributes
 	(odf_write_plot): use gog_styles instead of series named styles
 
 2010-08-30  Andreas J. Guelzow <aguelzow@pyrshep.ca>
@@ -3978,7 +4026,7 @@
 2010-08-28  Andreas J. Guelzow <aguelzow@pyrshep.ca>
 
 	* openoffice-read.c (oo_cell_start): no need to duplicate the style name
-	(od_style_prop_chart): new atribute
+	(od_style_prop_chart): new attribute
 	(oo_plot_series): zero the data point count
 	(oo_series_pt): implement
 	* openoffice-write.c (cmp_data_points): new
@@ -6665,7 +6713,7 @@
 
 	http://bugzilla.gnome.org/show_bug.cgi?id=96595
 	* openoffice-read.c (oo_covered_cell_start) : new.
-	(oo_covered_cell_end) : new.  covered cells, and repeated convered
+	(oo_covered_cell_end) : new.  covered cells, and repeated converted
 	  cells take up space.
 	(oo_cell_end) : a repeated cell with content replicates the content.
 	(oo_cell_start) : a repeated cell with a style replicates the style.

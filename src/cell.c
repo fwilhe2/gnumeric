@@ -292,14 +292,11 @@ gnm_cell_set_expr (GnmCell *cell, GnmExprTop const *texpr)
  * @rowa:   The top row in the destination region.
  * @colb:   The right column in the destination region.
  * @rowb:   The bottom row in the destination region.
- * @texpr:   an expression (the inner expression, not a corner or element)
+ * @texpr: (transfer full): an expression (the inner expression, not a corner or element)
  *
  * Uses cell_set_expr_internal to store the expr as an
  * 'array-formula'.  The supplied expression is wrapped in an array
  * operator for each cell in the range and scheduled for recalc.
- *
- * NOTE : Does not add a reference to the expression.  It takes over the
- *        caller's reference.
  *
  * Does not regenerate spans, dimensions or autosize cols/rows.
  *
@@ -555,9 +552,9 @@ gnm_cell_array_bound (GnmCell const *cell, GnmRange *res)
 
 /**
  * gnm_cell_is_array:
- * @cell: #GnmCell
+ * @cell: (nullable): #GnmCell
  *
- * Returns %TRUE is @cell is part of an array
+ * Returns: %TRUE if @cell is part of an array
  **/
 gboolean
 gnm_cell_is_array (GnmCell const *cell)
@@ -571,7 +568,7 @@ gnm_cell_is_array (GnmCell const *cell)
  * gnm_cell_is_nonsingleton_array:
  * @cell: #GnmCell
  *
- * Returns: %TRUE is @cell is part of an array larger than 1x1
+ * Returns: %TRUE if @cell is part of an array larger than 1x1
  **/
 gboolean
 gnm_cell_is_nonsingleton_array (GnmCell const *cell)
@@ -596,7 +593,8 @@ gnm_cell_is_nonsingleton_array (GnmCell const *cell)
  * gnm_cell_get_rendered_value: (skip)
  * @cell: #GnmCell
  *
- * Returns: (transfer none): The #GnmRenderedValue for the cell.
+ * Returns: (transfer none) (nullable): The #GnmRenderedValue for the cell,
+ * if one currently exists.
  **/
 GnmRenderedValue *
 gnm_cell_get_rendered_value (GnmCell const *cell)
@@ -662,10 +660,13 @@ gnm_cell_render_value (GnmCell const *cell, gboolean allow_variable_width)
 
 /*
  * gnm_cell_get_rendered_text:
+ * @cell: cell to query
  *
  * Warning: use this only when you really want what is displayed on the
  * screen.  If the user has decided to display formulas instead of values
  * then that is what you get.
+ *
+ * Returns: (transfer full): text in cell.
  */
 char *
 gnm_cell_get_rendered_text (GnmCell *cell)
@@ -701,11 +702,10 @@ gnm_cell_get_render_color (GnmCell const *cell)
  * gnm_cell_get_entered_text:
  * @cell: the cell from which we want to pull the content from
  *
- * This returns a g_malloc()ed region of memory with a text representation
- * of the cell contents.
- *
  * Returns: (transfer full): a text expression if the cell contains a
- * formula, or a string representation of the value.
+ * formula, or a string representation of the value.  For formulas this
+ * includes an equals sign.  For values, an initial single quote may
+ * be added to force text interpretation of a string.
  */
 char *
 gnm_cell_get_entered_text (GnmCell const *cell)
@@ -735,8 +735,12 @@ gnm_cell_get_entered_text (GnmCell const *cell)
 			sheet_date_conv (sheet);
 
 		if (VALUE_IS_STRING (v)) {
-			/* Try to be reasonably smart about adding a leading quote */
-			char const *tmp = value_peek_string (v);
+			// Try to be reasonably smart about adding a leading quote
+
+			// Note: copy the string.  Weird things involving
+			// conditional formats and go_string_get_casefolded_collate
+			// can cause problems.
+			char *tmp = g_strdup (value_peek_string (v));
 
 			if (tmp[0] != '\'' &&
 			    tmp[0] != 0 &&
@@ -746,10 +750,12 @@ gnm_cell_get_entered_text (GnmCell const *cell)
 					 gnm_cell_get_format (cell),
 					 date_conv);
 				if (val == NULL)
-					return g_strdup (tmp);
+					return tmp;
 				value_release (val);
 			}
-			return g_strconcat ("\'", tmp, NULL);
+			char *res = g_strconcat ("\'", tmp, NULL);
+			g_free (tmp);
+			return res;
 		} else {
 			GOFormat const *fmt = gnm_cell_get_format (cell);
 			return format_value (fmt, v, -1, date_conv);
@@ -877,10 +883,12 @@ gnm_cell_get_text_for_editing (GnmCell const * cell,
 			break;
 		}
 
+		default:
 		case GO_FORMAT_NUMBER:
 		case GO_FORMAT_SCIENTIFIC:
 		case GO_FORMAT_CURRENCY:
-		case GO_FORMAT_ACCOUNTING: {
+		case GO_FORMAT_ACCOUNTING:
+		case GO_FORMAT_GENERAL: {
 			GString *new_str = g_string_new (NULL);
 			gnm_render_general (NULL, new_str, go_format_measure_zero,
 					    go_font_metrics_unit, f,
@@ -926,9 +934,6 @@ gnm_cell_get_text_for_editing (GnmCell const * cell,
 			go_format_unref (new_fmt);
 			break;
 		}
-
-		default:
-			break;
 		}
 	}
 
@@ -954,9 +959,7 @@ gnm_cell_rendered_height (GnmCell const *cell)
 	g_return_val_if_fail (cell != NULL, 0);
 
 	rv = gnm_cell_get_rendered_value (cell);
-	return rv
-		? PANGO_PIXELS (rv->layout_natural_height)
-		: 0;
+	return rv ?  gnm_rendered_value_get_height (rv) : 0;
 }
 
 /*
@@ -970,9 +973,7 @@ gnm_cell_rendered_width (GnmCell const *cell)
 	g_return_val_if_fail (cell != NULL, 0);
 
 	rv = gnm_cell_get_rendered_value (cell);
-	return rv
-		? PANGO_PIXELS (rv->layout_natural_width)
-		: 0;
+	return rv ?  gnm_rendered_value_get_width (rv) : 0;
 }
 
 int
@@ -1144,6 +1145,23 @@ gnm_cell_convert_expr_to_value (GnmCell *cell)
 	cell->base.texpr = NULL;
 }
 
+/**
+ * gnm_cell_queue_recalc:
+ * @cell:
+ *
+ * Queue the cell and everything that depends on it for recalculation.
+ * If a dependency is already queued ignore it.
+ */
+void
+gnm_cell_queue_recalc (GnmCell *cell)
+{
+	g_return_if_fail (cell != NULL);
+
+	if (!gnm_cell_needs_recalc (cell))
+		dependent_queue_recalc (GNM_CELL_TO_DEP (cell));
+}
+
+
 static gpointer cell_boxed_copy (gpointer c) { return c; }
 static void cell_boxed_free (gpointer c) { }
 
@@ -1172,3 +1190,34 @@ gnm_cell_get_type (void)
  * or contains a value.
  */
 extern inline gboolean gnm_cell_has_expr (GnmCell const *cell);
+
+/**
+ * gnm_cell_needs_recalc:
+ * @cell: #GnmCell
+ *
+ * Returns: %TRUE if @cell needs recalculations.
+ */
+extern inline gboolean gnm_cell_needs_recalc (GnmCell const *cell);
+
+// Internal
+extern inline gboolean gnm_cell_expr_is_linked (GnmCell const *cell);
+
+/**
+ * gnm_cell_is_merged:
+ * @cell: #GnmCell
+ *
+ * Returns: %TRUE if @cell is the corner of a merged region.
+ */
+extern inline gboolean gnm_cell_is_merged (GnmCell const *cell);
+
+/**
+ * gnm_cell_eval:
+ * @cell: (transfer none): #GnmCell
+ *
+ * Evaluate @cell if needed and return its value.  Other than return
+ * value, this does the same thing as gnm_dep_cell_eval.  Choose the
+ * latter in the main evaluation path in order to limit stack usage.
+ *
+ * Returns: (transfer none): the cell's new value.
+ */
+extern inline GnmValue *gnm_cell_eval (GnmCell *cell);

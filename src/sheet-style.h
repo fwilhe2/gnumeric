@@ -1,17 +1,17 @@
-#ifndef _GNM_SHEET_STYLE_H_
-# define _GNM_SHEET_STYLE_H_
+#ifndef GNM_SHEET_STYLE_H_
+#define GNM_SHEET_STYLE_H_
 
 #include <gnumeric.h>
 #include <style-border.h>
 
 G_BEGIN_DECLS
 
-struct _GnmStyleRegion {
+struct GnmStyleRegion_ {
 	GnmRange  range; /* must be 1st */
 	GnmStyle *style;
 };
 
-struct _GnmStyleRow {
+struct GnmStyleRow_ {
 	gboolean hide_grid;
 	int row, start_col, end_col;
 	Sheet const     *sheet;
@@ -50,11 +50,11 @@ unsigned int sheet_style_find_conflicts (Sheet const *sheet, GnmRange const *r,
 					 GnmBorder *borders[GNM_STYLE_BORDER_EDGE_MAX]);
 void	 sheet_style_get_extent		(Sheet const *sheet, GnmRange *r);
 void	 sheet_style_get_nondefault_extent (Sheet const *sheet, GnmRange *extent,
-					    const GnmRange *src, GnmStyle **col_defaults);
-guint8 * sheet_style_get_nondefault_rows (Sheet const *sheet,
-					  GnmStyle **col_defaults);
+					    const GnmRange *src, GPtrArray *col_defaults);
+GByteArray* sheet_style_get_nondefault_rows (Sheet const *sheet,
+					     GPtrArray *col_defaults);
 
-gboolean sheet_style_is_default         (Sheet const *sheet, const GnmRange *r, GnmStyle **col_defaults);
+gboolean sheet_style_is_default         (Sheet const *sheet, const GnmRange *r, GPtrArray *col_defaults);
 void     style_row_init			(GnmBorder const * * *prev_vert,
 					 GnmStyleRow *sr, GnmStyleRow *next_sr,
 					 int start_col, int end_col,
@@ -67,7 +67,7 @@ void	  sheet_style_range_foreach (Sheet const *sheet, GnmRange const *r,
 				     GHFunc	  func,
 				     gpointer     user_data);
 
-GnmStyle **sheet_style_most_common (Sheet const *sheet, gboolean is_col);
+GPtrArray *sheet_style_most_common (Sheet const *sheet, gboolean is_col);
 
 void sheet_style_init     (Sheet *sheet);
 void sheet_style_resize   (Sheet *sheet, int cols, int rows);
@@ -78,8 +78,8 @@ void      sheet_style_set_auto_pattern_color (Sheet  *sheet,
 GnmColor *sheet_style_get_auto_pattern_color (Sheet const *sheet);
 void      sheet_style_update_grid_color      (Sheet const *sheet, GtkStyleContext *context);
 
-GnmStyle const    *style_list_get_style	 (GnmStyleList const *l, int col, int row);
-void		   style_list_free	 (GnmStyleList *l);
+GnmStyle const    *sheet_style_list_get_style (GnmStyleList const *l, int col, int row);
+void		   sheet_style_list_free (GnmStyleList *l);
 GnmStyleList	  *sheet_style_get_range (Sheet const *sheet, GnmRange const *r);
 
 typedef  gboolean (*sheet_style_set_list_cb_t) (GnmRange *range,
@@ -110,4 +110,4 @@ void      sheet_style_optimize (Sheet *sheet);
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_STYLE_H_ */
+#endif /* GNM_SHEET_STYLE_H_ */

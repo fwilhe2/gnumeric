@@ -169,7 +169,7 @@ dialog_doc_metadata_get_value_type_from_name (gchar const *name, GType def)
 		static struct {
 			char const *name;
 			GType type;
-		} const map [] = {
+		} const map[] = {
 			{GSF_META_NAME_GENERATOR,            G_TYPE_STRING},
 			{GSF_META_NAME_INITIAL_CREATOR,      G_TYPE_STRING},
 			{GSF_META_NAME_CREATOR,              G_TYPE_STRING},
@@ -308,7 +308,7 @@ dialog_doc_metadata_transform_str_to_timestamp (const char *str,
 		int_serial = (int)serial;
 		s = go_date_serial_to_timet (int_serial, NULL);
 
-		if (gnm_abs (serial - int_serial) >= 1.0 || s == (time_t)-1) {
+		if (gnm_abs (serial - int_serial) >= 1 || s == (time_t)-1) {
 			s = time (NULL);
 		} else
 			s += (gnm_fake_round (3600 * 24 * (serial - int_serial)));
@@ -552,7 +552,7 @@ dialog_doc_metadata_set_up_permissions (DialogDocMetaData *state)
 	gtk_widget_set_sensitive (GTK_WIDGET (state->others_write), FALSE);
 }
 
- /* @auto_fill : if TRUE and the text is NULL, try to set the label text with an automatic value. */
+ /* @auto_fill : if %TRUE and the text is %NULL, try to set the label text with an automatic value. */
 static void
 dialog_doc_metadata_set_label (DialogDocMetaData *state,
 			       GtkLabel          *label,
@@ -1076,6 +1076,7 @@ cb_dialog_doc_metadata_comments_changed (GtkTextView     *view,
 				      GSF_META_NAME_DESCRIPTION,
 				      text,
 				      NULL,  G_TYPE_STRING);
+	g_free (text);
 	return FALSE;
 }
 
@@ -1331,7 +1332,7 @@ cb_dialog_doc_metadata_add_clicked (G_GNUC_UNUSED GtkWidget *w,
 	const gchar *value = gtk_entry_get_text (state->ppt_value);
 	gchar *name_trimmed = trim_string (name);
 	GType t = G_TYPE_INVALID; /* we need to initialize that one since
-								gtk_tree_model_get() will only set the low bytes */
+								gtk_tree_model_get will only set the low bytes */
 	GtkTreeIter filter_iter;
 
 	if (gtk_combo_box_get_active_iter (state->ppt_type, &filter_iter)) {
@@ -1753,27 +1754,27 @@ cb_dialog_doc_metadata_ppt_name_changed (G_GNUC_UNUSED GtkEntry          *entry,
 		}
 
 		if (t == G_TYPE_INVALID) {
-			g_signal_handlers_block_by_func(G_OBJECT (state->ppt_type),
-							cb_dialog_doc_metadata_ppt_type_changed,
-							state);
+			g_signal_handlers_block_by_func (G_OBJECT (state->ppt_type),
+							 cb_dialog_doc_metadata_ppt_type_changed,
+							 state);
 			gtk_tree_model_foreach (GTK_TREE_MODEL (state->type_store),
 						dialog_doc_metadata_show_all_types, NULL);
 			gtk_tree_model_filter_refilter (state->type_store_filter);
-			g_signal_handlers_unblock_by_func(G_OBJECT (state->ppt_type),
-							  cb_dialog_doc_metadata_ppt_type_changed,
-							  state);
+			g_signal_handlers_unblock_by_func (G_OBJECT (state->ppt_type),
+							   cb_dialog_doc_metadata_ppt_type_changed,
+							   state);
 		} else {
 			gtk_combo_box_set_active_iter (state->ppt_type, NULL);
-			g_signal_handlers_block_by_func(G_OBJECT (state->ppt_type),
-							cb_dialog_doc_metadata_ppt_type_changed,
-							state);
+			g_signal_handlers_block_by_func (G_OBJECT (state->ppt_type),
+							 cb_dialog_doc_metadata_ppt_type_changed,
+							 state);
 			gtk_tree_model_foreach (GTK_TREE_MODEL (state->type_store),
 						dialog_doc_metadata_show_this_type,
 						GINT_TO_POINTER (t));
 			gtk_tree_model_filter_refilter (state->type_store_filter);
-			g_signal_handlers_unblock_by_func(G_OBJECT (state->ppt_type),
-							  cb_dialog_doc_metadata_ppt_type_changed,
-							  state);
+			g_signal_handlers_unblock_by_func (G_OBJECT (state->ppt_type),
+							   cb_dialog_doc_metadata_ppt_type_changed,
+							   state);
 			if (gtk_tree_model_get_iter_first
 			    (GTK_TREE_MODEL (state->type_store_filter), &iter))
 				gtk_combo_box_set_active_iter (state->ppt_type, &iter);
@@ -1827,9 +1828,9 @@ dialog_doc_metadata_init_properties_page (DialogDocMetaData *state)
 
 	/* Intialize Combo Box */
 	/* gtk_combo_box_set_id_column (state->ppt_type, 0); */
-	cell = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(state->ppt_type), cell, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(state->ppt_type), cell, "text", 0, NULL);
+	cell = gtk_cell_renderer_text_new ();
+	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->ppt_type), cell, TRUE);
+	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (state->ppt_type), cell, "text", 0, NULL);
 
 	for (i = 0; i < G_N_ELEMENTS (ppt_types); i++)
 		gtk_list_store_insert_with_values (state->type_store, NULL, G_MAXINT,
@@ -1862,11 +1863,11 @@ dialog_doc_metadata_init_properties_page (DialogDocMetaData *state)
 	/* Append Columns */
 	gtk_tree_view_insert_column_with_attributes (state->properties,
 						     0, _("Name"),
-						     gtk_cell_renderer_text_new(),
+						     gtk_cell_renderer_text_new (),
 						     "text", 0,
 						     NULL);
 
-	cell =  gtk_cell_renderer_text_new();
+	cell =  gtk_cell_renderer_text_new ();
 	gtk_tree_view_insert_column_with_attributes (state->properties,
 						     1, _("Value"),
 						     cell,
@@ -1880,7 +1881,7 @@ dialog_doc_metadata_init_properties_page (DialogDocMetaData *state)
 
 	gtk_tree_view_insert_column_with_attributes (state->properties,
 						     2, _("Linked To"),
-						     gtk_cell_renderer_text_new(),
+						     gtk_cell_renderer_text_new (),
 						     "text", 2,
 						     NULL);
 
@@ -1967,8 +1968,8 @@ cb_dialog_doc_metadata_recalc_max_changed (GtkEntry          *entry,
 
 static gboolean
 cb_dialog_doc_metadata_recalc_tolerance_changed (GtkEntry          *entry,
-					   G_GNUC_UNUSED GdkEventFocus *event,
-					   DialogDocMetaData *state)
+						 G_GNUC_UNUSED GdkEventFocus *event,
+						 DialogDocMetaData *state)
 {
 	gnm_float val;
 	if (!entry_to_float (entry, &val, TRUE))
@@ -2014,9 +2015,14 @@ dialog_doc_metadata_init_calculations_page (DialogDocMetaData *state)
 	buf = g_strdup_printf ("%d", state->wb->iteration.max_number);
 	gtk_entry_set_text (state->recalc_max, buf);
 	g_free (buf);
-	buf = g_strdup_printf ("%g", state->wb->iteration.tolerance);
-	gtk_entry_set_text (state->recalc_tolerance, buf);
-	g_free (buf);
+
+	{
+		GnmValue *v = value_new_float (state->wb->iteration.tolerance);
+		buf = value_get_as_string (v);
+		value_release (v);
+		gtk_entry_set_text (state->recalc_tolerance, buf);
+		g_free (buf);
+	}
 
 	g_signal_connect (G_OBJECT (state->recalc_auto),
 			  "toggled",
@@ -2261,7 +2267,7 @@ dialog_doc_metadata_init (DialogDocMetaData *state,
 	int i;
 
 	state->wbcg     = wbcg;
-	state->wb       = wb_control_get_workbook (GNM_WBC(wbcg));
+	state->wb       = wb_control_get_workbook (GNM_WBC (wbcg));
 	state->doc      = GO_DOC (state->wb);
 	state->metadata = go_doc_get_meta_data (wb_control_get_doc (GNM_WBC (state->wbcg)));
 
@@ -2318,7 +2324,7 @@ dialog_doc_metadata_init (DialogDocMetaData *state,
 	go_gtk_nonmodal_dialog (wbcg_toplevel (state->wbcg),
 				GTK_WINDOW (state->dialog));
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog), "state",
 		state, (GDestroyNotify) dialog_doc_metadata_free);
 
@@ -2342,7 +2348,8 @@ dialog_doc_metadata_init (DialogDocMetaData *state,
 
 /**
  * dialog_doc_metadata_new:
- * @wbcg: WBCGtk
+ * @wbcg: #WBCGtk
+ * @page: initial page index
  *
  * Creates a new instance of the dialog.
  **/
@@ -2354,7 +2361,7 @@ dialog_doc_metadata_new (WBCGtk *wbcg, int page)
 	g_return_if_fail (wbcg != NULL);
 
 	/* Only one guru per workbook. */
-	if (wbc_gtk_get_guru (wbcg))
+	if (wbcg_get_guru (wbcg))
 		return;
 
 	/* Only pop up one copy per workbook */

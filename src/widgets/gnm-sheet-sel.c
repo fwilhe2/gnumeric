@@ -163,6 +163,11 @@ GSF_CLASS (GnmSheetSel, gnm_sheet_sel,
 	   gnm_sheet_sel_class_init, gnm_sheet_sel_init,
 	   GO_TYPE_OPTION_MENU)
 
+/**
+ * gnm_sheet_sel_new:
+ *
+ * Returns: (transfer full): a new sheet selector.
+ **/
 GtkWidget *
 gnm_sheet_sel_new (void)
 {
@@ -214,6 +219,14 @@ cb_wb_changed (GnmWorkbookSel *wbs,
 	g_ptr_array_unref (sheets);
 }
 
+/**
+ * gnm_sheet_sel_link:
+ * @ss: #GnmSheetSel
+ * @wbs: #GnmWorkbookSel
+ *
+ * Links @ss to @wbs so that the sheet list is updated when the workbook
+ * changes.
+ **/
 void
 gnm_sheet_sel_link (GnmSheetSel *ss, GnmWorkbookSel *wbs)
 {

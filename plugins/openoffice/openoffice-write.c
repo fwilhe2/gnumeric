@@ -1,5 +1,3 @@
-/* vm: set sw=8: -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
-
 /*
  * openoffice-write.c : export OpenOffice OASIS .ods files
  *
@@ -56,7 +54,6 @@
 #include <validation-combo.h>
 #include <hlink.h>
 #include <sheet-filter.h>
-#include <print-info.h>
 #include <parse-util.h>
 #include <tools/dao.h>
 #include <gutils.h>
@@ -160,10 +157,11 @@ typedef struct {
 	float sheet_progress;
 } GnmOOExport;
 
-typedef struct {
-	GnmConventions base;
-	GnmOOExport *state;
-} ODFConventions;
+static inline GnmOOExport *
+odf_get_data (GnmConventions const *convs)
+{
+	return (GnmOOExport *)convs->pdata;
+}
 
 
 typedef struct {
@@ -368,7 +366,7 @@ odf_add_chars_non_white (GnmOOExport *state, char const *text, int len)
 static void
 odf_add_chars (GnmOOExport *state, char const *text, int len, gboolean *white_written)
 {
-	int nw = strcspn(text, " \n\t");
+	int nw = strcspn (text, " \n\t");
 
 	if (nw >= len) {
 		odf_add_chars_non_white (state, text, len);
@@ -386,7 +384,7 @@ odf_add_chars (GnmOOExport *state, char const *text, int len, gboolean *white_wr
 	switch (*text) {
 	case ' ':
 	{
-		int white = strspn(text, " ");
+		int white = strspn (text, " ");
 
 		if (!*white_written) {
 			gsf_xml_out_add_cstr (state->xml, NULL, " ");
@@ -433,9 +431,9 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 	int spans = 0;
 
 	switch (a->klass->type) {
-	case PANGO_ATTR_FAMILY :
+	case PANGO_ATTR_FAMILY:
 		break; /* ignored */
-	case PANGO_ATTR_SIZE :
+	case PANGO_ATTR_SIZE:
 		{
 			char * str;
 			gint size = ((PangoAttrInt *)a)->value/PANGO_SCALE;
@@ -457,7 +455,7 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 			gsf_xml_out_add_cstr (state->xml, TEXT "style-name", "AC-script");
 		spans += 1;
 		break;
-	case PANGO_ATTR_STYLE :
+	case PANGO_ATTR_STYLE:
 		spans += 1;
 		gsf_xml_out_start_element (state->xml, TEXT "span");
 		gsf_xml_out_add_cstr (state->xml, TEXT "style-name",
@@ -465,7 +463,7 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 				       == PANGO_STYLE_ITALIC)
 				      ? "AC-italic"  : "AC-roman");
 		break;
-	case PANGO_ATTR_WEIGHT :
+	case PANGO_ATTR_WEIGHT:
 	{
 		char * str = g_strdup_printf ("AC-weight%i",
 					      ((((PangoAttrInt *)a)->value
@@ -476,7 +474,7 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 		g_free (str);
 	}
 	break;
-	case PANGO_ATTR_STRIKETHROUGH :
+	case PANGO_ATTR_STRIKETHROUGH:
 		spans += 1;
 		gsf_xml_out_start_element (state->xml, TEXT "span");
 		gsf_xml_out_add_cstr (state->xml, TEXT "style-name",
@@ -484,23 +482,23 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 				      ? "AC-strikethrough-solid"
 				      : "AC-strikethrough-none");
 		break;
-	case PANGO_ATTR_UNDERLINE :
+	case PANGO_ATTR_UNDERLINE:
 	{
 		char const *name = NULL;
 		switch (((PangoAttrInt *)a)->value) {
-		case PANGO_UNDERLINE_NONE :
+		case PANGO_UNDERLINE_NONE:
 			name = "AC-underline-none";
 			break;
-		case PANGO_UNDERLINE_SINGLE :
+		case PANGO_UNDERLINE_SINGLE:
 			name = "AC-underline-single";
 			break;
-		case PANGO_UNDERLINE_DOUBLE :
+		case PANGO_UNDERLINE_DOUBLE:
 			name = "AC-underline-double";
 			break;
-		case PANGO_UNDERLINE_LOW :
+		case PANGO_UNDERLINE_LOW:
 			name = "AC-underline-low";
 			break;
-		case PANGO_UNDERLINE_ERROR :
+		case PANGO_UNDERLINE_ERROR:
 			name = "AC-underline-error";
 			break;
 		default:
@@ -511,7 +509,7 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 		gsf_xml_out_add_cstr (state->xml, TEXT "style-name", name);
 	}
 	break;
-	case PANGO_ATTR_FOREGROUND :
+	case PANGO_ATTR_FOREGROUND:
 		{
 			PangoColor const *c;
 			gchar *c_str;
@@ -529,7 +527,7 @@ odf_attrs_as_string (GnmOOExport *state, PangoAttribute *a)
 			g_hash_table_insert (state->text_colours, name, c_str);
 		}
 		break;
-	default :
+	default:
 		if (a->klass->type ==
 		    go_pango_attr_subscript_get_attr_type ()) {
 			gsf_xml_out_start_element (state->xml, TEXT "span");
@@ -646,6 +644,12 @@ odf_go_color_to_string (GOColor color)
 				GO_COLOR_UINT_R (color),
 				GO_COLOR_UINT_G (color),
 				GO_COLOR_UINT_B (color));
+}
+
+static gboolean
+odf_go_color_has_opacity (GOColor color)
+{
+	return GO_COLOR_UINT_A (color) < 255;
 }
 
 static double
@@ -1525,7 +1529,7 @@ static char *
 odf_strip_brackets (char *string)
 {
 	char *closing;
-	closing = strrchr(string, ']');
+	closing = strrchr (string, ']');
 	if (closing != NULL && *(closing+1) == '\0')
 		*closing = '\0';
 	return ((*string == '[') ? (string + 1) : string);
@@ -1628,10 +1632,9 @@ odf_save_style_map (GnmOOExport *state, GnmStyleCond const *cond, GnmRange *r)
 		return;
 	}
 
-	if (texpr) {
-		gnm_expr_top_unref (texpr);
-		texpr = NULL;
-	}
+	gnm_expr_top_unref (texpr);
+
+	texpr = NULL;
 
 	gsf_xml_out_start_element (state->xml, STYLE "map");
 
@@ -1662,7 +1665,7 @@ odf_write_style (GnmOOExport *state, GnmStyle const *style, GnmRange *r, gboolea
 	guint i;
 
 	if ((!is_default) && gnm_style_is_element_set (style, MSTYLE_FORMAT)) {
-		GOFormat const *format = gnm_style_get_format(style);
+		GOFormat const *format = gnm_style_get_format (style);
 		if (format != NULL)
 			odf_write_style_goformat_name (state, format);
 	}
@@ -1738,7 +1741,7 @@ odf_find_row_style (GnmOOExport *state, ColRowInfo const *ci, gboolean write)
 			gsf_xml_out_end_element (state->xml); /* </style:style> */
 			return new_style->name;
 		} else {
-			g_warning("We forgot to export a required row style!");
+			g_warning ("We forgot to export a required row style!");
 			return "Missing-Row-Style";
 		}
 	}
@@ -1775,7 +1778,7 @@ odf_find_col_style (GnmOOExport *state, ColRowInfo const *ci, gboolean write)
 			gsf_xml_out_end_element (state->xml); /* </style:style> */
 			return new_style->name;
 		} else {
-			g_warning("We forgot to export a required column style!");
+			g_warning ("We forgot to export a required column style!");
 			return "Missing-Column-Style";
 		}
 	}
@@ -2658,14 +2661,14 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 		{ "ZTEST","ZTEST" },
 		{ NULL, NULL }
 	};
-	ODFConventions *oconv = (ODFConventions *)(out->convs);
+	GnmOOExport *state = odf_get_data (out->convs);
 	GHashTable *namemap;
 	GHashTable *handlermap;
 
 	char const *name = gnm_func_get_name (func->func, FALSE);
 	gboolean (*handler) (GnmConventionsOut *out, GnmExprFunction const *func);
 
-	if (NULL == oconv->state->openformula_namemap) {
+	if (NULL == state->openformula_namemap) {
 		guint i;
 		namemap = g_hash_table_new (go_ascii_strcase_hash,
 					    go_ascii_strcase_equal);
@@ -2673,11 +2676,11 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 			g_hash_table_insert (namemap,
 					     (gchar *) sc_func_renames[i].gnm_name,
 					     (gchar *) sc_func_renames[i].odf_name);
-		oconv->state->openformula_namemap = namemap;
+		state->openformula_namemap = namemap;
 	} else
-		namemap = oconv->state->openformula_namemap;
+		namemap = state->openformula_namemap;
 
-	if (NULL == oconv->state->openformula_handlermap) {
+	if (NULL == state->openformula_handlermap) {
 		guint i;
 		handlermap = g_hash_table_new (go_ascii_strcase_hash,
 					       go_ascii_strcase_equal);
@@ -2685,9 +2688,9 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 			g_hash_table_insert (handlermap,
 					     (gchar *) sc_func_handlers[i].gnm_name,
 					     sc_func_handlers[i].handler);
-		oconv->state->openformula_handlermap = handlermap;
+		state->openformula_handlermap = handlermap;
 	} else
-		handlermap = oconv->state->openformula_handlermap;
+		handlermap = state->openformula_handlermap;
 
 	handler = g_hash_table_lookup (handlermap, name);
 
@@ -2738,10 +2741,7 @@ odf_boolean_handler (GnmConventionsOut *out, gboolean val)
 static GnmConventions *
 odf_expr_conventions_new (GnmOOExport *state)
 {
-	GnmConventions *conv = gnm_conventions_new_full
-		(sizeof (ODFConventions));
-	ODFConventions *oconv = (ODFConventions *)conv;
-	gnm_float l10;
+	GnmConventions *conv = gnm_conventions_new ();
 
 	conv->sheet_name_sep		= '.';
 	conv->arg_sep			= ';';
@@ -2754,12 +2754,16 @@ odf_expr_conventions_new (GnmOOExport *state)
 	conv->output.range_ref		= odf_rangeref_as_string;
 	conv->output.func               = odf_expr_func_handler;
 	conv->output.boolean            = odf_boolean_handler;
+	conv->output.uppercase_E        = FALSE;
 
-	l10 = gnm_log10 (FLT_RADIX);
-	conv->output.decimal_digits     = (int)gnm_ceil (GNM_MANT_DIG * l10) +
-		                          (l10 == (int)l10 ? 0 : 1);
+	if (!gnm_shortest_rep_in_files ()) {
+		gnm_float l10 = gnm_log10 (GNM_RADIX);
+		conv->output.decimal_digits  =
+			(int)gnm_ceil (GNM_MANT_DIG * l10) +
+			(l10 == (int)l10 ? 0 : 1);
+	}
 
-	oconv->state                    = state;
+	gnm_conventions_set_extension (conv, state, NULL);
 
 	return conv;
 }
@@ -2773,7 +2777,7 @@ odf_cell_is_covered (G_GNUC_UNUSED Sheet const *sheet,
 	GSList *l;
 
 	if (merge_range != NULL) {
-		GnmRange *new_range = g_new(GnmRange, 1);
+		GnmRange *new_range = g_new (GnmRange, 1);
 		*new_range = *merge_range;
 		(*merge_ranges) = g_slist_prepend (*merge_ranges, new_range);
 		return FALSE;
@@ -2784,7 +2788,7 @@ odf_cell_is_covered (G_GNUC_UNUSED Sheet const *sheet,
 
 	*merge_ranges = g_slist_remove_all (*merge_ranges, NULL);
 
-	for (l = *merge_ranges; l != NULL; l = g_slist_next(l)) {
+	for (l = *merge_ranges; l != NULL; l = g_slist_next (l)) {
 		GnmRange *r = l->data;
 		if (r->end.row < row) {
 			/* We do not need this range anymore */
@@ -3086,7 +3090,7 @@ odf_write_image (GnmOOExport *state, SheetObject *so, char const *name)
 		gsf_xml_out_add_cstr (state->xml, XLINK "actuate", "onLoad");
 		gsf_xml_out_end_element (state->xml); /*  DRAW "image" */
 
-		g_free(fullname);
+		g_free (fullname);
 		g_free (image_type);
 	} else
 		g_warning ("Image is missing from hash.");
@@ -3160,7 +3164,7 @@ odf_write_custom_shape (GnmOOExport *state, SheetObject *so)
 	if (path) {
 		char *ps = go_path_to_svg (path);
 		path_string = g_strconcat (ps, " N", NULL);
-		g_free(ps);
+		g_free (ps);
 	}
 	if (paths) {
 		GString *gstr = g_string_new (path_string);
@@ -3461,7 +3465,7 @@ odf_cellspan_is_empty (int col, GnmCell const *ok_span_cell)
 	tmp = sheet_cell_get (sheet, col, row);
 
 	return (tmp == NULL || tmp->value == NULL ||
-		(VALUE_IS_EMPTY (tmp->value) && !gnm_cell_has_expr(tmp)));
+		(VALUE_IS_EMPTY (tmp->value) && !gnm_cell_has_expr (tmp)));
 }
 
 static void
@@ -3586,7 +3590,7 @@ odf_write_cell (GnmOOExport *state, GnmCell *cell, GnmRange const *merge_range,
 					gsf_xml_out_add_cstr (state->xml, OFFICE "date-value", str);
 				}
 				g_free (str);
-			} else if (go_format_is_time (fmt) && (value_get_as_float (cell->value) >= 0.)) {
+			} else if (go_format_is_time (fmt) && (value_get_as_float (cell->value) >= 0)) {
 				char *str;
 				gsf_xml_out_add_cstr_unchecked (state->xml,
 								OFFICE "value-type", "time");
@@ -3716,7 +3720,8 @@ write_col_style (GnmOOExport *state, GnmStyle *col_style, ColRowInfo const *ci,
 }
 
 static void
-odf_write_formatted_columns (GnmOOExport *state, Sheet const *sheet, GnmStyle **col_styles, int from, int to)
+odf_write_formatted_columns (GnmOOExport *state, Sheet const *sheet,
+			     GPtrArray *col_styles, int from, int to)
 {
 	int number_cols_rep;
 	ColRowInfo const *last_ci;
@@ -3725,12 +3730,14 @@ odf_write_formatted_columns (GnmOOExport *state, Sheet const *sheet, GnmStyle **
 
 	gsf_xml_out_start_element (state->xml, TABLE "table-column");
 	number_cols_rep = 1;
-	last_col_style = filter_style (state->default_style_region->style, col_styles[0]);
+	last_col_style = filter_style (state->default_style_region->style,
+				       g_ptr_array_index (col_styles, 0));
 	last_ci = sheet_col_get (sheet, 0);
 	write_col_style (state, last_col_style, last_ci, sheet);
 
 	for (i = from+1; i < to; i++) {
-		GnmStyle *this_col_style = filter_style (state->default_style_region->style, col_styles[i]);
+		GnmStyle *this_col_style = filter_style (state->default_style_region->style,
+							 g_ptr_array_index (col_styles, i));
 		ColRowInfo const *this_ci = sheet_col_get (sheet, i);
 
 		if ((this_col_style == last_col_style) && col_row_info_equal (last_ci, this_ci))
@@ -3832,9 +3839,10 @@ enum {
 };
 
 static void
-odf_write_content_rows (GnmOOExport *state, Sheet const *sheet, int from, int to,
-			int row_length,
-			GSList **sheet_merges, GnmPageBreaks *pb, GnmStyle **col_styles)
+odf_write_content_rows (GnmOOExport *state, Sheet const *sheet,
+			int from, int to,
+			int row_length,	GSList **sheet_merges,
+			GnmPageBreaks *pb, GPtrArray *col_styles)
 {
 	int row;
 	GPtrArray *all_cells;
@@ -3877,12 +3885,12 @@ odf_write_content_rows (GnmOOExport *state, Sheet const *sheet, int from, int to
 
 	/* Find out what rows have style not covered by column styles.  */
 	{
-		guint8 *non_defaults_rows =
+		GByteArray *non_defaults_rows =
 			sheet_style_get_nondefault_rows (sheet, col_styles);
 		for (row = from; row < to; row++)
-			if (non_defaults_rows[row])
+			if (non_defaults_rows->data[row])
 				row_flags[row] |= RF_STYLE;
-		g_free (non_defaults_rows);
+		g_byte_array_free (non_defaults_rows, TRUE);
 	}
 
 	for (row = from; row < to; /* nothing here */) {
@@ -3934,7 +3942,7 @@ odf_write_content_rows (GnmOOExport *state, Sheet const *sheet, int from, int to
 				GSList *objects;
 				GnmStyle const *this_style = row_styles
 					? row_styles[col]
-					: col_styles[col];
+					: g_ptr_array_index (col_styles, col);
 
 				current_cell = g_ptr_array_index (all_cells, cno);
 				if (current_cell &&
@@ -3960,7 +3968,7 @@ odf_write_content_rows (GnmOOExport *state, Sheet const *sheet, int from, int to
 					? odf_sheet_objects_get (sheet, &pos)
 					: NULL;
 
-				if ((!(current_cell && gnm_cell_has_expr(current_cell))) &&
+				if ((!(current_cell && gnm_cell_has_expr (current_cell))) &&
 				    (merge_range == NULL) && (objects == NULL) &&
 				    gnm_cell_is_empty (current_cell) &&
 				    !gnm_style_get_hlink (this_style)) {
@@ -4015,7 +4023,7 @@ odf_write_sheet (GnmOOExport *state)
 	Sheet const *sheet = state->sheet;
 	int max_cols = gnm_sheet_get_max_cols (sheet);
 	int max_rows = gnm_sheet_get_max_rows (sheet);
-	GnmStyle **col_styles;
+	GPtrArray *col_styles;
 	GnmRange r;
 	GSList *sheet_merges = NULL;
 	GnmPageBreaks *pb = sheet->print_info->page_breaks.v;
@@ -4067,7 +4075,7 @@ odf_write_sheet (GnmOOExport *state)
 					max_cols, &sheet_merges, pb, col_styles);
 
 	g_slist_free_full (sheet_merges, g_free);
-	g_free (col_styles);
+	g_ptr_array_free (col_styles, TRUE);
 
 }
 
@@ -4428,7 +4436,7 @@ odf_write_filter_cond (GnmOOExport *state, GnmFilter const *filter, int i)
 	case GNM_FILTER_OP_TOP_N_PERCENT:	op = "top percent"; break;
 	case GNM_FILTER_OP_BOTTOM_N_PERCENT:	op = "bottom percent"; break;
 	/* remainder are not supported in ODF */
-	default :
+	default:
 		return;
 	}
 
@@ -4825,7 +4833,7 @@ odf_print_spreadsheet_content_validations (GnmOOExport *state)
 			/* </table:content-validation> */
 		}
 
-		style_list_free (list);
+		sheet_style_list_free (list);
 	}
 
 	if (element_written)
@@ -4854,8 +4862,8 @@ odf_print_spreadsheet_content_prelude (GnmOOExport *state)
 	gsf_xml_out_add_cstr_unchecked (state->xml, TABLE "value-type", "date");
 	gsf_xml_out_end_element (state->xml); /* </table:null-date> */
 	gsf_xml_out_start_element (state->xml, TABLE "iteration");
-	go_xml_out_add_double (state->xml, TABLE "maximum-difference",
-			       state->wb->iteration.tolerance);
+	gnm_xml_out_add_gnm_float (state->xml, TABLE "maximum-difference",
+				   state->wb->iteration.tolerance);
 	gsf_xml_out_add_cstr_unchecked (state->xml, TABLE "status",
 					state->wb->iteration.enabled ?  "enable" : "disable");
 	gsf_xml_out_add_int (state->xml, TABLE "steps", state->wb->iteration.max_number);
@@ -5244,7 +5252,7 @@ odf_render_cell (GnmOOExport *state, char const *args)
 			args += 4;
 		texpr = gnm_expr_parse_str (args, &pp, GNM_EXPR_PARSE_DEFAULT,
 				    convs, NULL);
-		gnm_conventions_unref (convs);
+		g_object_unref (convs);
 		if (texpr) {
 			formula = gnm_expr_top_as_string (texpr, &pp, state->conv);
 			gnm_expr_top_unref (texpr);
@@ -5269,7 +5277,7 @@ typedef struct {
 	char *name_trans;
 } render_ops_t;
 
-static render_ops_t odf_render_ops [] = {
+static render_ops_t odf_render_ops[] = {
 	{ N_("tab"),   odf_render_tab,   NULL},
 	{ N_("page"),  odf_render_page,  NULL},
 	{ N_("pages"), odf_render_pages, NULL},
@@ -5281,7 +5289,7 @@ static render_ops_t odf_render_ops [] = {
 	{ NULL, NULL, NULL },
 };
 
-static render_ops_t odf_render_ops_to_xl [] = {
+static render_ops_t odf_render_ops_to_xl[] = {
 	{ N_("tab"),   NULL,                  NULL},
 	{ N_("page"),  NULL,                  NULL},
 	{ N_("pages"), NULL,                  NULL},
@@ -5346,7 +5354,7 @@ odf_hf_region_to_xl_styles (GnmOOExport *state, char const *format)
 	if (format == NULL)
 		return;
 
-	for (p = format; *p; p = g_utf8_next_char(p)) {
+	for (p = format; *p; p = g_utf8_next_char (p)) {
 		if (*p == '&' && p[1] == '[') {
 			char const *start;
 
@@ -5415,7 +5423,7 @@ odf_write_hf_region (GnmOOExport *state, char const *format, char const *id)
 	gsf_xml_out_start_element (state->xml, TEXT "p");
 
 	text = g_string_new (NULL);
-	for (p = format; *p; p = g_utf8_next_char(p)) {
+	for (p = format; *p; p = g_utf8_next_char (p)) {
 		if (*p == '&' && p[1] == '[') {
 			char const *start;
 
@@ -5436,7 +5444,7 @@ odf_write_hf_region (GnmOOExport *state, char const *format, char const *id)
 			} else
 				break;
 		} else
-			g_string_append_len (text, p, g_utf8_next_char(p) - p);
+			g_string_append_len (text, p, g_utf8_next_char (p) - p);
 	}
 	if (text->len > 0)
 		gsf_xml_out_simple_element (state->xml, TEXT "span", text->str);
@@ -5467,7 +5475,7 @@ odf_write_hf (GnmOOExport *state, GnmPrintInformation *pi, char const *id, gbool
 	}
 
 	gsf_xml_out_start_element (state->xml, id);
-	odf_add_bool (state->xml, STYLE "display", hf_height > 0.);
+	odf_add_bool (state->xml, STYLE "display", hf_height > 0);
 
 	odf_write_hf_region (state, hf->left_format, STYLE "region-left");
 	odf_write_hf_region (state, hf->middle_format, STYLE "region-center");
@@ -5481,7 +5489,7 @@ odf_store_data_style_for_style_with_name (GnmStyleRegion *sr, G_GNUC_UNUSED char
 	GnmStyle const *style = sr->style;
 
 	if (gnm_style_is_element_set (style, MSTYLE_FORMAT)) {
-		GOFormat const *format = gnm_style_get_format(style);
+		GOFormat const *format = gnm_style_get_format (style);
 		if (format != NULL && !go_format_is_markup (format) && !go_format_is_general (format)) {
 			xl_find_format (state, format);
 		}
@@ -5634,7 +5642,7 @@ static void
 odf_write_page_layout (GnmOOExport *state, GnmPrintInformation *pi,
 		       Sheet const *sheet)
 {
-	static char const *centre_type [] = {
+	static char const *const centre_type[] = {
 		"none"        ,
 		"horizontal"  ,
 		"vertical"    ,
@@ -5945,7 +5953,7 @@ odf_write_gradient_info (GOStyle const *style, char const *name, GnmOOExport *st
 		unsigned int dir;
 		char const *type;
 		int angle;
-	} gradients[] = {
+	} const gradients[] = {
 		{GO_GRADIENT_N_TO_S,"linear", 180},
 		{GO_GRADIENT_S_TO_N, "linear", 0},
 		{GO_GRADIENT_N_TO_S_MIRRORED, "axial", 180},
@@ -6001,7 +6009,7 @@ odf_write_hatch_info (GOPattern *pattern, char const *name, GnmOOExport *state)
 		char const *style;
 		int angle;
 		double distance;
-	} info[] = {
+	} const info[] = {
 		{GO_PATTERN_GREY75, "double", 0, 1.0},
 		{GO_PATTERN_GREY50, "double", 0, 2.0},
 		{GO_PATTERN_GREY25, "double", 0, 3.0},
@@ -6065,7 +6073,7 @@ odf_write_dash_info (char const *name, gpointer data, GnmOOExport *state)
 
 	lds = go_line_dash_get_sequence (type, scale);
 	if (lds != NULL) {
-		double dot_1 = lds->dash [0];
+		double dot_1 = lds->dash[0];
 		guint n_1 = 1;
 		guint i = 2;
 
@@ -6078,7 +6086,7 @@ odf_write_dash_info (char const *name, gpointer data, GnmOOExport *state)
 
 		for (; lds->n_dash > i && lds->dash[i] == dot_1; i += 2);
 		gsf_xml_out_add_int (state->xml, DRAW "dots1", n_1);
-		if (dot_1 == 0.)
+		if (dot_1 == 0)
 			dot_1 = scale * 0.2;
 		if (new)
 			odf_add_percent (state->xml, DRAW "dots1-length", dot_1);
@@ -6090,7 +6098,7 @@ odf_write_dash_info (char const *name, gpointer data, GnmOOExport *state)
 			for (i += 2; lds->n_dash > i
 				     && lds->dash[i] == dot_1; i += 2);
 			gsf_xml_out_add_int (state->xml, DRAW "dots2", n_1);
-			if (dot_1 == 0.)
+			if (dot_1 == 0)
 				dot_1 = scale * 0.2;
 			if (new)
 				odf_add_percent (state->xml, DRAW "dots2-length",
@@ -6243,7 +6251,7 @@ odf_write_ooo_settings (GnmOOExport *state)
 		gsf_xml_out_start_element (state->xml, CONFIG "config-item");
 		gsf_xml_out_add_cstr_unchecked (state->xml, CONFIG "name", "ZoomValue");
 		gsf_xml_out_add_cstr_unchecked (state->xml, CONFIG "type", "int");
-		gsf_xml_out_add_int (state->xml, NULL, (int) gnm_floor (sheet->last_zoom_factor_used * 100. + 0.5));
+		gsf_xml_out_add_int (state->xml, NULL, (int) gnm_round (sheet->last_zoom_factor_used * 100));
 		gsf_xml_out_end_element (state->xml); /* </config:config-item> */
 
 		gsf_xml_out_start_element (state->xml, CONFIG "config-item");
@@ -6380,23 +6388,23 @@ odf_write_graph_manifest (SheetObject *graph, char const *name, GnmOOExport *sta
 		char *realname = g_strdup_printf ("%s-%i", name, i);
 		char *fullname = g_strdup_printf ("%s/", realname);
 		odf_file_entry (state->xml, "application/vnd.oasis.opendocument.chart", fullname);
-		g_free(fullname);
+		g_free (fullname);
 		fullname = g_strdup_printf ("%s/content.xml", realname);
 		odf_file_entry (state->xml, "text/xml", fullname);
-		g_free(fullname);
+		g_free (fullname);
 		fullname = g_strdup_printf ("%s/meta.xml", realname);
 		odf_file_entry (state->xml, "text/xml", fullname);
-		g_free(fullname);
+		g_free (fullname);
 		fullname = g_strdup_printf ("%s/styles.xml", realname);
 		odf_file_entry (state->xml, "text/xml", fullname);
-		g_free(fullname);
+		g_free (fullname);
 		fullname = g_strdup_printf ("Pictures/%s", realname);
 		odf_file_entry (state->xml, "image/svg+xml", fullname);
-		g_free(fullname);
+		g_free (fullname);
 		fullname = g_strdup_printf ("Pictures/%s.png", realname);
 		odf_file_entry (state->xml, "image/png", fullname);
-		g_free(fullname);
-		g_free(realname);
+		g_free (fullname);
+		g_free (realname);
 	}
 }
 
@@ -6413,7 +6421,7 @@ odf_write_image_manifest (SheetObject *image, char const *name, GnmOOExport *sta
 	odf_file_entry (state->xml, mime, fullname);
 
 	g_free (mime);
-	g_free(fullname);
+	g_free (fullname);
 	g_free (image_type);
 
 }
@@ -7091,11 +7099,11 @@ odf_write_interpolation_attribute (GnmOOExport *state,
 }
 
 static int
-odf_scale_initial_angle (gnm_float angle)
+odf_scale_initial_angle (double angle)
 {
 	angle = 90 - angle;
 	while (angle < 0)
-		angle += 360.;
+		angle += 360;
 	angle = gnm_fake_round (angle);
 
 	return (((int) angle) % 360);
@@ -7132,7 +7140,7 @@ odf_write_plot_style (GnmOOExport *state, GogObject const *plot)
 		} else
 			gsf_xml_out_add_int (state->xml,
 					     CHART "pie-offset",
-					     (default_separation * 100. + 0.5));
+					     round (default_separation * 100));
 	}
 
 	/* Note: horizontal refers to the bars and vertical to  the x-axis */
@@ -7202,7 +7210,7 @@ odf_get_marker (GOMarkerShape m)
 	static struct {
 		guint m;
 		char const *str;
-	} marks [] =
+	} const marks[] =
 		  {{GO_MARKER_NONE, "none"},
 		   {GO_MARKER_SQUARE, "square"},
 		   {GO_MARKER_DIAMOND,"diamond"},
@@ -7322,7 +7330,7 @@ odf_write_axis_style (GnmOOExport *state, GOStyle const *style,
 				      GNMSTYLE "chart-maximum-expression", NULL);
 	}
 
-	interval = gog_dataset_get_dim (GOG_DATASET(axis),2);
+	interval = gog_dataset_get_dim (GOG_DATASET (axis),2);
 	if (interval != NULL) {
 		GnmExprTop const *texpr
 			= gnm_go_data_get_expr (interval);
@@ -7331,7 +7339,7 @@ odf_write_axis_style (GnmOOExport *state, GOStyle const *style,
 			double val = value_get_as_float (texpr->expr->constant.value);
 			go_xml_out_add_double (state->xml, CHART "interval-major", val);
 
-			interval = gog_dataset_get_dim (GOG_DATASET(axis),3);
+			interval = gog_dataset_get_dim (GOG_DATASET (axis),3);
 			if (interval != NULL) {
 				texpr = gnm_go_data_get_expr (interval);
 				if (texpr != NULL &&
@@ -7340,9 +7348,9 @@ odf_write_axis_style (GnmOOExport *state, GOStyle const *style,
 						(texpr->expr->constant.value);
 					if (val_minor > 0) {
 						if (logarithmic)
-							val_minor = gnm_floor(val_minor + 1.5);
+							val_minor = gnm_floor (val_minor + 1.5);
 						else
-							val_minor = gnm_floor(val/val_minor + 0.5);
+							val_minor = gnm_round (val / val_minor);
 						gsf_xml_out_add_float
 							(state->xml, CHART "interval-minor-divisor",
 							 val_minor, 0);
@@ -7436,7 +7444,7 @@ odf_write_title (GnmOOExport *state, GogObject const *title,
 		 char const *id, gboolean allow_content)
 {
 	if (title != NULL && id != NULL) {
-		GOData const *dat = gog_dataset_get_dim (GOG_DATASET(title),0);
+		GOData const *dat = gog_dataset_get_dim (GOG_DATASET (title),0);
 
 		if (dat != NULL) {
 			GnmExprTop const *texpr = gnm_go_data_get_expr (dat);
@@ -7546,7 +7554,7 @@ odf_match_gradient (GOStyle const *old, GOStyle const *new)
 	if (old->fill.gradient.brightness != new->fill.gradient.brightness)
 		return FALSE;
 
-	if (old->fill.gradient.brightness >= 0.)
+	if (old->fill.gradient.brightness >= 0)
 		result = (old->fill.gradient.brightness == new->fill.gradient.brightness);
 	else
 		result = (old->fill.pattern.fore == new->fill.pattern.fore);
@@ -7632,7 +7640,7 @@ odf_get_border_info (G_GNUC_UNUSED GnmOOExport *state, GOStyle const *style)
 static void
 odf_write_gog_style_graphic (GnmOOExport *state, GOStyle const *style, gboolean with_border)
 {
-	char const *image_types[] =
+	char const * const image_types[] =
 		{"stretch", "repeat", "no-repeat"};
 
 	if (!style)
@@ -7737,11 +7745,11 @@ odf_write_gog_style_graphic (GnmOOExport *state, GOStyle const *style, gboolean 
 
 		if (style->line.auto_width && state->with_extension)
 			odf_add_bool (state->xml, GNMSTYLE "auto-width", TRUE);
-		else if (style->line.width == 0.0) {
+		else if (style->line.width == 0) {
 			odf_add_pt (state->xml, SVG "stroke-width", 1.);
 			if (state->with_extension)
 				odf_add_pt (state->xml, GNMSTYLE "stroke-width", 0.);
-		} else if (style->line.width > 0.0)
+		} else if (style->line.width > 0)
 			odf_add_pt (state->xml, SVG "stroke-width",
 				    style->line.width);
 
@@ -7760,12 +7768,26 @@ odf_write_gog_style_graphic (GnmOOExport *state, GOStyle const *style, gboolean 
 			char *s = odf_go_color_to_string (color);
 			gsf_xml_out_add_cstr (state->xml, SVG "stroke-color", s);
 			g_free (s);
+
 			if (state->with_extension) {
-				s = odf_go_color_to_string (go_marker_get_outline_color (style->marker.mark));
+				if (odf_go_color_has_opacity (color))
+					odf_add_percent (state->xml, GNMSTYLE "stroke-color-opacity",
+							 odf_go_color_opacity (color));
+
+				GOColor c = go_marker_get_outline_color (style->marker.mark);
+				s = odf_go_color_to_string (c);
 				gsf_xml_out_add_cstr (state->xml, GNMSTYLE "marker-outline-colour", s);
 				g_free (s);
-				s = odf_go_color_to_string (go_marker_get_fill_color (style->marker.mark));
+				if (odf_go_color_has_opacity (c))
+					odf_add_percent (state->xml, GNMSTYLE "marker-outline-colour-opacity",
+							 odf_go_color_opacity (c));
+
+				c = go_marker_get_fill_color (style->marker.mark);
+				s = odf_go_color_to_string (c);
 				gsf_xml_out_add_cstr (state->xml, GNMSTYLE "marker-fill-colour", s);
+				if (odf_go_color_has_opacity (c))
+					odf_add_percent (state->xml, GNMSTYLE "marker-fill-colour-opacity",
+							 odf_go_color_opacity (c));
 				g_free (s);
 			}
 		} else if (state->with_extension)
@@ -8417,7 +8439,7 @@ odf_write_plot (GnmOOExport *state, SheetObject *so, GogObject const *graph,
 						 GNMSTYLE "title", state->odf_version > 101);
 			else if (state->odf_version > 101) {
 				GOData const *dat =
-					gog_dataset_get_dim (GOG_DATASET(title),0);
+					gog_dataset_get_dim (GOG_DATASET (title),0);
 
 				if (dat != NULL) {
 					GnmExprTop const *texpr
@@ -8767,7 +8789,7 @@ odf_write_pie_point (GnmOOExport *state, G_GNUC_UNUSED GOStyle const *style,
 					  G_TYPE_DOUBLE, &separation)) {
 		gsf_xml_out_add_int (state->xml,
 				     CHART "pie-offset",
-				     (separation * 100. + 0.5));
+				     round (separation * 100));
 	}
 }
 
@@ -8780,7 +8802,7 @@ odf_fill_chart_props_hash (GnmOOExport *state)
 		void (*odf_write_property) (GnmOOExport *state,
 					    GOStyle const *style,
 					    GogObject const *obj);
-	} props[] = {
+	} const props[] = {
 		{"GogSeriesLines", odf_write_drop},
 		{"GogAxis", odf_write_axis_style},
 		{"GogAxisLine", odf_write_axisline_style},
@@ -9149,7 +9171,7 @@ openoffice_file_save_real (G_GNUC_UNUSED  GOFileSaver const *fs, GOIOContext *io
 		/* Complain fiercely? */
 	}
 
-	g_free (state.conv);
+	g_object_unref (state.conv);
 	if (state.openformula_namemap)
 		g_hash_table_destroy (state.openformula_namemap);
 	if (state.openformula_handlermap)

@@ -1,5 +1,5 @@
-#ifndef _GNM_PRINT_INFO_H_
-# define _GNM_PRINT_INFO_H_
+#ifndef GNM_PRINT_INFO_H_
+#define GNM_PRINT_INFO_H_
 
 #include <gnumeric.h>
 #include <print.h>
@@ -67,12 +67,12 @@ struct GnmPrintInformation_ {
 		* When the user is doing the simple scaling, both these values
 		* will be equal.
 		*/
-		struct _PrintScalePercent {
+		struct PrintScalePercent_ {
 			double x;
 			double y;
 		} percentage;
 
-		struct _PrintScaleDim { /* zero == use as many as required */
+		struct PrintScaleDim_ { /* zero == use as many as required */
 			int cols;
 			int rows;
 		} dim;
@@ -96,7 +96,7 @@ struct GnmPrintInformation_ {
 	GnmPrintCommentPlacementType comment_placement;
 	GnmPrintErrorsType error_display;
 
-	struct _PrintInfoPageBreaks {
+	struct PrintInfoPageBreaks_ {
 		GnmPageBreaks *h,  /* between rows */
 			      *v;  /* between columns */
 	} page_breaks;
@@ -129,7 +129,7 @@ typedef struct {
 GType             gnm_print_information_get_type (void);
 GnmPrintInformation *gnm_print_information_new         (gboolean load_defaults);
 void              gnm_print_info_load_defaults (GnmPrintInformation *pi);
-GnmPrintInformation *gnm_print_info_dup	 (GnmPrintInformation const *pi);
+GnmPrintInformation *gnm_print_info_dup	 (GnmPrintInformation const *src);
 void              gnm_print_info_free        (GnmPrintInformation *pi);
 void              gnm_print_info_save        (GnmPrintInformation *pi);
 
@@ -151,7 +151,7 @@ char             *gnm_print_hf_format_render       (char const *format,
 
 GType             gnm_print_hf_render_info_get_type      (void);
 GnmPrintHFRenderInfo     *gnm_print_hf_render_info_new     (void);
-void              gnm_print_hf_render_info_destroy (GnmPrintHFRenderInfo *hfi);
+void              gnm_print_hf_render_info_free (GnmPrintHFRenderInfo *hfi);
 
 
 GtkUnit     unit_name_to_unit    (char const *name);
@@ -230,4 +230,4 @@ extern GList *gnm_print_hf_formats;
 
 G_END_DECLS
 
-#endif /* _GNM_PRINT_INFO_H_ */
+#endif /* GNM_PRINT_INFO_H_ */

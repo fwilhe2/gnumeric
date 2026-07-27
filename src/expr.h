@@ -1,5 +1,5 @@
-#ifndef _GNM_EXPR_H_
-# define _GNM_EXPR_H_
+#ifndef GNM_EXPR_H_
+#define GNM_EXPR_H_
 
 G_BEGIN_DECLS
 
@@ -139,7 +139,7 @@ GnmExprList *gnm_expr_list_copy	  (GnmExprList *list);
 #define GNM_EXPR_TOP_MAGIC 0x42
 #define GNM_IS_EXPR_TOP(et) ((et) && (et)->magic == GNM_EXPR_TOP_MAGIC)
 
-struct _GnmExprTop {
+struct GnmExprTop_ {
 	unsigned magic : 8;
 	unsigned hash : 24;  /* Zero meaning not yet computed.  */
 	guint32 refcount;
@@ -178,7 +178,7 @@ GSList	       *gnm_expr_top_referenced_sheets	(GnmExprTop const *texpr);
 GnmExpr const  *gnm_expr_top_first_funcall	(GnmExprTop const *texpr);
 GnmExprTop const *gnm_expr_top_transpose        (GnmExprTop const *texpr);
 
-struct _GnmExprRelocateInfo {
+struct GnmExprRelocateInfo_ {
 	GnmParsePos pos;
 
 	GnmRange   origin;	    /* References to cells in origin_sheet!range */
@@ -202,7 +202,7 @@ struct _GnmExprRelocateInfo {
 };
 GnmExprTop const *gnm_expr_top_relocate	 (GnmExprTop const *texpr,
 					  GnmExprRelocateInfo const *rinfo,
-					  gboolean include_rel);
+					  gboolean ignore_rel);
 GnmExprTop const * gnm_expr_top_relocate_sheet (GnmExprTop const *texpr,
 						Sheet const *src,
 						Sheet const *dst);
@@ -238,4 +238,4 @@ void gnm_expr_shutdown_ (void);
 
 G_END_DECLS
 
-#endif /* _GNM_EXPR_H_ */
+#endif /* GNM_EXPR_H_ */

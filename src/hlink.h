@@ -1,5 +1,5 @@
-#ifndef _GNM_HLINK_H_
-# define _GNM_HLINK_H_
+#ifndef GNM_HLINK_H_
+#define GNM_HLINK_H_
 
 #include <gnumeric.h>
 #include <wbc-gtk.h>
@@ -30,7 +30,7 @@ gboolean  gnm_hlink_equal (GnmHLink const *a, GnmHLink const *b, gboolean relax_
 gboolean         gnm_hlink_activate   (GnmHLink *lnk, WBCGtk *wbcg);
 
 const char	*gnm_hlink_get_target (GnmHLink const *lnk);
-void	     	 gnm_hlink_set_target (GnmHLink *lnk, gchar const *url);
+void	     	 gnm_hlink_set_target (GnmHLink *lnk, gchar const *target);
 
 const char	*gnm_hlink_get_tip    (GnmHLink const *lnk);
 void		 gnm_hlink_set_tip    (GnmHLink *lnk, gchar const *tip);
@@ -51,4 +51,4 @@ void gnm_hlink_init_ (void);
 
 G_END_DECLS
 
-#endif /* _GNM_HLINK_H_ */
+#endif /* GNM_HLINK_H_ */

@@ -28,7 +28,7 @@
 
 #include <gsf/gsf-impl-utils.h>
 
-struct _GnmTextView {
+struct GnmTextView_ {
 	GtkBox parent;
 
 	GtkTextBuffer *buffer;
@@ -40,7 +40,7 @@ struct _GnmTextView {
 	GtkToolButton *underline;
 };
 
-typedef struct _GnmTextViewClass {
+typedef struct {
 	GtkBoxClass base;
 
 	void (* changed)  (GnmTextView *gtv);
@@ -60,14 +60,14 @@ enum {
 	PROP_ATTR
 };
 
-static guint signals [LAST_SIGNAL] = { 0 };
+static guint signals[LAST_SIGNAL] = { 0 };
 
 /* Internal routines */
 
 static void
 cb_gtv_emit_changed (G_GNUC_UNUSED GtkTextBuffer *buffer, GnmTextView *gtv)
 {
-	g_signal_emit (G_OBJECT (gtv), signals [CHANGED], 0);
+	g_signal_emit (G_OBJECT (gtv), signals[CHANGED], 0);
 }
 
 static void
@@ -288,7 +288,7 @@ gtv_build_button_underline (GtkWidget *tb, GnmTextView *gtv)
 				  "icon-name", "format-text-underline",
 				  "menu", menu,
 				  NULL);
-	gtk_toolbar_insert(GTK_TOOLBAR(tb), tb_button, -1);
+	gtk_toolbar_insert (GTK_TOOLBAR (tb), tb_button, -1);
 	g_object_set_data (G_OBJECT (tb_button), "underlinevalue",
                            (char *) "PANGO_UNDERLINE_SINGLE");
 	g_signal_connect (G_OBJECT (tb_button), "clicked",
@@ -335,7 +335,7 @@ gtv_build_button_bold (GtkWidget *tb, GnmTextView *gtv)
 				  "icon-name", "format-text-bold",
 				  "menu", menu,
 				  NULL);
-	gtk_toolbar_insert(GTK_TOOLBAR(tb), tb_button, -1);
+	gtk_toolbar_insert (GTK_TOOLBAR (tb), tb_button, -1);
 	g_object_set_data (G_OBJECT (tb_button), "boldvalue",
                            (char *) "PANGO_WEIGHT_BOLD");
 	g_signal_connect (G_OBJECT (tb_button), "clicked",
@@ -435,7 +435,7 @@ gtv_init (GnmTextView *gtv)
 		(tb, gtv,
 		 "format-text-strikethrough",
 		 G_CALLBACK (cb_gtv_set_strikethrough));
-	gtk_toolbar_insert (GTK_TOOLBAR(tb),
+	gtk_toolbar_insert (GTK_TOOLBAR (tb),
 			    gtk_separator_tool_item_new (), -1);
 	gtv->bold = gtv_build_button_bold (tb, gtv);
 	gtv->underline = gtv_build_button_underline (tb, gtv);
@@ -474,7 +474,7 @@ gtv_class_init (GObjectClass *gobject_class)
 	gobject_class->get_property	= gtv_get_property;
 	((GtkWidgetClass*)gobject_class)->grab_focus = gtv_grab_focus;
 
-	signals [CHANGED] = g_signal_new ("changed",
+	signals[CHANGED] = g_signal_new ("changed",
 		GNM_TEXT_VIEW_TYPE,
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (GnmTextViewClass, changed),
@@ -516,7 +516,7 @@ GSF_CLASS (GnmTextView, gnm_text_view,
 /**
  * gnm_text_view_new:
  *
- * Return value: a new #GnmTextView.
+ * Returns: (transfer full): a new #GnmTextView.
  **/
 GnmTextView *
 gnm_text_view_new (void)

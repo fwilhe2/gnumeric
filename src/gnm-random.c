@@ -270,7 +270,7 @@ mt_setup_win32 (void)
 		return FALSE;
 
 	MyRtlGenRandom = (LPFNRTLGENRANDOM)
-		GetProcAddress(hmod, "SystemFunction036");
+		GetProcAddress (hmod, "SystemFunction036");
 	if (MyRtlGenRandom &&
 	    MyRtlGenRandom (buffer, sizeof (buffer))) {
 		mt_init_by_array (buffer, G_N_ELEMENTS (buffer));
@@ -286,69 +286,6 @@ mt_setup_win32 (void)
 
 /* ------------------------------------------------------------------------ */
 
-static gnm_float
-random_01_mersenne (void)
-{
-	size_t N = (sizeof (gnm_float) + sizeof (guint32) - 1) / sizeof (guint32);
-	gnm_float res;
-
-	do {
-		size_t n;
-
-		res = 0;
-		for (n = 0; n < N; n++)
-			res = (res + genrand_int32()) / 4294967296.0;
-		/*
-		 * It is conceivable that rounding turned the result
-		 * into 1, so repeat in that case.
-		 */
-	} while (res >= 1);
-
-	return res;
-}
-
-/* ------------------------------------------------------------------------ */
-
-static gnm_float
-random_01_data (const unsigned char *data)
-{
-	unsigned ui;
-	gnm_float res = 0;
-
-	for (ui = 0; ui < sizeof (gnm_float); ui++)
-		res = (res + data[ui]) / 256;
-	return res;
-}
-
-/* ------------------------------------------------------------------------ */
-
-static FILE *random_device_file = NULL;
-#define RANDOM_DEVICE "/dev/urandom"
-
-static gnm_float
-random_01_device (void)
-{
-	static size_t bytes_left = 0;
-	static unsigned char data[32 * sizeof (gnm_float)];
-
-	while (bytes_left < sizeof (gnm_float)) {
-		gssize items = fread (data + bytes_left, 1,
-				      sizeof (data) - bytes_left,
-				      random_device_file);
-		if (items <= 0) {
-			g_warning ("Reading from %s failed; reverting to pseudo-random.",
-				   RANDOM_DEVICE);
-			return random_01_mersenne ();
-		}
-		bytes_left += items;
-	}
-
-	bytes_left -= sizeof (gnm_float);
-	return random_01_data (data + bytes_left);
-}
-
-/* ------------------------------------------------------------------------ */
-
 typedef enum {
 	RS_UNDETERMINED,
 	RS_MERSENNE,
@@ -357,8 +294,11 @@ typedef enum {
 
 static RandomSource random_src = RS_UNDETERMINED;
 
+static FILE *random_device_file = NULL;
+#define RANDOM_DEVICE "/dev/urandom"
+
 static void
-random_01_determine (void)
+random_source_determine (void)
 {
 	char const *seed = g_getenv ("GNUMERIC_PRNG_SEED");
 	if (seed) {
@@ -387,21 +327,82 @@ random_01_determine (void)
 	return;
 }
 
-gnm_float
-random_01 (void)
+static guint32
+gnm_random_32_device (void)
+{
+	guint32 res;
+
+	if (fread (&res, sizeof (res), 1, random_device_file) != 1) {
+		g_warning ("Reading from %s failed; reverting to pseudo-random.",
+			   RANDOM_DEVICE);
+		res = genrand_int32 ();
+	}
+
+	return res;
+}
+
+static guint32
+random_32 (void)
 {
 	if (random_src == RS_UNDETERMINED)
-		random_01_determine ();
+		random_source_determine ();
 
 	switch (random_src) {
 	case RS_UNDETERMINED:
 	default:
 		g_assert_not_reached ();
 	case RS_MERSENNE:
-		return random_01_mersenne ();
+		return genrand_int32 ();
 	case RS_DEVICE:
-		return random_01_device ();
+		return gnm_random_32_device ();
 	}
+}
+
+/* ------------------------------------------------------------------------ */
+
+gnm_float
+random_01 (void)
+{
+	gnm_float res = 0;
+
+#if GNM_RADIX == 2
+	for (int d = GNM_MANT_DIG; d > 0; d -= 32) {
+		uint32_t bits = random_32 ();
+		if (d >= 32) {
+			res = (res + bits) / 4294967296ull;
+		} else {
+			bits &= ((1 << d) - 1);
+			res = (res + bits) / (1 << d);
+			break;
+		}
+	}
+
+	return res;
+#elif GNM_RADIX == 10
+	static const uint32_t p10[10] = {
+		1, 10, 100, 1000, 10000,
+		100000, 1000000, 10000000, 100000000, 1000000000
+	};
+
+	for (int d = GNM_MANT_DIG; d > 0; d -= 9) {
+		uint32_t bits;
+		do {
+			bits = random_32 () / 4;
+			// Rejecting roughly 7% of cases
+		} while (bits >= 1000000000);
+		if (d >= 9) {
+			res = (res + bits) / GNM_const(1e9);
+		} else {
+			bits %= p10[d];
+			res = (res + bits) / p10[d];
+			break;
+		}
+	}
+
+	return res;
+#else
+#error "Code needs fixing here"
+#endif
 }
 
 /* ------------------------------------------------------------------------ */
@@ -440,6 +441,8 @@ random_normal (void)
 gnm_float
 random_lognormal (gnm_float zeta, gnm_float sigma)
 {
+	if (sigma < 0)
+		return gnm_nan;
 	return gnm_exp (sigma * random_normal () + zeta);
 }
 
@@ -455,6 +458,11 @@ random_gaussian (gnm_float sigma)
 gnm_float
 random_poisson (gnm_float lambda)
 {
+	if (lambda < 0)
+		return gnm_nan;
+	if (lambda == 0)
+		return 0;
+
 	/*
 	 * This may not be optimal code, but it sure is easy to
 	 * understand compared to R's code.
@@ -468,6 +476,10 @@ random_poisson (gnm_float lambda)
 gnm_float
 random_binomial (gnm_float p, gnm_float trials)
 {
+	if (p < 0 || p > 1 || trials < 0)
+		return gnm_nan;
+	if (trials == 0)
+		return 0;
 	return qbinom (random_01 (), trials, p, TRUE, FALSE);
 }
 
@@ -477,6 +489,10 @@ random_binomial (gnm_float p, gnm_float trials)
 gnm_float
 random_negbinom (gnm_float p, gnm_float f)
 {
+	if (p <= 0 || p > 1 || f < 0)
+		return gnm_nan;
+	if (f == 0)
+		return 0;
 	return qnbinom (random_01 (), f, p, TRUE, FALSE);
 }
 
@@ -486,6 +502,8 @@ random_negbinom (gnm_float p, gnm_float f)
 gnm_float
 random_exponential (gnm_float b)
 {
+	if (b < 0)
+		return gnm_nan;
 	return -b * gnm_log (random_01 ());
 }
 
@@ -495,8 +513,12 @@ random_exponential (gnm_float b)
 gnm_float
 random_bernoulli (gnm_float p)
 {
-	gnm_float r = random_01 ();
+	gnm_float r;
 
+	if (p < 0 || p > 1)
+		return gnm_nan;
+
+	r = random_01 ();
 	return (r <= p) ? 1.0 : 0.0;
 }
 
@@ -509,11 +531,14 @@ random_cauchy (gnm_float a)
 {
 	gnm_float u;
 
+	if (a < 0)
+		return gnm_nan;
+
 	do {
 		u = random_01 ();
-	} while (u == 0.5);
+	} while (u == GNM_const(0.5) || u == 0);
 
-	return a * gnm_tan (M_PIgnum * u);
+	return a * gnm_tanpi (u);
 }
 
 /*
@@ -526,9 +551,15 @@ random_weibull (gnm_float a, gnm_float b)
 {
 	gnm_float x, z;
 
+	if (a < 0 || b <= 0)
+		return gnm_nan;
+
+	if (a == 0)
+		return 0;
+
 	do {
 		x = random_01 ();
-	} while (x == 0.0);
+	} while (x == 0);
 
 	z = gnm_pow (-gnm_log (x), 1 / b);
 
@@ -545,9 +576,12 @@ random_laplace (gnm_float a)
 {
 	gnm_float u;
 
+	if (a < 0)
+		return gnm_nan;
+
 	do {
-		u = 2 * random_01 () - 1.0;
-	} while (u == 0.0);
+		u = 2 * random_01 () - 1;
+	} while (u == 0);
 
 	if (u < 0)
 		return a * gnm_log (-u);
@@ -571,11 +605,14 @@ random_rayleigh (gnm_float sigma)
 {
 	gnm_float u;
 
+	if (sigma < 0)
+		return gnm_nan;
+
 	do {
 		u = random_01 ();
-	} while (u == 0.0);
+	} while (u == 0);
 
-	return sigma * gnm_sqrt (-2.0 * gnm_log (u));
+	return sigma * gnm_sqrt (-2 * gnm_log (u));
 }
 
 /*
@@ -592,11 +629,14 @@ random_rayleigh_tail (gnm_float a, gnm_float sigma)
 {
 	gnm_float u;
 
+	if (sigma < 0)
+		return gnm_nan;
+
 	do {
 		u = random_01 ();
-	} while (u == 0.0);
+	} while (u == 0);
 
-	return gnm_sqrt (a * a - 2.0 * sigma * sigma * gnm_log (u));
+	return gnm_sqrt (a * a - 2 * sigma * sigma * gnm_log (u));
 }
 
 /* The Gamma distribution of order a>0 is defined by:
@@ -623,7 +663,7 @@ gamma_frac (gnm_float a)
 		gnm_float u = random_01 ();
 		do {
 			v = random_01 ();
-		} while (v == 0.0);
+		} while (v == 0);
 
 		if (u < p) {
 			x = gnm_pow (v, 1 / a);
@@ -697,8 +737,11 @@ random_gamma (gnm_float a, gnm_float b)
 {
 	gnm_float na;
 
-	if (gnm_isnan (a) || gnm_isnan (b) || a <= 0 || b <= 0)
+	if (gnm_isnan (a) || gnm_isnan (b) || a < 0 || b < 0)
 		return gnm_nan;
+
+	if (a == 0 || b == 0)
+		return 0;
 
 	na = gnm_floor (a);
 
@@ -719,9 +762,15 @@ random_pareto (gnm_float a, gnm_float b)
 {
 	gnm_float x;
 
+	if (a <= 0 || b < 0)
+		return gnm_nan;
+
+	if (b == 0)
+		return 0;
+
 	do {
 		x = random_01 ();
-	} while (x == 0.0);
+	} while (x == 0);
 
 	return b * gnm_pow (x, -1 / a);
 }
@@ -733,8 +782,13 @@ random_pareto (gnm_float a, gnm_float b)
 gnm_float
 random_fdist (gnm_float nu1, gnm_float nu2)
 {
-	gnm_float Y1 = random_gamma (nu1 / 2, 2.0);
-	gnm_float Y2 = random_gamma (nu2 / 2, 2.0);
+	gnm_float Y1, Y2;
+
+	if (nu1 <= 0 || nu2 <= 0)
+		return gnm_nan;
+
+	Y1 = random_gamma (nu1 / 2, 2);
+	Y2 = random_gamma (nu2 / 2, 2);
 
 	return (Y1 * nu2) / (Y2 * nu1);
 }
@@ -746,8 +800,13 @@ random_fdist (gnm_float nu1, gnm_float nu2)
 gnm_float
 random_beta (gnm_float a, gnm_float b)
 {
-	gnm_float x1 = random_gamma (a, 1.0);
-	gnm_float x2 = random_gamma (b, 1.0);
+	gnm_float x1, x2;
+
+	if (a <= 0 || b <= 0)
+		return gnm_nan;
+
+	x1 = random_gamma (a, 1.0);
+	x2 = random_gamma (b, 1.0);
 
 	return x1 / (x1 + x2);
 }
@@ -760,6 +819,9 @@ random_beta (gnm_float a, gnm_float b)
 gnm_float
 random_chisq (gnm_float nu)
 {
+	if (nu < 0)
+		return gnm_nan;
+
 	return 2 * random_gamma (nu / 2, 1.0);
 }
 
@@ -772,6 +834,9 @@ gnm_float
 random_logistic (gnm_float a)
 {
 	gnm_float x;
+
+	if (a < 0)
+		return gnm_nan;
 
 	do {
 		x = random_01 ();
@@ -790,8 +855,10 @@ random_geometric (gnm_float p)
 {
 	gnm_float u;
 
+	if (p <= 0 || p > 1)
+		return gnm_nan;
 	if (p == 1)
-		return 1;
+		return 0;
 	do {
 		u = random_01 ();
 	} while (u == 0);
@@ -805,6 +872,8 @@ random_geometric (gnm_float p)
 gnm_float
 random_hypergeometric (gnm_float n1, gnm_float n2, gnm_float t)
 {
+	if (n1 < 0 || n2 < 0 || t < 0 || t > n1 + n2)
+		return gnm_nan;
 	return qhyper (random_01 (), n1, n2, t, TRUE, FALSE);
 }
 
@@ -818,6 +887,9 @@ gnm_float
 random_logarithmic (gnm_float p)
 {
 	gnm_float c, v;
+
+	if (p <= 0 || p >= 1)
+		return gnm_nan;
 
 	c = gnm_log1p (-p);
 	do {
@@ -850,6 +922,9 @@ random_logarithmic (gnm_float p)
 gnm_float
 random_tdist (gnm_float nu)
 {
+	if (nu <= 0)
+		return gnm_nan;
+
 	if (nu <= 2) {
 		gnm_float Y1 = random_normal ();
 		gnm_float Y2 = random_chisq (nu);
@@ -885,9 +960,12 @@ random_gumbel1 (gnm_float a, gnm_float b)
 {
 	gnm_float x;
 
+	if (a == 0 || b <= 0)
+		return gnm_nan;
+
 	do {
 		x = random_01 ();
-	} while (x == 0.0);
+	} while (x == 0);
 
 	return (gnm_log (b) - gnm_log (-gnm_log (x))) / a;
 }
@@ -902,9 +980,12 @@ random_gumbel2 (gnm_float a, gnm_float b)
 {
 	gnm_float x;
 
+	if (a == 0 || b <= 0)
+		return gnm_nan;
+
 	do {
 		x = random_01 ();
-	} while (x == 0.0);
+	} while (x == 0);
 
 	return gnm_pow (-b / gnm_log (x), 1 / a);
 }
@@ -935,11 +1016,14 @@ random_levy (gnm_float c, gnm_float alpha)
 {
 	gnm_float u, v, t, s;
 
+	if (c <= 0 || alpha <= 0 || alpha > 2)
+		return gnm_nan;
+
 	do {
 		u = random_01 ();
-	} while (u == 0.0);
+	} while (u == 0);
 
-	u = M_PIgnum * (u - 0.5);
+	u = M_PIgnum * (u - GNM_const(0.5));
 
 	if (alpha == 1) {	      /* cauchy case */
 		t = gnm_tan (u);
@@ -992,14 +1076,17 @@ random_levy_skew (gnm_float c, gnm_float alpha, gnm_float beta)
 {
 	gnm_float V, W, X;
 
+	if (c <= 0 || alpha <= 0 || alpha > 2 || beta < -1 || beta > 1)
+		return gnm_nan;
+
 	if (beta == 0) /* symmetric case */
 		return random_levy (c, alpha);
 
 	do {
 		V = random_01 ();
-	} while (V == 0.0);
+	} while (V == 0);
 
-	V = M_PIgnum * (V - 0.5);
+	V = M_PIgnum * (V - GNM_const(0.5));
 
 	do {
 		W = random_exponential (1.0);
@@ -1058,15 +1145,18 @@ gnm_float
 random_exppow (gnm_float a, gnm_float b)
 {
 	/* See http://www.mcgill.ca/files/economics/propertiesandestimation.pdf */
-	if (!(a > 0) || gnm_isnan (b))
+	if (a < 0 || b <= 0 || gnm_isnan (b))
 		return gnm_nan;
+
+	if (a == 0)
+		return 0;
 
 	if (b < 1) {
 		gnm_float u = random_01 ();
 		gnm_float v = random_gamma (1 / b, 1.0);
 		gnm_float z = a * gnm_pow (v, 1 / b) ;
 
-		if (u > 0.5)
+		if (u > GNM_const(0.5))
 			return z;
 		else
 			return -z;
@@ -1125,7 +1215,12 @@ random_gaussian_tail (gnm_float a, gnm_float sigma)
 	 * This implementation does one-sided upper-tailed deviates.
 	 */
 
-	gnm_float s = a / sigma;
+	gnm_float s;
+
+	if (sigma <= 0)
+		return gnm_nan;
+
+	s = a / sigma;
 
 	if (s < 1) {
 		/* For small s, use a direct rejection method. The limit s < 1
@@ -1150,7 +1245,7 @@ random_gaussian_tail (gnm_float a, gnm_float sigma)
 			u = random_01 ();
 			do {
 				v = random_01 ();
-			} while (v == 0.0);
+			} while (v == 0);
 			x = gnm_sqrt (s * s - 2 * gnm_log (v));
 		} while (x * u > s);
 		return x * sigma;
@@ -1181,7 +1276,7 @@ random_landau (void)
 {
 	static gnm_float F[983] = {
 		0.0000000, /*
-			    * Add empty element [0] to account for difference
+			    * Add empty element[0] to account for difference
 			    * between C and Fortran convention for lower bound.
 			    */
 		00.000000, 00.000000, 00.000000, 00.000000, 00.000000,
@@ -1387,8 +1482,8 @@ random_landau (void)
 
 	do {
 		X = random_01 ();
-	} while (X == 0.0);
-	U = 1000.0 * X;
+	} while (X == 0);
+	U = 1000 * X;
 	I = U;
 	U = U - I;
 
@@ -1396,25 +1491,25 @@ random_landau (void)
 		RANLAN = F[I] + U * (F[I + 1] - F[I]);
 	else if (I >= 7 && I <= 980)
 		RANLAN = F[I] + U * (F[I + 1] - F[I] -
-				     0.25 * (1 - U) * (F[I + 2] - F[I + 1] -
-						       F[I] + F[I - 1]));
+				     GNM_const(0.25) * (1 - U) * (F[I + 2] - F[I + 1] -
+								  F[I] + F[I - 1]));
 	else if (I < 7) {
 		V = gnm_log (X);
 		U = 1 / V;
-		RANLAN = ((0.99858950 + (3.45213058E1 + 1.70854528E1 * U) * U) /
-			  (1 + (3.41760202E1 + 4.01244582 * U) * U)) *
-			( -gnm_log ( -0.91893853 - V) - 1);
+		RANLAN = ((GNM_const(0.99858950) + (GNM_const(3.45213058E1) + GNM_const(1.70854528E1) * U) * U) /
+			  (1 + (GNM_const(3.41760202E1) + GNM_const(4.01244582) * U) * U)) *
+			( -gnm_log ( GNM_const(-0.91893853) - V) - 1);
 	} else {
 		U = 1 - X;
 		V = U * U;
-		if (X <= 0.999)
-			RANLAN = (1.00060006 + 2.63991156E2 *
-				  U + 4.37320068E3 * V) /
-			  ((1 + 2.57368075E2 * U + 3.41448018E3 * V) * U);
+		if (X <= GNM_const(0.999))
+			RANLAN = (GNM_const(1.00060006) + GNM_const(2.63991156E2) *
+				  U + GNM_const(4.37320068E3) * V) /
+				((1 + GNM_const(2.57368075E2) * U + GNM_const(3.41448018E3) * V) * U);
 		else
-			RANLAN = (1.00001538 + 6.07514119E3 * U +
-				  7.34266409E5 * V) /
-			  ((1 + 6.06511919E3 * U + 6.94021044E5 * V) * U);
+			RANLAN = (GNM_const(1.00001538) + GNM_const(6.07514119E3) * U +
+				  GNM_const(7.34266409E5) * V) /
+				((1 + GNM_const(6.06511919E3) * U + GNM_const(6.94021044E5) * V) * U);
 	}
 
 	return RANLAN;
@@ -1435,13 +1530,19 @@ gnm_float
 random_skew_normal (gnm_float a)
 {
 	gnm_float result;
-	gnm_float delta = a / gnm_sqrt(1 + a * a);
-	gnm_float u = random_normal ();
-	gnm_float v = random_normal ();
+	gnm_float delta;
+	gnm_float u, v;
 
-	result = delta * u + gnm_sqrt (1-delta*delta) * v;
+	if (!gnm_finite (a))
+		return gnm_nan;
 
-	return ((u < 0.) ? -result : result);
+	delta = a / gnm_hypot (1, a);
+	u = random_normal ();
+	v = random_normal ();
+
+	result = delta * u + gnm_sqrt (1 - delta * delta) * v;
+
+	return (u < 0 ? -result : result);
 }
 
 
@@ -1458,10 +1559,73 @@ random_skew_normal (gnm_float a)
 gnm_float
 random_skew_tdist (gnm_float nu, gnm_float a)
 {
-	gnm_float chi = random_chisq (nu);
-	gnm_float z = random_skew_normal (a);
+	gnm_float chi, z;
+
+	if (nu <= 0)
+		return gnm_nan;
+
+	chi = random_chisq (nu);
+	z = random_skew_normal (a);
 
 	return (z * gnm_sqrt(nu/chi));
 }
 
 /* ------------------------------------------------------------------------ */
+
+/**
+ * gnm_random_uniform_int:
+ * @n: one more than the maximum number in range.
+ *
+ * Returns: a uniformly distributed random non-negative integer less than @n.
+ */
+guint32
+gnm_random_uniform_int (guint32 n)
+{
+	guint32 left;
+
+	g_return_val_if_fail (n > 0, 0);
+
+	// This is the number of value that we need to reject in order to ensure
+	// uniform distribution.  In the worst case we will end up rejecting
+	// about half the numbers but for sane-sized ranges it is practically
+	// zero.
+	left = G_MAXUINT32 % n;
+
+	while (TRUE) {
+		guint32 r = random_32 ();
+		if (r > G_MAXUINT32 - left)
+			continue;
+		return r % n;
+	}
+}
+
+/**
+ * gnm_random_uniform_integer:
+ * @l: integer lower bound
+ * @h: integer upper bound
+ *
+ * Returns: a uniformly distributed random integer in the range from
+ * @l to @h (inclusively).
+ */
+gnm_float
+gnm_random_uniform_integer (gnm_float l, gnm_float h)
+{
+	gnm_float range, res;
+
+	if (l > h || !gnm_finite (l) || !gnm_finite (h))
+		return gnm_nan;
+
+	range = h - l + 1;
+	if (range < G_MAXUINT32) {
+		do {
+			res = l + gnm_random_uniform_int (range);
+		} while (res > h);
+	} else {
+		// This could be better
+		do {
+			res = l + gnm_floor (range * random_01 ());
+		} while (res > h);
+	}
+
+	return res;
+}

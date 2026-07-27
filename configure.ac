@@ -1,13 +1,13 @@
 -*- mode: m4 -*-
 dnl We require Automake 1.7.2, which requires Autoconf 2.54.
 dnl (It needs _AC_AM_CONFIG_HEADER_HOOK, for example.)
-AC_PREREQ(2.54)
+AC_PREREQ([2.54])
 AC_CONFIG_MACRO_DIR([m4])
 AX_IS_RELEASE([git-directory])
 
 m4_define([gnumeric_version_epoch], [1])
 m4_define([gnumeric_version_major], [12])
-m4_define([gnumeric_version_minor], [54])
+m4_define([gnumeric_version_minor], [62])
 m4_define([gnumeric_version_extra], [])
 m4_define([gnumeric_version_full],
     [gnumeric_version_epoch.gnumeric_version_major.gnumeric_version_minor[]gnumeric_version_extra])
@@ -16,9 +16,7 @@ dnl Emphasize some of the checks.
 m4_define([BIG_CHECKING], [AC_MSG_CHECKING([
 ======== $1])])
 
-AC_INIT([gnumeric], [gnumeric_version_full],
-	[https://gitlab.gnome.org/GNOME/gnumeric/issues],,
-	[http://www.gnumeric.org/])
+AC_INIT([gnumeric],[gnumeric_version_full],[https://gitlab.gnome.org/GNOME/gnumeric/issues],[],[https://www.gnumeric.org/])
 
 AC_CONFIG_SRCDIR(src/sheet.h)
 AM_INIT_AUTOMAKE([dist-bzip2])
@@ -82,7 +80,6 @@ IT_PO_SUBDIR(po-functions)
 dnl We use $host and $host_os:
 AC_CANONICAL_HOST
 
-AC_ISC_POSIX
 AC_PROG_CC
 AC_PROG_CC_C99
 if test "$ac_cv_prog_cc_c99" = no; then
@@ -95,7 +92,6 @@ if test "x$ac_cv_prog_YACC" = x; then
 fi
 
 AC_PROG_LN_S
-AC_HEADER_STDC
 
 LT_PREREQ([2.2.6])
 # Make --disable-static the default
@@ -166,8 +162,8 @@ PKG_PROG_PKG_CONFIG(0.18)
 
 dnl *****************************
 libspreadsheet_reqs="
-	libgoffice-${GOFFICE_API_VER}	>= 0.10.51
-	libgsf-1		>= 1.14.33
+	libgoffice-${GOFFICE_API_VER}	>= 0.10.61
+	libgsf-1		>= 1.14.45
 	libxml-2.0		>= 2.4.12
 "
 gnumeric_reqs="$libspreadsheet_reqs
@@ -175,11 +171,11 @@ gnumeric_reqs="$libspreadsheet_reqs
 	gobject-2.0		>= 2.40.0
 	gmodule-2.0		>= 2.40.0
 	gthread-2.0		>= 2.40.0
-	pango			>= 1.24.0
-	pangocairo		>= 1.24.0
+	pango			>= 1.46.0
+	pangocairo		>= 1.46.0
 "
 libspreadsheet_gtk_reqs="
-	gtk+-3.0		>= 3.8.7
+	gtk+-3.0		>= 3.20.0
 "
 
 gnumeric_gtk_reqs="$libspreadsheet_gtk_reqs"
@@ -259,7 +255,8 @@ dnl below.
 AC_SUBST(GETTEXT_PACKAGE, gnumeric-${VERSION})
 AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE, "$GETTEXT_PACKAGE",
 	[The package name, for gettext])
-AM_GLIB_GNU_GETTEXT
+AM_GNU_GETTEXT_VERSION([0.13])
+AM_GNU_GETTEXT([external])
 
 dnl ****************************
 dnl prep the pixmap generator
@@ -494,7 +491,7 @@ dnl config.status is created, a code originating from intltool.m4 creates
 dnl POTFILES again, this time correctly removing the intltool tags.
 dnl config.status then creates po/Makefile, again in two steps.  First,
 dnl po/Makefile.in is created from po/Makefile.in.in the usual way, and then
-dnl a code registered via the obsolete macro AC_OUTPUT_COMMANDS insterts the
+dnl a code registered via the obsolete macro AC_CONFIG_COMMANDS inserts the
 dnl contents of file POTFILES to po/Makefile.
 dnl
 dnl But both glib-gettext and intltool have the dirname "po/" hardwired, so
@@ -555,15 +552,7 @@ CFLAGS="$CFLAGS $GNUMERIC_CFLAGS"
 LIBS="$GNUMERIC_LIBS $LIBS"
 
 AC_CHECK_FUNCS(gtk_cell_renderer_text_get_background_set gtk_cell_renderer_text_get_foreground_set gtk_cell_renderer_text_get_editable)
-AC_CHECK_FUNCS(gtk_entry_set_editing_cancelled gtk_icon_theme_add_resource_path gtk_widget_class_set_css_name)
-AC_CHECK_FUNCS(g_ptr_array_insert)
-
-AC_MSG_CHECKING([for OO_NS_LOCALC_EXT])
-AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <gsf/gsf.h>]],
-				[[(void)(OO_NS_LOCALC_EXT == OO_NS_LOCALC_EXT);]])],
-               [AC_DEFINE(HAVE_OO_NS_LOCALC_EXT, 1, [Define if OO_NS_LOCALC_EXT is available])
-		AC_MSG_RESULT(yes)],
-	       [AC_MSG_RESULT(no)])
+AC_CHECK_FUNCS(gtk_entry_set_editing_cancelled gtk_icon_theme_add_resource_path)
 
 CFLAGS=$SAVE_CFLAGS
 LIBS=$SAVE_LIBS
@@ -620,9 +609,14 @@ if test "x$with_win32" = "xyes" -o "x$cos_works" = "xno"; then
 fi
 
 float_msg=double
+float_msg_default=yes
 AC_ARG_WITH(long_double,
 	AS_HELP_STRING([--with-long-double], [Use long double for floating point]),
 	[if test "x$withval" = xyes; then
+		if test $float_msg_default = no; then
+		   AC_MSG_ERROR([Incompatible number system options supplied])
+		fi
+
 		SAVE_CFLAGS="$CFLAGS"
 		SAVE_LIBS="$LIBS"
 		CFLAGS="$GNUMERIC_CFLAGS"
@@ -683,12 +677,43 @@ AC_ARG_WITH(long_double,
 		LIBS="$SAVE_LIBS"
 
 		float_msg="long double (EXPERIMENTAL)"
+		float_msg_default=no
 		AC_MSG_WARN([Long double support is experimental -- expect problems])
 		AC_DEFINE(GNM_WITH_LONG_DOUBLE, 1,
 			[Define if the long double type is to be used]
 		)
 	fi]
 )
+
+gnumeric_with_decimal64=false
+AC_ARG_WITH(decimal64,
+	AS_HELP_STRING([--with-decimal], [Use Decimal64 for floating point]),
+	[if test "x$withval" = xyes; then
+		if test $float_msg_default = no; then
+		   AC_MSG_ERROR([Incompatible number system options supplied])
+		fi
+		SAVE_CFLAGS="$CFLAGS"
+		SAVE_LIBS="$LIBS"
+		CFLAGS="$GNUMERIC_CFLAGS"
+		LIBS="$GNUMERIC_LIBS -lm"
+
+		AC_CHECK_FUNCS(go_finiteD,
+			       ,
+			       AC_MSG_ERROR([libgoffice needs to be compiled with Decimal64 support.]))
+		CFLAGS="$SAVE_CFLAGS"
+		LIBS="$SAVE_LIBS"
+		AC_DEFINE(GNM_WITH_DECIMAL64, 1,
+			[Define if the Decimal64 type is to be used]
+		)
+		gnumeric_with_decimal64=true
+		float_msg="Decimal64 (EXPERIMENTAL)"
+		float_msg_default=no
+		AC_MSG_WARN([Decimal64 support is experimental -- expect problems])
+	fi]
+)
+AM_CONDITIONAL(WITH_DECIMAL64, $gnumeric_with_decimal64)
+
+
 
 ## this should come after `AC_PROG_CC'
 set_more_warnings=yes
@@ -709,7 +734,7 @@ if test "$GCC" = yes -a "x$set_more_warnings" != xno; then
 	warning_options="-Wall -Werror=init-self -Werror=missing-include-dirs \
 			 -Wsign-compare -Werror=pointer-arith \
 			 -Wchar-subscripts -Wwrite-strings \
-			 -Wdeclaration-after-statement -Wnested-externs \
+			 -Wnested-externs \
 			 -Wmissing-noreturn \
 			 -Werror=missing-prototypes -Werror=nested-externs \
 			 -Werror=implicit-function-declaration \
@@ -718,6 +743,14 @@ if test "$GCC" = yes -a "x$set_more_warnings" != xno; then
 			 -Wdefault-bitfield-sign -Wdo-while -Wparen-string \
 			 -Wptr-subtraction-blows -Wreturn-void -Wtypesign \
 			 -Wstrict-prototypes -Wno-error=format-nonliteral "
+	if $gnumeric_with_decimal64; then
+		# Turn off format warnings.  They are, unfortunable, not useful
+		# with decimal64 as gcc doesn't understand the "W" specifier we
+		# use for decimal64.
+		# This is not an invitation to turn them off in any other
+		# situation!
+		warning_options="$warning_options -Wno-format-security -Wno-format"
+	fi
 	for option in $warning_options ; do
 		SAVE_CFLAGS="$CFLAGS"
 		CFLAGS="$CFLAGS $uwoption $option"
@@ -1168,7 +1201,7 @@ dnl
 dnl These are changed in gutils.c for WIN32 packages
 AC_SUBST(gnumeric_datadir, '${datadir}/gnumeric/${VERSION}')
 AC_SUBST(gnumeric_libdir, '${libdir}/gnumeric/${VERSION}')
-AC_SUBST(gnumeric_localedir, '${prefix}/${DATADIRNAME}/locale')
+AC_SUBST(gnumeric_localedir, '${localedir}')
 dnl
 AC_SUBST(gnumeric_plugindir, '${gnumeric_libdir}/plugins')
 AC_SUBST(gnumeric_externplugindir, '${libdir}/gnumeric/${GNUMERIC_API_VER}/plugins')
@@ -1189,7 +1222,7 @@ AC_DEFINE(GNM_VERSION_EXTRA, "gnumeric_version_extra",
 AC_DEFINE(GNM_API_VERSION, "GNUMERIC_API_VER",
 	[The API version number of this release])
 
-AC_OUTPUT([
+AC_CONFIG_FILES([
 Makefile
 libspreadsheet.pc
 icons/Makefile
@@ -1224,6 +1257,7 @@ plugins/fn-derivatives/Makefile
 plugins/fn-eng/Makefile
 plugins/fn-erlang/Makefile
 plugins/fn-financial/Makefile
+plugins/fn-flt/Makefile
 plugins/fn-hebrew-date/Makefile
 plugins/fn-info/Makefile
 plugins/fn-logical/Makefile
@@ -1238,7 +1272,6 @@ plugins/fn-tsa/Makefile
 plugins/applix/Makefile
 plugins/dif/Makefile
 plugins/excel/Makefile
-plugins/excelplugins/Makefile
 plugins/gda/Makefile
 plugins/gnome-db/Makefile
 plugins/gnome-glossary/Makefile
@@ -1279,6 +1312,7 @@ tools/win32/moduleset
 tools/win32/gnumeric.nsi
 component/Makefile
 ])
+AC_OUTPUT
 
 echo "
 

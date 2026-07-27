@@ -1,4 +1,3 @@
-
 /*
  * dialog-so-styled.c: Pref dialog for objects with a GOStyle 'style' property
  *
@@ -126,7 +125,8 @@ dialog_so_styled_text_widget (DialogSOStyled *state)
 
 	g_object_get (state->so, "markup", &markup, NULL);
 	g_object_set (gtv, "attributes", markup, NULL);
-	/* unref? */
+	if (markup)
+		pango_attr_list_unref (markup);
 
 	g_signal_connect (G_OBJECT (gtv), "changed",
 			  G_CALLBACK (cb_dialog_so_styled_text_widget_changed), state);
@@ -256,6 +256,6 @@ dialog_so_styled (WBCGtk *wbcg, GObject *so, GOStyle *default_style,
 		"state", state, (GDestroyNotify) dialog_so_styled_free);
 	go_gtk_nonmodal_dialog (wbcg_toplevel (state->wbcg),
 		GTK_WINDOW (dialog));
-	wbc_gtk_attach_guru (state->wbcg, dialog);
+	wbcg_attach_guru (state->wbcg, dialog);
 	gtk_widget_show (dialog);
 }

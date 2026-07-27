@@ -1,5 +1,5 @@
-#ifndef GNUMERIC_DIALOG_STF_H
-#define GNUMERIC_DIALOG_STF_H
+#ifndef GNM_DIALOG_STF_H_
+#define GNM_DIALOG_STF_H_
 
 #include <dialogs/dialog-stf-preview.h>
 #include <gui-util.h>
@@ -116,7 +116,7 @@ typedef struct {
 	FixedInfo_t           fixed;
 	FormatInfo_t          format;
 
-	StfParseOptions_t    *parseoptions;
+	GnmStfParseOptions    *parseoptions;
 } StfDialogData;
 
 typedef struct {
@@ -125,7 +125,7 @@ typedef struct {
 	char              *text;          /* Decoded text.  */
 	int                rowcount;      /* Number of resulting rows.  */
 	int                colcount;      /* Number of resulting rows.  */
-	StfParseOptions_t *parseoptions;  /* parse options */
+	GnmStfParseOptions *parseoptions;  /* parse options */
 } DialogStfResult_t;
 
 /* This is the main function which handles all the dialog import stuff */
@@ -169,4 +169,4 @@ void    stf_dialog_csv_page_prepare                     (StfDialogData *pagedata
 void    stf_dialog_fixed_page_prepare                   (StfDialogData *pagedata);
 void    stf_dialog_format_page_prepare                  (StfDialogData *pagedata);
 
-#endif /* GNUMERIC_DIALOG_STF_H */
+#endif /* GNM_DIALOG_STF_H_ */

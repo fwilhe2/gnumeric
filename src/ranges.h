@@ -1,5 +1,5 @@
-#ifndef _GNM_RANGES_H_
-# define _GNM_RANGES_H_
+#ifndef GNM_RANGES_H_
+#define GNM_RANGES_H_
 
 #include <gnumeric.h>
 #include <glib-object.h>
@@ -13,7 +13,7 @@ G_BEGIN_DECLS
  *
  * NB. commutative, symmetric, and transitive.
  *
- * Returns: True if both ranges are equal.
+ * Returns: %TRUE if both ranges are equal.
  **/
 #define range_equal(a,b)   ((a)->start.row == (b)->start.row && \
 			    (a)->end.row   == (b)->end.row && \
@@ -47,7 +47,7 @@ int       gnm_range_compare (GnmRange const *a, GnmRange const *b);
  *
  * Determine if a range contains a col,row co-ordinate.
  *
- * Return value: TRUE if co-ordinate contained.
+ * Returns: %TRUE if co-ordinate contained.
  **/
 #define range_contains(r,x,y)	(((y) <= (r)->end.row) && \
 				 ((y) >= (r)->start.row) && \
@@ -130,4 +130,4 @@ gboolean       global_range_contained	  (Sheet const *sheet,
 
 G_END_DECLS
 
-#endif /* _GNM_RANGES_H_ */
+#endif /* GNM_RANGES_H_ */

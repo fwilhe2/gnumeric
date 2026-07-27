@@ -44,7 +44,7 @@
 #include <string.h>
 #include <locale.h>
 
-struct _GnmStfExport {
+struct GnmStfExport_ {
 	GsfOutputCsv csv;
 
 	GSList *sheet_list;
@@ -52,6 +52,7 @@ struct _GnmStfExport {
 	char *locale;
 	GnmStfTransliterateMode transliterate_mode;
 	GnmStfFormatMode format;
+	gboolean formulas;
 };
 
 static GObjectClass *parent_class;
@@ -65,7 +66,8 @@ enum {
 	PROP_CHARSET,
 	PROP_LOCALE,
 	PROP_TRANSLITERATE_MODE,
-	PROP_FORMAT
+	PROP_FORMAT,
+	PROP_FORMULAS
 };
 
 /* ------------------------------------------------------------------------- */
@@ -130,7 +132,7 @@ gnm_stf_export_options_sheet_list_add (GnmStfExport *stfe, Sheet *sheet)
  * @stfe: #GnmStfExport
  *
  * Returns: (element-type Sheet) (transfer none): the list of #Sheet instances
- * added to @stfe using gnm_stf_export_options_sheet_list_add().
+ * added to @stfe using gnm_stf_export_options_sheet_list_add.
  **/
 GSList *
 gnm_stf_export_options_sheet_list_get (const GnmStfExport *stfe)
@@ -197,8 +199,9 @@ try_auto_date (GnmValue *value, const GOFormat *format,
 	vs = (24 * 60 * 60) * gnm_abs (v - vr);
 
 	needs_date = is_time < 2 && (is_date || gnm_abs (v) >= 1);
-	needs_time = is_time > 0 || gnm_abs (v - vr) > 1e-9;
-	needs_frac_sec = needs_time && gnm_abs (vs - gnm_fake_round (vs)) >= 0.5e-3;
+	needs_time = is_time > 0 || gnm_abs (v - vr) > GNM_const(1e-9);
+	needs_frac_sec = needs_time &&
+		gnm_abs (vs - gnm_fake_round (vs)) >= GNM_const(0.5e-3);
 
 	xlfmt = g_string_new (NULL);
 	if (needs_date) g_string_append (xlfmt, "yyyy/mm/dd");
@@ -225,7 +228,7 @@ try_auto_date (GnmValue *value, const GOFormat *format,
  * @stfe: an export options struct
  * @cell: the cell to write to the file
  *
- * Return value: return TRUE on success, FALSE otherwise.
+ * Returns: %TRUE on success, %FALSE otherwise.
  **/
 static gboolean
 stf_export_cell (GnmStfExport *stfe, GnmCell *cell)
@@ -235,7 +238,11 @@ stf_export_cell (GnmStfExport *stfe, GnmCell *cell)
 	gboolean ok;
 	g_return_val_if_fail (stfe != NULL, FALSE);
 
-	if (cell) {
+	if (!cell) {
+		// Nothing
+	} else if (stfe->formulas && gnm_cell_has_expr (cell)) {
+		text = tmp = gnm_cell_get_entered_text (cell);
+	} else {
 		switch (stfe->format) {
 		case GNM_STF_FORMAT_PRESERVE:
 			text = tmp = gnm_cell_get_rendered_text (cell);
@@ -275,32 +282,26 @@ stf_export_cell (GnmStfExport *stfe, GnmCell *cell)
  *
  * Writes the @sheet to the callback function
  *
- * Return value: returns TRUE on success, FALSE otherwise
+ * Returns: %TRUE on success, %FALSE otherwise
  **/
 static gboolean
 stf_export_sheet (GnmStfExport *stfe, Sheet *sheet)
 {
 	int col, row;
 	GnmRange r;
-	GnmRangeRef *range;
+	int exporting;
 
 	g_return_val_if_fail (stfe != NULL, FALSE);
 	g_return_val_if_fail (IS_SHEET (sheet), FALSE);
 
-	range = g_object_get_data (G_OBJECT (sheet->workbook), "ssconvert-range");
-	if (range) {
-		Sheet *start_sheet, *end_sheet;
-		GnmEvalPos ep;
-
-		gnm_rangeref_normalize (range,
-					eval_pos_init_sheet (&ep, sheet),
-					&start_sheet, &end_sheet,
-					&r);
-
-		if (start_sheet != sheet)
+	exporting = gnm_export_range_for_sheet (sheet, &r);
+	if (exporting >= 0) {
+		if (exporting == 0)
 			return TRUE;
-	} else
+	} else {
 		r = sheet_get_extent (sheet, FALSE, TRUE);
+		r.start.row = r.start.col = 0;
+	}
 
 	for (row = r.start.row; row <= r.end.row; row++) {
 		for (col = r.start.col; col <= r.end.col; col++) {
@@ -321,7 +322,7 @@ stf_export_sheet (GnmStfExport *stfe, Sheet *sheet)
  *
  * Exports the sheets given in @stfe
  *
- * Return value: TRUE on success, FALSE otherwise
+ * Returns: %TRUE on success, %FALSE otherwise
  **/
 gboolean
 gnm_stf_export (GnmStfExport *stfe)
@@ -494,6 +495,9 @@ gnm_stf_export_get_property (GObject     *object,
 	case PROP_FORMAT:
 		g_value_set_enum (value, stfe->format);
 		break;
+	case PROP_FORMULAS:
+		g_value_set_boolean (value, stfe->formulas);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
 		break;
@@ -527,6 +531,9 @@ gnm_stf_export_set_property (GObject      *object,
 		break;
 	case PROP_FORMAT:
 		stfe->format = g_value_get_enum (value);
+		break;
+	case PROP_FORMULAS:
+		stfe->formulas = g_value_get_boolean (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -583,6 +590,14 @@ gnm_stf_export_class_init (GObjectClass *gobject_class)
 				    GNM_STF_FORMAT_AUTO,
 				    GSF_PARAM_STATIC |
 				    G_PARAM_READWRITE));
+	g_object_class_install_property
+		(gobject_class,
+		 PROP_FORMULAS,
+		 g_param_spec_boolean ("formulas",
+				       P_("Formulas"),
+				       P_("Should formulas be printed instead of values?"),
+				       FALSE,
+				       GSF_PARAM_STATIC | G_PARAM_READWRITE));
 }
 
 /* ------------------------------------------------------------------------- */
@@ -621,13 +636,13 @@ gnm_stf_get_stfe (GObject *obj)
 			GNM_STF_TRANSLITERATE_MODE_TRANS : GNM_STF_TRANSLITERATE_MODE_ESCAPE;
 		GString *triggers = g_string_new (NULL);
 
-		if (strlen (locale) == 0)
+		if (*locale == 0)
 			locale = NULL;
-		if (strlen (encoding) == 0)
+		if (*encoding == 0)
 			encoding = NULL;
 
 		/* Workaround GConf bug #641807. */
-		if (terminator == NULL || strlen (terminator) == 0)
+		if (terminator == NULL || *terminator == 0)
 			terminator = "\n";
 
 		if (quotingmode == GSF_OUTPUT_CSV_QUOTING_MODE_AUTO) {
@@ -736,6 +751,7 @@ cb_set_export_option (const char *key, const char *value,
 	    strcmp (key, "quote") == 0 ||
 	    strcmp (key, "separator") == 0 ||
 	    strcmp (key, "format") == 0 ||
+	    strcmp (key, "formulas") == 0 ||
 	    strcmp (key, "transliterate-mode") == 0 ||
 	    strcmp (key, "quoting-mode") == 0 ||
 	    strcmp (key, "quoting-on-whitespace") == 0)
@@ -755,12 +771,12 @@ error:
 	return TRUE;
 }
 
-static gboolean
-gnm_stf_fs_set_export_options (GOFileSaver *fs,
-			       GODoc *doc,
-			       const char *options,
-			       GError **err,
-			       G_GNUC_UNUSED gpointer user)
+gboolean
+gnm_csvtxt_fs_set_export_options (GOFileSaver *fs,
+				  GODoc *doc,
+				  const char *options,
+				  GError **err,
+				  G_GNUC_UNUSED gpointer user)
 {
 	GnmStfExport *stfe = gnm_stf_get_stfe (G_OBJECT (doc));
 	struct cb_set_export_option data;
@@ -768,6 +784,17 @@ gnm_stf_fs_set_export_options (GOFileSaver *fs,
 	data.wb = WORKBOOK (doc);
 	gnm_stf_export_options_sheet_list_clear (stfe);
 	return go_parse_key_value (options, err, cb_set_export_option, &data);
+}
+
+static gboolean
+gnm_stf_fs_set_export_options (GOFileSaver *fs,
+			       GODoc *doc,
+			       const char *options,
+			       GError **err,
+			       gpointer user)
+{
+	// For now just common options
+	return gnm_csvtxt_fs_set_export_options (fs, doc, options, err, user);
 }
 
 /**

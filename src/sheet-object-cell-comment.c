@@ -1,4 +1,3 @@
-
 /*
  * sheet-object-cell-comment.c: A SheetObject to support cell comments.
  *
@@ -37,7 +36,7 @@
 #include <libxml/globals.h>
 #include <gsf/gsf-impl-utils.h>
 
-struct _GnmComment {
+struct GnmComment_ {
 	SheetObject	base;
 
 	char *author, *text;
@@ -421,6 +420,12 @@ cell_comment_init (GnmComment *cc)
 GSF_CLASS (GnmComment, cell_comment,
 	   cell_comment_class_init, cell_comment_init, GNM_SO_TYPE)
 
+/**
+ * cell_comment_author_get:
+ * @cc: #GnmComment
+ *
+ * Returns: (transfer none) (nullable): the author of @cc.
+ **/
 char const  *
 cell_comment_author_get (GnmComment const *cc)
 {
@@ -428,6 +433,13 @@ cell_comment_author_get (GnmComment const *cc)
 	return cc->author;
 }
 
+/**
+ * cell_comment_author_set:
+ * @cc: #GnmComment
+ * @author: (nullable): new author
+ *
+ * Sets the author of @cc to @author.
+ **/
 void
 cell_comment_author_set (GnmComment *cc, char const *author)
 {
@@ -439,6 +451,12 @@ cell_comment_author_set (GnmComment *cc, char const *author)
 	cc->author = tmp;
 }
 
+/**
+ * cell_comment_text_get:
+ * @cc: #GnmComment
+ *
+ * Returns: (transfer none) (nullable): the text of @cc.
+ **/
 char const  *
 cell_comment_text_get (GnmComment const *cc)
 {
@@ -446,6 +464,13 @@ cell_comment_text_get (GnmComment const *cc)
 	return cc->text;
 }
 
+/**
+ * cell_comment_text_set:
+ * @cc: #GnmComment
+ * @text: (nullable): new text
+ *
+ * Sets the text of @cc to @text.
+ **/
 void
 cell_comment_text_set (GnmComment *cc, char const *text)
 {
@@ -458,11 +483,18 @@ cell_comment_text_set (GnmComment *cc, char const *text)
 }
 
 /* convenience routine */
+/**
+ * cell_comment_set_pos:
+ * @cc: #GnmComment
+ * @pos: #GnmCellPos
+ *
+ * Sets the position of the cell comment @cc to @pos.
+ **/
 void
 cell_comment_set_pos (GnmComment *cc, GnmCellPos const *pos)
 {
 	/* top right */
-	static double const a_offsets [4] = { 1., 0., 1., 0. };
+	static double const a_offsets[4] = { 1., 0., 1., 0. };
 	SheetObjectAnchor anchor;
 	GnmRange	  r;
 
@@ -478,9 +510,9 @@ cell_comment_set_pos (GnmComment *cc, GnmCellPos const *pos)
  * cell_set_comment:
  * @sheet: #Sheet.
  * @pos: the position.
- * @author: comment author.
- * @text: comment text.
- * @markup: comment markup.
+ * @author: (transfer none): comment author.
+ * @text: (transfer none): comment text.
+ * @markup: (transfer none): comment markup.
  *
  * Returns: (transfer none): the newly allocated #GnmComment.
  **/

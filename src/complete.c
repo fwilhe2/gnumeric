@@ -12,7 +12,7 @@
  *    The search function should not take too long to run, and try to
  *    search on each step information on its data repository.  When the
  *    data repository information has been extenuated or if a match has
- *    been found, then the method should return FALSE and invoke the
+ *    been found, then the method should return %FALSE and invoke the
  *    notification function that was provided to GnmComplete.
  *
  *
@@ -28,20 +28,12 @@
 #define PARENT_TYPE (G_TYPE_OBJECT)
 #define ACC(o) (GNM_COMPLETE_CLASS (G_OBJECT_GET_CLASS (o)))
 
-/**
- * gnm_complete_construct:
- * @complete: #GnmComplete
- * @notify: (scope async): #GnmCompleteMatchNotifyFn
- * @notify_closure: user data
- **/
-void
-gnm_complete_construct (GnmComplete *complete,
-		    GnmCompleteMatchNotifyFn notify,
-		    void *notify_closure)
-{
-	complete->notify = notify;
-	complete->notify_closure = notify_closure;
-}
+enum {
+	NOTIFY_MATCH,
+	LAST_SIGNAL
+};
+
+static guint complete_signals[LAST_SIGNAL] = { 0 };
 
 static void
 complete_finalize (GObject *object)
@@ -76,6 +68,13 @@ complete_idle (gpointer data)
 	return FALSE;
 }
 
+/**
+ * gnm_complete_start:
+ * @complete: #GnmComplete
+ * @text: (transfer none): search text
+ *
+ * Starts the completion process.
+ **/
 void
 gnm_complete_start (GnmComplete *complete, char const *text)
 {
@@ -108,6 +107,16 @@ complete_class_init (GObjectClass *object_class)
 
 	object_class->finalize = complete_finalize;
 	complete_class->search_iteration = default_search_iteration;
+
+	complete_signals[NOTIFY_MATCH] =
+		g_signal_new (
+			"notify-match",
+			GNM_COMPLETE_TYPE,
+			G_SIGNAL_RUN_LAST,
+			0,
+			NULL, NULL,
+			g_cclosure_marshal_VOID__STRING,
+			G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 GSF_CLASS (GnmComplete, gnm_complete,

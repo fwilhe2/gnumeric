@@ -75,6 +75,12 @@ sylk_read_warning (SylkReader *state, char const *fmt, ...)
 	g_free (msg);
 }
 
+static gboolean
+length_at_least (const char *str, size_t n)
+{
+	return strnlen (str, n) >= n;
+}
+
 static char *
 sylk_next_token (char *src)
 {
@@ -135,7 +141,7 @@ sylk_next_token (char *src)
 			}
 		} else if (src[0] == 0x1B) { /* escape */
 			gunichar u;
-			if (src[1] != 'N') { /* must be <ESC>N? */
+			if (!length_at_least (src, 3) || src[1] != 'N') { /* must be <ESC>N? */
 				src++;
 				continue;
 			} else if (src[2] <= 0x20 || 0x7f <= src[2]) { /* out of range */
@@ -148,7 +154,7 @@ sylk_next_token (char *src)
 			} else { /* accents 0x40 - 0x4F */
 				char *merged = NULL;
 				int accent = accents[src[2] - 0x40];
-				if (accent >= 0) {
+				if (accent >= 0 && length_at_least (src, 4)) {
 					char buf[6];
 					int len = g_unichar_to_utf8 (0x300 + accent, buf+1);
 					buf[0] = src[3];
@@ -160,8 +166,10 @@ sylk_next_token (char *src)
 					}
 				}
 					/* fallback to the unaccented char */
-				if (NULL == merged)
-					*dst++ = src[3];
+				if (NULL == merged) {
+					if (length_at_least (src, 4))
+						*dst++ = src[3];
+				}
 				src += 4;
 				continue;
 			}
@@ -185,6 +193,17 @@ sylk_parse_int (char const *str, int *res)
 	l = strtol (str, &end, 10);
 	if (str != end && errno != ERANGE) {
 		*res = l;
+		return TRUE;
+	}
+	return FALSE;
+}
+
+static gboolean
+sylk_parse_coord (char const *str, int *res, int max)
+{
+	int tmp;
+	if (sylk_parse_int (str, &tmp) && tmp >= 1 && tmp <= max) {
+		*res = tmp - 1;
 		return TRUE;
 	}
 	return FALSE;
@@ -229,14 +248,14 @@ sylk_rtd_c_parse (SylkReader *state, char *str)
 	GnmValue *val = NULL;
 	GnmExprTop const *texpr = NULL;
 	gboolean is_array = FALSE;
-	int r = -1, c = -1, tmp;
+	int r = -1, c = -1;
 	char *next;
 
 	for (; *str != '\0' ; str = next) {
 		next = sylk_next_token (str);
 		switch (*str) {
-		case 'X': if (sylk_parse_int (str+1, &tmp)) state->pp.eval.col = tmp - 1; break;
-		case 'Y': if (sylk_parse_int (str+1, &tmp)) state->pp.eval.row = tmp - 1; break;
+		case 'X': sylk_parse_coord (str+1, &state->pp.eval.col, gnm_sheet_get_max_cols (state->pp.sheet)); break;
+		case 'Y': sylk_parse_coord (str+1, &state->pp.eval.row, gnm_sheet_get_max_rows (state->pp.sheet)); break;
 
 		case 'K': /* ;K value: Value of the cell. */
 			if (val != NULL) {
@@ -311,8 +330,8 @@ sylk_rtd_c_parse (SylkReader *state, char *str)
 			if (texpr) {
 				GnmRange rg;
 				rg.start = state->pp.eval;
-				rg.end.col = c - 1;
-				rg.end.row = r - 1;
+				rg.end.col = (c >= 1 && c <= gnm_sheet_get_max_cols (state->pp.sheet)) ? c - 1 : state->pp.eval.col;
+				rg.end.row = (r >= 1 && r <= gnm_sheet_get_max_rows (state->pp.sheet)) ? r - 1 : state->pp.eval.row;
 
 				gnm_cell_set_array (state->pp.sheet,
 						    &rg,
@@ -385,7 +404,7 @@ sylk_rtd_p_parse (SylkReader *state, char *str)
 					break;
 				}
 			break;
-		default :
+		default:
 			sylk_read_warning (state, "unknown P option '%c'", *str);
 		}
 	}
@@ -455,7 +474,7 @@ sylk_rtd_o_parse (SylkReader *state, char *str)
 			state->pp.sheet->hide_zero = TRUE;
 			break;
 
-		default :
+		default:
 			sylk_read_warning (state, "unknown option '%c'", *str);
 		}
 	}
@@ -517,7 +536,7 @@ sylk_rtd_f_parse (SylkReader *state, char *str)
 				case 'R' : a = GNM_HALIGN_RIGHT; break;
 				case 'C' : a = GNM_HALIGN_CENTER; break;
 				case 'X' : a = GNM_HALIGN_FILL; break;
-				default :
+				default:
 					   break;
 				}
 				if (a >= 0) {
@@ -625,9 +644,8 @@ sylk_rtd_f_parse (SylkReader *state, char *str)
 			int first, last, width;
 			if (3 == sscanf (str+1, "%d %d %d", &first, &last, &width)) {
 				/* width seems to be in characters */
-				if (first <= last &&
-				    first < gnm_sheet_get_max_cols (state->pp.sheet) &&
-				    last < gnm_sheet_get_max_cols (state->pp.sheet))
+				if (1 <= first && first <= last &&
+				    last <= gnm_sheet_get_max_cols (state->pp.sheet))
 					while (first <= last)
 						sheet_col_set_size_pts (state->pp.sheet,
 							first++ - 1, width*7.45, TRUE);
@@ -635,10 +653,10 @@ sylk_rtd_f_parse (SylkReader *state, char *str)
 			break;
 		}
 
-		case 'C': if (sylk_parse_int (str+1, &tmp)) full_col = tmp - 1; break;
-		case 'R': if (sylk_parse_int (str+1, &tmp)) full_row = tmp - 1; break;
-		case 'X': if (sylk_parse_int (str+1, &tmp)) state->pp.eval.col = tmp - 1; break;
-		case 'Y': if (sylk_parse_int (str+1, &tmp)) state->pp.eval.row = tmp - 1; break;
+		case 'C': sylk_parse_coord (str+1, &full_col, gnm_sheet_get_max_cols (state->pp.sheet)); break;
+		case 'R': sylk_parse_coord (str+1, &full_row, gnm_sheet_get_max_rows (state->pp.sheet)); break;
+		case 'X': sylk_parse_coord (str+1, &state->pp.eval.col, gnm_sheet_get_max_cols (state->pp.sheet)); break;
+		case 'Y': sylk_parse_coord (str+1, &state->pp.eval.row, gnm_sheet_get_max_rows (state->pp.sheet)); break;
 		default:
 			sylk_read_warning (state, "unhandled F option %c.", *str);
 		}
@@ -765,9 +783,9 @@ sylk_parse_line (SylkReader *state, char *buf, gsize len)
 			case 'O' : return sylk_rtd_o_parse (state, buf + 2);
 			case 'W' : return sylk_rtd_w_parse (state, buf + 2);
 			}
-		} else if (0 == strncmp ("ID", buf, 2))
+		} else if (g_str_has_prefix (buf, "ID"))
 			return TRUE; /* who cares */
-		else if (0 == strncmp ("NN;", buf, 2))
+		else if (g_str_has_prefix (buf, "NN;"))
 			return sylk_rtd_nn_parse (state, buf + 3);
 		else if (buf[0] == 'E')
 			return sylk_rtd_e_parse (state);
@@ -853,5 +871,5 @@ sylk_file_probe (GOFileOpener const *fo, GsfInput *input, GOFileProbeLevel pl)
 	char const *header = NULL;
 	if (!gsf_input_seek (input, 0, G_SEEK_SET))
 		header = gsf_input_read (input, 3, NULL);
-	return (header != NULL && strncmp (header, "ID;", 3) == 0);
+	return (header != NULL && g_str_has_prefix (header, "ID;"));
 }

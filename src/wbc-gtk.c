@@ -1,4 +1,3 @@
-
 /*
  * wbc-gtk.c: A gtk based WorkbookControl
  *
@@ -192,11 +191,43 @@ wbc_gtk_set_action_label (WBCGtk *wbcg,
 }
 
 static void
+wbcg_set_action_feedback (WBCGtk *wbcg,
+			  GtkToggleAction *action, gboolean active)
+{
+	guint sig;
+	gulong handler;
+	gboolean debug = FALSE;
+	const char *name = gtk_action_get_name (GTK_ACTION (action));
+
+	if (active == gtk_toggle_action_get_active (action))
+		return;
+
+	sig = wbcg->updating_ui
+		? g_signal_lookup ("activate", G_TYPE_FROM_INSTANCE (action))
+		: 0;
+	handler = sig
+		? g_signal_handler_find (action, G_SIGNAL_MATCH_ID, sig,
+					 0, NULL, NULL, NULL)
+		: 0;
+	if (handler) {
+		if (debug)
+			g_printerr ("Blocking signal %d for %s\n", sig, name);
+		g_signal_handler_block (action, handler);
+	}
+	gtk_toggle_action_set_active (action, active);
+	if (sig) {
+		if (debug)
+			g_printerr ("Unblocking signal %d %s\n", sig, name);
+		g_signal_handler_unblock (action, handler);
+	}
+}
+
+static void
 wbc_gtk_set_toggle_action_state (WBCGtk *wbcg,
 				 char const *action, gboolean state)
 {
 	GtkAction *a = wbcg_find_action (wbcg, action);
-	gtk_toggle_action_set_active (GTK_TOGGLE_ACTION (a), state);
+	wbcg_set_action_feedback (wbcg, GTK_TOGGLE_ACTION (a), state);
 }
 
 /****************************************************************************/
@@ -288,9 +319,9 @@ cb_autosave (WBCGtk *wbcg)
  * wbcg_rangesel_possible:
  * @wbcg: the workbook control gui
  *
- * Returns true if the cursor keys should be used to select
+ * Returns: %TRUE if the cursor keys should be used to select
  * a cell range (if the cursor is in a spot in the expression
- * where it makes sense to have a cell reference), false if not.
+ * where it makes sense to have a cell reference), %FALSE if not.
  **/
 gboolean
 wbcg_rangesel_possible (WBCGtk const *wbcg)
@@ -511,7 +542,7 @@ sheet_menu_label_run (SheetControlGUI *scg, GdkEvent *event)
 		void (*function) (SheetControlGUI *scg);
 		int flags;
 		int submenu;
-	} const sheet_label_context_actions [] = {
+	} const sheet_label_context_actions[] = {
 		{ N_("Manage Sheets..."), &cb_sheets_manage,	0, 0},
 		{ NULL, NULL, 0, 0 },
 		{ N_("Insert"),		  &cb_sheets_insert,	0, 0 },
@@ -526,7 +557,7 @@ sheet_menu_label_run (SheetControlGUI *scg, GdkEvent *event)
 
 	unsigned int ui;
 	GtkWidget *item, *menu = gtk_menu_new ();
-	GtkWidget *guru = wbc_gtk_get_guru (scg_wbcg (scg));
+	GtkWidget *guru = wbcg_get_guru (scg_wbcg (scg));
 	unsigned int N_visible, pass;
 	GtkWidget *submenus[2 + 1];
 	GSList *scgs = get_all_scgs (scg->wbcg);
@@ -964,7 +995,7 @@ cb_bnotebook_page_reordered (GtkNotebook *notebook, GtkWidget *child,
 		WorkbookControl * wbc = GNM_WBC (wbcg);
 		Workbook *wb = wb_control_get_workbook (wbc);
 		Sheet *sheet = workbook_sheet_by_index (wb, old);
-		WorkbookSheetState * old_state = workbook_sheet_state_new(wb);
+		WorkbookSheetState * old_state = workbook_sheet_state_new (wb);
 		workbook_sheet_move (sheet, page_num - old);
 		cmd_reorganize_sheets (wbc, old_state, sheet);
 	}
@@ -1309,7 +1340,11 @@ wbcg_update_title (WBCGtk *wbcg)
 	char *title = g_strconcat
 		(go_doc_is_dirty (doc) ? "*" : "",
 		 basename ? basename : doc->uri,
+#ifdef GNM_WITH_DECIMAL64
+		 _(" - Gnumeric [Decimal]"),
+#else
 		 _(" - Gnumeric"),
+#endif
 		 NULL);
 	gtk_window_set_title (wbcg_toplevel (wbcg), title);
 	g_free (title);
@@ -1436,7 +1471,10 @@ wbcg_auto_expr_value_changed (WorkbookView *wbv,
 
 		g_string_append (str, " = ");
 
-		if (format) {
+		if (wbv->auto_expr.use_max_precision && VALUE_IS_NUMBER (v)) {
+			// "G" to match what format "General" does.
+			go_dtoa (str, "!" GNM_FORMAT_G, value_get_as_float (v));
+		} else if (format) {
 			PangoLayout *layout = gtk_widget_create_pango_layout (GTK_WIDGET (wbcg->toplevel), NULL);
 			gsize old_len = str->len;
 			GODateConventions const *date_conv = workbook_date_conv (wb_view_get_workbook (wbv));
@@ -1474,8 +1512,9 @@ wbcg_auto_expr_value_changed (WorkbookView *wbv,
 				break;
 			}
 			g_object_unref (layout);
-		} else
+		} else {
 			g_string_append (str, value_peek_string (v));
+		}
 
 		gtk_label_set_text (lbl, str->str);
 		gtk_label_set_attributes (lbl, attrs);
@@ -1514,7 +1553,7 @@ wbcg_menu_state_update (WorkbookControl *wbc, int flags)
 	SheetControlGUI *scg = wbcg_cur_scg (wbcg);
 	SheetView const *sv  = wb_control_cur_sheet_view (wbc);
 	Sheet const *sheet = wb_control_cur_sheet (wbc);
-	gboolean const has_guru = wbc_gtk_get_guru (wbcg) != NULL;
+	gboolean const has_guru = wbcg_get_guru (wbcg) != NULL;
 	gboolean edit_object = scg != NULL &&
 		(scg->selected_objects != NULL || wbcg->new_object != NULL);
 	gboolean has_print_area;
@@ -1682,7 +1721,7 @@ wbcg_menu_state_update (WorkbookControl *wbc, int flags)
 				styles = sheet_style_collect_hlinks
 					(sheet, r);
 				has_links = (styles != NULL);
-				style_list_free (styles);
+				sheet_style_list_free (styles);
 			}
 			if (!has_comments) {
 				objs = sheet_objects_get
@@ -1690,7 +1729,7 @@ wbcg_menu_state_update (WorkbookControl *wbc, int flags)
 				has_comments = (objs != NULL);
 				g_slist_free (objs);
 			}
-			if((count++ > 1) && has_comments && has_links)
+			if (count++ > 1 && has_comments && has_links)
 				break;
 		}
 		wbc_gtk_set_action_sensitivity
@@ -1702,7 +1741,7 @@ wbcg_menu_state_update (WorkbookControl *wbc, int flags)
 			sel_is_vector = (range_width (r) == 1 ||
 					 range_height (r) == 1) &&
 				!range_is_singleton (r);
- 		}
+		}
 		wbc_gtk_set_action_sensitivity
 			(wbcg, "InsertSortDecreasing", sel_is_vector);
 		wbc_gtk_set_action_sensitivity
@@ -1820,7 +1859,6 @@ wbcg_close_if_user_permits (WBCGtk *wbcg, WorkbookView *wb_view)
 {
 	gboolean   can_close = TRUE;
 	gboolean   done      = FALSE;
-	int        iteration = 0;
 	int        button = 0;
 	Workbook  *wb = wb_view_get_workbook (wb_view);
 	static int in_can_close;
@@ -1832,7 +1870,6 @@ wbcg_close_if_user_permits (WBCGtk *wbcg, WorkbookView *wb_view)
 	in_can_close = TRUE;
 
 	while (go_doc_is_dirty (GO_DOC (wb)) && !done) {
-		iteration++;
 		button = wbcg_show_save_dialog(wbcg, wb);
 
 		switch (button) {
@@ -2021,7 +2058,7 @@ cb_accept_input_menu (GtkMenuToolButton *button, WBCGtk *wbcg)
 		gchar const *text;
 		void (*function) (WBCGtk *wbcg);
 		gboolean (*sensitive) (WBCGtk *wbcg);
-	} const accept_input_actions [] = {
+	} const accept_input_actions[] = {
 		{ N_("Enter in current cell"),       cb_accept_input,
 		  NULL },
 		{ N_("Enter in current cell without autocorrection"), cb_accept_input_wo_ac,
@@ -2249,7 +2286,7 @@ cb_autofunction (WBCGtk *wbcg)
 
 	entry = wbcg_get_entry (wbcg);
 	txt = gtk_entry_get_text (entry);
-	if (strncmp (txt, "=", 1)) {
+	if (!g_str_has_prefix (txt, "=")) {
 		if (!wbcg_edit_start (wbcg, TRUE, TRUE))
 			return; /* attempt to edit failed */
 		gtk_entry_set_text (entry, "=");
@@ -2281,63 +2318,84 @@ cb_set_focus (GtkWindow *window, GtkWidget *focus, WBCGtk *wbcg)
 
 /***************************************************************************/
 
+static void
+do_scroll_zoom (WBCGtk *wbcg, gboolean go_back)
+{
+	SheetControlGUI *scg = wbcg_get_scg (wbcg, wbcg_focus_cur_scg (wbcg));
+	Sheet		*sheet = scg_sheet (scg);
+	int zoom = (int)(sheet->last_zoom_factor_used * 100. + .5) - 10;
+	if ((zoom % 15) != 0) {
+		zoom = 15 * (int)(zoom/15);
+		if (go_back)
+			zoom += 15;
+	} else {
+		if (go_back)
+			zoom += 15;
+		else
+			zoom -= 15;
+	}
+
+	if (0 <= zoom && zoom <= 390)
+		cmd_zoom (GNM_WBC (wbcg), g_slist_append (NULL, sheet),
+			  (double) (zoom + 10) / 100);
+}
+
 static gboolean
 cb_scroll_wheel (GtkWidget *w, GdkEventScroll *event,
 		 WBCGtk *wbcg)
 {
 	SheetControlGUI *scg = wbcg_get_scg (wbcg, wbcg_focus_cur_scg (wbcg));
-	Sheet		*sheet = scg_sheet (scg);
 	/* scroll always operates on pane 0 */
 	GnmPane *pane = scg_pane (scg, 0);
-	gboolean go_horiz = (event->direction == GDK_SCROLL_LEFT ||
-			     event->direction == GDK_SCROLL_RIGHT);
 	gboolean go_back = (event->direction == GDK_SCROLL_UP ||
 			    event->direction == GDK_SCROLL_LEFT);
+	gboolean qsmooth = (event->direction == GDK_SCROLL_SMOOTH);
+	int drow = 0, dcol = 0;
 
-	if (!pane ||
-	    !gtk_widget_get_realized (w) ||
-	    event->direction == GDK_SCROLL_SMOOTH)
+	if (!pane || !gtk_widget_get_realized (w))
 		return FALSE;
 
-	if ((event->state & GDK_SHIFT_MASK))
-		go_horiz = !go_horiz;
+	if ((event->state & GDK_CONTROL_MASK)) {
+		/* zoom */
+		if (qsmooth)
+			return FALSE;
+		do_scroll_zoom (wbcg, go_back);
+		return TRUE;
+	}
 
-	if ((event->state & GDK_CONTROL_MASK)) {	/* zoom */
-		int zoom = (int)(sheet->last_zoom_factor_used * 100. + .5) - 10;
-
-		if ((zoom % 15) != 0) {
-			zoom = 15 * (int)(zoom/15);
-			if (go_back)
-				zoom += 15;
-		} else {
-			if (go_back)
-				zoom += 15;
-			else
-				zoom -= 15;
-		}
-
-		if (0 <= zoom && zoom <= 390)
-			cmd_zoom (GNM_WBC (wbcg), g_slist_append (NULL, sheet),
-				  (double) (zoom + 10) / 100);
-	} else if (go_horiz) {
-		int col = (pane->last_full.col - pane->first.col) / 4;
-		if (col < 1)
-			col = 1;
-		if (go_back)
-			col = pane->first.col - col;
-		else
-			col = pane->first.col + col;
-		scg_set_left_col (pane->simple.scg, col);
+	if (qsmooth) {
+		gdouble dx, dy;
+		gdouble scale = 10; // ???
+		gdk_event_get_scroll_deltas ((GdkEvent*)event, &dx, &dy);
+		dcol = (int)(dx * scale);
+		drow = (int)(dy * scale);
 	} else {
-		int row = (pane->last_full.row - pane->first.row) / 4;
-		if (row < 1)
-			row = 1;
-		if (go_back)
-			row = pane->first.row - row;
-		else
-			row = pane->first.row + row;
+		gboolean go_horiz = (event->direction == GDK_SCROLL_LEFT ||
+				     event->direction == GDK_SCROLL_RIGHT);
+
+		if ((event->state & GDK_SHIFT_MASK))
+			go_horiz = !go_horiz;
+
+		if (go_horiz) {
+			dcol = (pane->last_full.col - pane->first.col) / 4;
+			dcol = MAX (1, dcol);
+			if (go_back) dcol = -dcol;
+		} else {
+			drow = (pane->last_full.row - pane->first.row) / 4;
+			drow = MAX (1, drow);
+			if (go_back) drow = -drow;
+		}
+	}
+
+	if (dcol) {
+		int col = pane->first.col + dcol;
+		scg_set_left_col (pane->simple.scg, col);
+	}
+	if (drow) {
+		int row = pane->first.row + drow;
 		scg_set_top_row (pane->simple.scg, row);
 	}
+
 	return TRUE;
 }
 
@@ -2563,15 +2621,23 @@ show_gui (WBCGtk *wbcg)
 	gdouble fx, fy;
 	GdkRectangle rect;
 	GdkScreen *screen = wbcg_get_screen (wbcg);
+	gboolean debug = gnm_debug_flag ("window-size");
 
 	/* In a Xinerama setup, we want the geometry of the actual display
 	 * unit, if available. See bug 59902.  */
 	gdk_screen_get_monitor_geometry (screen, 0, &rect);
 	sx = MAX (rect.width, 600);
 	sy = MAX (rect.height, 200);
+	if (debug)
+		g_printerr ("Monitor geometry %dx%d\n", sx, sy);
 
 	fx = gnm_conf_get_core_gui_window_x ();
 	fy = gnm_conf_get_core_gui_window_y ();
+	if (debug)
+		g_printerr ("Configuration scale %gx%g\n", fx, fy);
+
+	if (debug && wbcg->preferred_geometry)
+		g_printerr ("Specified geometry \"%s\"\n", wbcg->preferred_geometry);
 
 	/* Successfully parsed geometry string and urged WM to comply */
 	if (NULL != wbcg->preferred_geometry && NULL != wbcg->toplevel &&
@@ -2583,8 +2649,10 @@ show_gui (WBCGtk *wbcg)
 		   wbv != NULL &&
 		   (wbv->preferred_width > 0 || wbv->preferred_height > 0)) {
 		/* Set grid size to preferred width */
-		int pwidth = MIN(wbv->preferred_width, gdk_screen_get_width (screen));
-		int pheight = MIN(wbv->preferred_height, gdk_screen_get_height (screen));
+		int swidth = gdk_screen_get_width (screen);
+		int sheight = gdk_screen_get_height (screen);
+		int pwidth = MIN (wbv->preferred_width, swidth);
+		int pheight = MIN (wbv->preferred_height, sheight);
 		GtkRequisition requisition;
 
 		pwidth = pwidth > 0 ? pwidth : -1;
@@ -2592,10 +2660,20 @@ show_gui (WBCGtk *wbcg)
 		gtk_widget_set_size_request (GTK_WIDGET (wbcg->notebook_area),
 					     pwidth, pheight);
 		gtk_widget_get_preferred_size (GTK_WIDGET (wbcg->toplevel),
-					 &requisition, NULL);
+					       &requisition, NULL);
+		if (debug) {
+			g_printerr ("Screen size %dx%d\n", swidth, sheight);
+			g_printerr ("View's preferred size %dx%d\n",
+				    wbv->preferred_width, wbv->preferred_height);
+			g_printerr ("Toplevel's preferred size %dx%d\n",
+				    requisition.width, requisition.height);
+			g_printerr ("Size request %dx%d\n",
+				    pwidth, pheight);
+		}
+
 		/* We want to test if toplevel is bigger than screen.
 		 * gtk_widget_size_request tells us the space
-		 * allocated to the  toplevel proper, but not how much is
+		 * allocated to the toplevel proper, but not how much is
 		 * need for WM decorations or a possible panel.
 		 *
 		 * The test below should very rarely maximize when there is
@@ -2608,6 +2686,8 @@ show_gui (WBCGtk *wbcg)
 		 */
 		if (requisition.height + 20 > rect.height ||
 		    requisition.width > rect.width) {
+			if (debug)
+				g_printerr ("Maximizing\n");
 			gtk_window_maximize (GTK_WINDOW (wbcg->toplevel));
 		} else {
 			gtk_window_set_default_size
@@ -2765,7 +2845,7 @@ wbc_gtk_cell_selector_popup (G_GNUC_UNUSED GtkEntry *entry,
 		struct CellSelectorMenu {
 			gchar const *text;
 			void (*function) (WBCGtk *wbcg);
-		} const cell_selector_actions [] = {
+		} const cell_selector_actions[] = {
 			{ N_("Go to Top"),      &cb_cs_go_up      },
 			{ N_("Go to Bottom"),   &cb_cs_go_down    },
 			{ N_("Go to First"),    &cb_cs_go_left    },
@@ -2776,7 +2856,7 @@ wbc_gtk_cell_selector_popup (G_GNUC_UNUSED GtkEntry *entry,
 		unsigned int ui;
 		GtkWidget *item, *menu = gtk_menu_new ();
 		gboolean active = (!wbcg_is_editing (wbcg) &&
-				   NULL == wbc_gtk_get_guru (wbcg));
+				   NULL == wbcg_get_guru (wbcg));
 
 		for (ui = 0; ui < G_N_ELEMENTS (cell_selector_actions); ui++) {
 			const struct CellSelectorMenu *it =
@@ -2808,7 +2888,7 @@ wbc_gtk_create_edit_area (WBCGtk *wbcg)
 	int len;
 	GtkWidget *debug_button;
 
-	wbc_gtk_init_editline (wbcg);
+	wbcg_init_editline (wbcg);
 	entry = wbcg_get_entry (wbcg);
 
 	/* Set a reasonable width for the selection box. */
@@ -3143,54 +3223,54 @@ wbc_gtk_style_feedback_real (WorkbookControl *wbc, GnmStyle const *changes)
 		changes = wb_view->current_style;
 
 	if (gnm_style_is_element_set (changes, MSTYLE_FONT_BOLD))
-		gtk_toggle_action_set_active (wbcg->font.bold,
+		wbcg_set_action_feedback (wbcg, wbcg->font.bold,
 			gnm_style_get_font_bold (changes));
 	if (gnm_style_is_element_set (changes, MSTYLE_FONT_ITALIC))
-		gtk_toggle_action_set_active (wbcg->font.italic,
+		wbcg_set_action_feedback (wbcg, wbcg->font.italic,
 			gnm_style_get_font_italic (changes));
 	if (gnm_style_is_element_set (changes, MSTYLE_FONT_UNDERLINE)) {
-		gtk_toggle_action_set_active (wbcg->font.underline,
+		wbcg_set_action_feedback (wbcg, wbcg->font.underline,
 			gnm_style_get_font_uline (changes) == UNDERLINE_SINGLE);
-		gtk_toggle_action_set_active (wbcg->font.d_underline,
+		wbcg_set_action_feedback (wbcg, wbcg->font.d_underline,
 			gnm_style_get_font_uline (changes) == UNDERLINE_DOUBLE);
-		gtk_toggle_action_set_active (wbcg->font.sl_underline,
+		wbcg_set_action_feedback (wbcg, wbcg->font.sl_underline,
 			gnm_style_get_font_uline (changes) == UNDERLINE_SINGLE_LOW);
-		gtk_toggle_action_set_active (wbcg->font.dl_underline,
+		wbcg_set_action_feedback (wbcg, wbcg->font.dl_underline,
 			gnm_style_get_font_uline (changes) == UNDERLINE_DOUBLE_LOW);
 	}
 	if (gnm_style_is_element_set (changes, MSTYLE_FONT_STRIKETHROUGH))
-		gtk_toggle_action_set_active (wbcg->font.strikethrough,
+		wbcg_set_action_feedback (wbcg, wbcg->font.strikethrough,
 			gnm_style_get_font_strike (changes));
 
 	if (gnm_style_is_element_set (changes, MSTYLE_FONT_SCRIPT)) {
-		gtk_toggle_action_set_active (wbcg->font.superscript,
+		wbcg_set_action_feedback (wbcg, wbcg->font.superscript,
 			gnm_style_get_font_script (changes) == GO_FONT_SCRIPT_SUPER);
-		gtk_toggle_action_set_active (wbcg->font.subscript,
+		wbcg_set_action_feedback (wbcg, wbcg->font.subscript,
 			gnm_style_get_font_script (changes) == GO_FONT_SCRIPT_SUB);
 	} else {
-		gtk_toggle_action_set_active (wbcg->font.superscript, FALSE);
-		gtk_toggle_action_set_active (wbcg->font.subscript, FALSE);
+		wbcg_set_action_feedback (wbcg, wbcg->font.superscript, FALSE);
+		wbcg_set_action_feedback (wbcg, wbcg->font.subscript, FALSE);
 	}
 
 	if (gnm_style_is_element_set (changes, MSTYLE_ALIGN_H)) {
 		GnmHAlign align = gnm_style_get_align_h (changes);
-		gtk_toggle_action_set_active (wbcg->h_align.left,
+		wbcg_set_action_feedback (wbcg, wbcg->h_align.left,
 			align == GNM_HALIGN_LEFT);
-		gtk_toggle_action_set_active (wbcg->h_align.center,
+		wbcg_set_action_feedback (wbcg, wbcg->h_align.center,
 			align == GNM_HALIGN_CENTER);
-		gtk_toggle_action_set_active (wbcg->h_align.right,
+		wbcg_set_action_feedback (wbcg, wbcg->h_align.right,
 			align == GNM_HALIGN_RIGHT);
-		gtk_toggle_action_set_active (wbcg->h_align.center_across_selection,
+		wbcg_set_action_feedback (wbcg, wbcg->h_align.center_across_selection,
 			align == GNM_HALIGN_CENTER_ACROSS_SELECTION);
 		go_action_combo_pixmaps_select_id (wbcg->halignment, align);
 	}
 	if (gnm_style_is_element_set (changes, MSTYLE_ALIGN_V)) {
 		GnmVAlign align = gnm_style_get_align_v (changes);
-		gtk_toggle_action_set_active (wbcg->v_align.top,
+		wbcg_set_action_feedback (wbcg, wbcg->v_align.top,
 			align == GNM_VALIGN_TOP);
-		gtk_toggle_action_set_active (wbcg->v_align.bottom,
+		wbcg_set_action_feedback (wbcg, wbcg->v_align.bottom,
 			align == GNM_VALIGN_BOTTOM);
-		gtk_toggle_action_set_active (wbcg->v_align.center,
+		wbcg_set_action_feedback (wbcg, wbcg->v_align.center,
 			align == GNM_VALIGN_CENTER);
 		go_action_combo_pixmaps_select_id (wbcg->valignment, align);
 	}
@@ -3327,7 +3407,7 @@ regenerate_window_menu (WBCGtk *gtk, Workbook *wb, unsigned i)
 	k = 1;
 	WORKBOOK_FOREACH_CONTROL (wb, wbv, wbc, {
 		if (i >= 20)
-			return i;
+			continue;
 		if (GNM_IS_WBC_GTK (wbc) && basename) {
 			GString *label = g_string_new (NULL);
 			char *name;
@@ -3842,11 +3922,11 @@ cb_disconnect_proxy (G_GNUC_UNUSED GtkUIManager *ui,
 static void
 cb_post_activate (G_GNUC_UNUSED GtkUIManager *manager, GtkAction *action, WBCGtk *wbcg)
 {
-	if (!wbcg_is_editing (wbcg) && strcmp(gtk_action_get_name (action), "EditGotoCellIndicator") != 0)
+	if (!wbcg_is_editing (wbcg) && strcmp (gtk_action_get_name (action), "EditGotoCellIndicator") != 0)
 		wbcg_focus_cur_scg (wbcg);
 }
 
-static void
+static gboolean
 cb_wbcg_window_state_event (GtkWidget           *widget,
 			    GdkEventWindowState *event,
 			    WBCGtk  *wbcg)
@@ -3855,7 +3935,7 @@ cb_wbcg_window_state_event (GtkWidget           *widget,
 	if (!(event->changed_mask & GDK_WINDOW_STATE_FULLSCREEN) ||
 	    new_val == wbcg->is_fullscreen ||
 	    wbcg->updating_ui)
-		return;
+		return FALSE;
 
 	wbc_gtk_set_toggle_action_state (wbcg, "ViewFullScreen", new_val);
 
@@ -3878,11 +3958,12 @@ cb_wbcg_window_state_event (GtkWidget           *widget,
 	} else {
 		if (wbcg->undo_for_fullscreen) {
 			go_undo_undo (wbcg->undo_for_fullscreen);
-			g_object_unref (wbcg->undo_for_fullscreen);
-			wbcg->undo_for_fullscreen = NULL;
+			g_clear_object (&wbcg->undo_for_fullscreen);
 		}
 		wbcg->is_fullscreen = FALSE;
 	}
+
+	return FALSE;
 }
 
 /****************************************************************************/
@@ -3954,7 +4035,8 @@ cb_auto_expr_insert_formula (WBCGtk *wbcg, gboolean below)
 	GnmRange *input;
 	gboolean multiple, use_last_cr;
 	data_analysis_output_t *dao;
-	analysis_tools_data_auto_expression_t *specs;
+	GnmAnalysisTool *tool;
+	GnmAutoExpressionTool *specs;
 
 	g_return_if_fail (selection != NULL);
 
@@ -3992,35 +4074,36 @@ cb_auto_expr_insert_formula (WBCGtk *wbcg, gboolean below)
 			input->end.col--;
 	}
 
-
-	dao = dao_init (NULL, RangeOutput);
+	dao = dao_init (GNM_DAO_OUTPUT_RANGE);
 	dao->start_col         = output.start.col;
 	dao->start_row         = output.start.row;
 	dao->cols              = range_width (&output);
 	dao->rows              = range_height (&output);
-	dao->sheet             = scg_sheet (scg);
+	dao->dst_sheet         = scg_sheet (scg);
 	dao->autofit_flag      = FALSE;
 	dao->put_formulas      = TRUE;
 
-	specs = g_new0 (analysis_tools_data_auto_expression_t, 1);
-	specs->base.wbc = GNM_WBC (wbcg);
-	specs->base.input = g_slist_prepend (NULL, value_new_cellrange_r (scg_sheet (scg), input));
+	tool = gnm_auto_expression_tool_new ();
+	specs = GNM_AUTO_EXPRESSION_TOOL (tool);
+	specs->parent.base.input = g_slist_prepend (NULL, value_new_cellrange_r (scg_sheet (scg), input));
 	g_free (input);
-	specs->base.group_by = below ? GROUPED_BY_COL : GROUPED_BY_ROW;
-	specs->base.labels = FALSE;
+	specs->parent.base.group_by = below ? GNM_TOOL_GROUPED_BY_COL : GNM_TOOL_GROUPED_BY_ROW;
+	specs->parent.base.labels = FALSE;
 	specs->multiple = multiple;
 	specs->below = below;
-	specs->func = NULL;
-	g_object_get (G_OBJECT (wb_control_view (GNM_WBC (wbcg))),
-		      "auto-expr-func", &(specs->func), NULL);
-	if (specs->func == NULL) {
-		specs->func =  gnm_func_lookup_or_add_placeholder ("sum");
-		gnm_func_inc_usage (specs->func);
+
+	{
+		GnmFunc *func = NULL;
+		g_object_get (G_OBJECT (wb_control_view (GNM_WBC (wbcg))),
+			      "auto-expr-func", &func, NULL);
+		g_object_set (specs, "function",
+			      func ? gnm_func_get_name (func, FALSE) : "sum",
+			      NULL);
+		g_object_unref (func);
 	}
 
-	cmd_analysis_tool (GNM_WBC (wbcg), scg_sheet (scg),
-			   dao, specs, analysis_tool_auto_expression_engine,
-			   TRUE);
+	cmd_analysis_tool (GNM_WBC (wbcg), scg_sheet (scg), dao, tool);
+	g_object_unref (tool);
 }
 
 static void
@@ -4056,7 +4139,7 @@ cb_select_auto_expr (GtkWidget *widget, GdkEvent *event, WBCGtk *wbcg)
 	static struct {
 		char const * const displayed_name;
 		char const * const function;
-	} const quick_compute_routines [] = {
+	} const quick_compute_routines[] = {
 		{ N_("Sum"),	       "sum" },
 		{ N_("Min"),	       "min" },
 		{ N_("Max"),	       "max" },
@@ -4975,7 +5058,7 @@ wbc_gtk_class_init (GObjectClass *gobject_class)
 				   0, G_MAXINT, 0,
 				   GSF_PARAM_STATIC | G_PARAM_READWRITE));
 
-	wbc_gtk_signals [WBC_GTK_MARKUP_CHANGED] = g_signal_new ("markup-changed",
+	wbc_gtk_signals[WBC_GTK_MARKUP_CHANGED] = g_signal_new ("markup-changed",
 		GNM_WBC_GTK_TYPE,
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (WBCGtkClass, markup_changed),
@@ -4984,7 +5067,7 @@ wbc_gtk_class_init (GObjectClass *gobject_class)
 		G_TYPE_NONE,
 		0, G_TYPE_NONE);
 
-	gtk_window_set_default_icon_name ("gnumeric");
+	gtk_window_set_default_icon_name ("org.gnumeric.gnumeric");
 }
 
 static void
@@ -5075,7 +5158,7 @@ wbc_gtk_init (GObject *obj)
 		gtk_ui_manager_get_accel_group (wbcg->ui));
 
 	if (uifilename) {
-		if (strncmp (uifilename, "res:", 4) == 0)
+		if (g_str_has_prefix (uifilename, "res:"))
 			uifile = g_strdup (uifilename);
 		else
 			uifile = g_build_filename (gnm_sys_data_dir (),
@@ -5084,7 +5167,7 @@ wbc_gtk_init (GObject *obj)
 	} else
 		uifile = g_strdup ("res:/org/gnumeric/gnumeric/ui/GNOME_Gnumeric-gtk.xml");
 
-	if (strncmp (uifile, "res:", 4) == 0)
+	if (g_str_has_prefix (uifile, "res:"))
 		merge_id = gtk_ui_manager_add_ui_from_resource
 			(wbcg->ui, uifile + 4, &error);
 	else
@@ -5148,24 +5231,24 @@ GSF_CLASS_FULL (WBCGtk, wbc_gtk, NULL, NULL, wbc_gtk_class_init, NULL,
 void
 wbc_gtk_markup_changer (WBCGtk *wbcg)
 {
-	g_signal_emit (G_OBJECT (wbcg), wbc_gtk_signals [WBC_GTK_MARKUP_CHANGED], 0);
+	g_signal_emit (G_OBJECT (wbcg), wbc_gtk_signals[WBC_GTK_MARKUP_CHANGED], 0);
 }
 
 /******************************************************************************/
 /**
  * wbc_gtk_new:
- * @optional_view: (allow-none): #WorkbookView
- * @optional_wb: (allow-none) (transfer full): #Workbook
- * @optional_screen: (allow-none): #GdkScreen.
- * @optional_geometry: (allow-none): string.
+ * @optional_view: (nullable): #WorkbookView
+ * @optional_wb: (nullable) (transfer full): #Workbook
+ * @optional_screen: (nullable): #GdkScreen.
+ * @optional_geometry: (nullable): string.
  *
- * Returns: (transfer none): (allow-none):  the new #WBCGtk or %NULL.
+ * Returns: (transfer none): the new #WBCGtk.
  **/
 WBCGtk *
 wbc_gtk_new (WorkbookView *optional_view,
 	     Workbook *optional_wb,
 	     GdkScreen *optional_screen,
-	     gchar *optional_geometry)
+	     const gchar *optional_geometry)
 {
 	Sheet *sheet;
 	WorkbookView *wbv;

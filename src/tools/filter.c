@@ -1,4 +1,3 @@
-
 /*
  * filter.c:
  *
@@ -37,6 +36,85 @@
 #include <tools/filter.h>
 #include <tools/analysis-tools.h>
 
+G_DEFINE_TYPE (GnmAdvancedFilterTool, gnm_advanced_filter_tool, GNM_TYPE_GENERIC_B_ANALYSIS_TOOL)
+
+enum {
+	ADVANCED_FILTER_PROP_0,
+	ADVANCED_FILTER_PROP_UNIQUE_ONLY_FLAG
+};
+
+static void
+gnm_advanced_filter_tool_set_property (GObject *object, guint property_id,
+				       GValue const *value, GParamSpec *pspec)
+{
+	GnmAdvancedFilterTool *tool = GNM_ADVANCED_FILTER_TOOL (object);
+
+	switch (property_id) {
+	case ADVANCED_FILTER_PROP_UNIQUE_ONLY_FLAG:
+		tool->unique_only_flag = g_value_get_boolean (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_advanced_filter_tool_get_property (GObject *object, guint property_id,
+				       GValue *value, GParamSpec *pspec)
+{
+	GnmAdvancedFilterTool *tool = GNM_ADVANCED_FILTER_TOOL (object);
+
+	switch (property_id) {
+	case ADVANCED_FILTER_PROP_UNIQUE_ONLY_FLAG:
+		g_value_set_boolean (value, tool->unique_only_flag);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_advanced_filter_tool_init (GnmAdvancedFilterTool *tool)
+{
+	tool->unique_only_flag = FALSE;
+}
+
+static gboolean
+gnm_advanced_filter_tool_update_dao (GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	GnmGenericBAnalysisTool *gtool = GNM_GENERIC_B_ANALYSIS_TOOL (tool);
+	int rows, cols;
+	rows = gtool->base.range_1->v_range.cell.b.row
+		- gtool->base.range_1->v_range.cell.a.row + 1;
+	cols = gtool->base.range_1->v_range.cell.b.col
+		- gtool->base.range_1->v_range.cell.a.col + 1;
+	if (cols < 2)
+		cols = 2;
+	dao_adjust (dao, cols, 3 + rows);
+	return FALSE;
+}
+
+static char *
+gnm_advanced_filter_tool_update_descriptor (G_GNUC_UNUSED GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	return dao_command_descriptor (dao, _("Advanced Filter (%s)"));
+}
+
+static gboolean
+gnm_advanced_filter_tool_prepare_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	dao_prepare_output (wbc, dao, _("Advanced Filter"));
+	return FALSE;
+}
+
+static gboolean
+gnm_advanced_filter_tool_format_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	return dao_format_output (wbc, dao, _("Advanced Filter"));
+}
+
 static void
 filter (data_analysis_output_t *dao, Sheet *sheet, GSList *rows,
 	gint input_col_b, gint input_col_e, gint input_row_b, gint input_row_e)
@@ -44,7 +122,7 @@ filter (data_analysis_output_t *dao, Sheet *sheet, GSList *rows,
         GnmCell *cell;
 	int  i, r=0;
 
-	if (dao->type == InPlaceOutput) {
+	if (dao->type == GNM_DAO_OUTPUT_INPLACE) {
 		sheet->has_filtered_rows = TRUE;
 		colrow_set_visibility (sheet, FALSE,
 				       FALSE, input_row_b+1, input_row_e);
@@ -94,6 +172,107 @@ filter (data_analysis_output_t *dao, Sheet *sheet, GSList *rows,
 	}
 }
 
+static gboolean
+gnm_advanced_filter_tool_perform_calc (GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	GnmAdvancedFilterTool *atool = GNM_ADVANCED_FILTER_TOOL (tool);
+	GnmGenericBAnalysisTool *gtool = &atool->parent;
+	GnmRange range;
+	char *name;
+	GnmValue  *database = gtool->base.range_1;
+	GnmValue  *criteria = gtool->base.range_2;
+	gint err = analysis_tools_noerr;
+        GSList  *crit, *rows;
+	GnmEvalPos ep;
+
+	dao_set_italic (dao, 0, 0, 0, 2);
+	set_cell_text_col (dao, 0, 0, _("/Advanced Filter:"
+					"/Source Range:"
+					"/Criteria Range:"));
+	range_init_value (&range, database);
+	name = global_range_name (database->v_range.cell.a.sheet, &range);
+	dao_set_cell (dao, 1, 1, name);
+	g_free (name);
+	range_init_value (&range, criteria);
+	name = global_range_name (criteria->v_range.cell.a.sheet, &range);
+	dao_set_cell (dao, 1, 2, name);
+	g_free (name);
+
+	dao->offset_row = 3;
+
+	crit = gnm_criteria_parse_database (
+		eval_pos_init_sheet (&ep, dao->dst_sheet),
+		database, criteria);
+
+	if (crit == NULL) {
+		err = analysis_tools_invalid_field;
+		goto finish;
+	}
+
+	rows = gnm_criteria_match (database->v_range.cell.a.sheet,
+				     database->v_range.cell.a.col,
+				     database->v_range.cell.a.row + 1,
+				     database->v_range.cell.b.col,
+				     database->v_range.cell.b.row,
+				     crit, atool->unique_only_flag);
+
+	gnm_criteria_list_free (crit);
+
+	if (rows == NULL) {
+		err = analysis_tools_no_records_found;
+		goto finish;
+	}
+
+	filter (dao, database->v_range.cell.a.sheet, rows,
+		database->v_range.cell.a.col,
+		database->v_range.cell.b.col, database->v_range.cell.a.row,
+		database->v_range.cell.b.row);
+
+finish:
+	if (err != analysis_tools_noerr) {
+		dao_set_merge (dao, 0,0, 1, 0);
+		if (err == analysis_tools_no_records_found)
+			dao_set_cell (dao, 0, 0, _("No matching records were found."));
+		else if (err == analysis_tools_invalid_field)
+			dao_set_cell (dao, 0, 0, _("The given criteria are invalid."));
+		else
+			dao_set_cell_printf (dao, 0, 0,
+					     _("An unexpected error has occurred: "
+					       "%d."), err);
+	}
+
+	dao_redraw_respan (dao);
+
+	return analysis_tools_noerr;
+}
+
+static void
+gnm_advanced_filter_tool_class_init (GnmAdvancedFilterToolClass *klass)
+{
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	GnmAnalysisToolClass *at_class = GNM_ANALYSIS_TOOL_CLASS (klass);
+
+	gobject_class->set_property = gnm_advanced_filter_tool_set_property;
+	gobject_class->get_property = gnm_advanced_filter_tool_get_property;
+
+	at_class->update_dao = gnm_advanced_filter_tool_update_dao;
+	at_class->update_descriptor = gnm_advanced_filter_tool_update_descriptor;
+	at_class->prepare_output_range = gnm_advanced_filter_tool_prepare_output_range;
+	at_class->format_output_range = gnm_advanced_filter_tool_format_output_range;
+	at_class->perform_calc = gnm_advanced_filter_tool_perform_calc;
+
+	g_object_class_install_property (gobject_class,
+		ADVANCED_FILTER_PROP_UNIQUE_ONLY_FLAG,
+		g_param_spec_boolean ("unique-only-flag", NULL, NULL,
+				      FALSE, G_PARAM_READWRITE));
+}
+
+GnmAnalysisTool *
+gnm_advanced_filter_tool_new (void)
+{
+	return g_object_new (GNM_TYPE_ADVANCED_FILTER_TOOL, NULL);
+}
+
 /*
  * Advanced Filter tool.
  */
@@ -114,21 +293,21 @@ advanced_filter (WorkbookControl        *wbc,
 	if (!VALUE_IS_CELLRANGE (criteria))
 		return analysis_tools_invalid_field;
 
-	crit = parse_database_criteria (
+	crit = gnm_criteria_parse_database (
 		eval_pos_init_sheet (&ep, wb_control_cur_sheet (wbc)),
 		database, criteria);
 
 	if (crit == NULL)
 		return analysis_tools_invalid_field;
 
-	rows = find_rows_that_match (sheet,
+	rows = gnm_criteria_match (sheet,
 				     database->v_range.cell.a.col,
 				     database->v_range.cell.a.row + 1,
 				     database->v_range.cell.b.col,
 				     database->v_range.cell.b.row,
 				     crit, unique_only_flag);
 
-	free_criterias (crit);
+	gnm_criteria_list_free (crit);
 
 	if (rows == NULL)
 		return analysis_tools_no_records_found;
@@ -179,115 +358,3 @@ filter_show_all (WorkbookControl *wbc)
 
 	wb_control_menu_state_update (wbc, MS_FILTER_STATE_CHANGED);
 }
-
-static gboolean
-analysis_tool_advanced_filter_engine_run (data_analysis_output_t *dao,
-					  analysis_tools_data_advanced_filter_t *info)
-{
-	GnmRange range;
-	char *name;
-	GnmValue  *database = info->base.range_1;
-	GnmValue  *criteria = info->base.range_2;
-	gint err = analysis_tools_noerr;
-        GSList  *crit, *rows;
-	GnmEvalPos ep;
-
-	dao_set_italic (dao, 0, 0, 0, 2);
-	set_cell_text_col (dao, 0, 0, _("/Advanced Filter:"
-					"/Source Range:"
-					"/Criteria Range:"));
-	range_init_value (&range, database);
-	name = global_range_name (database->v_range.cell.a.sheet, &range);
-	dao_set_cell (dao, 1, 1, name);
-	g_free (name);
-	range_init_value (&range, criteria);
-	name = global_range_name (criteria->v_range.cell.a.sheet, &range);
-	dao_set_cell (dao, 1, 2, name);
-	g_free (name);
-
-	dao->offset_row = 3;
-
-	crit = parse_database_criteria (
-		eval_pos_init_sheet (&ep, wb_control_cur_sheet (info->base.wbc)),
-		database, criteria);
-
-	if (crit == NULL) {
-		err = analysis_tools_invalid_field;
-		goto finish;
-	}
-
-	rows = find_rows_that_match (database->v_range.cell.a.sheet,
-				     database->v_range.cell.a.col,
-				     database->v_range.cell.a.row + 1,
-				     database->v_range.cell.b.col,
-				     database->v_range.cell.b.row,
-				     crit, info->unique_only_flag);
-
-	free_criterias (crit);
-
-	if (rows == NULL) {
-		err = analysis_tools_no_records_found;
-		goto finish;
-	}
-
-	filter (dao, database->v_range.cell.a.sheet, rows,
-		database->v_range.cell.a.col,
-		database->v_range.cell.b.col, database->v_range.cell.a.row,
-		database->v_range.cell.b.row);
-
-finish:
-	if (err != analysis_tools_noerr) {
-		dao_set_merge (dao, 0,0, 1, 0);
-		if (err == analysis_tools_no_records_found)
-			dao_set_cell (dao, 0, 0, _("No matching records were found."));
-		else if (err == analysis_tools_invalid_field)
-			dao_set_cell (dao, 0, 0, _("The given criteria are invalid."));
-		else
-			dao_set_cell_printf (dao, 0, 0,
-					     _("An unexpected error has occurred: "
-					       "%d."), err);
-	}
-
-	dao_redraw_respan (dao);
-
-	return analysis_tools_noerr;
-}
-
-
-gboolean
-analysis_tool_advanced_filter_engine (G_GNUC_UNUSED GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-				   analysis_tool_engine_t selector, gpointer result)
-{
-	analysis_tools_data_advanced_filter_t *info = specs;
-	switch (selector) {
-	case TOOL_ENGINE_UPDATE_DESCRIPTOR:
-		return (dao_command_descriptor (dao, _("Advanced Filter (%s)"), result)
-			== NULL);
-	case TOOL_ENGINE_UPDATE_DAO: {
-		int rows, cols;
-		rows = info->base.range_1->v_range.cell.b.row
-			- info->base.range_1->v_range.cell.a.row + 1;
-		cols = info->base.range_1->v_range.cell.b.col
-			- info->base.range_1->v_range.cell.a.col + 1;
-		if (cols < 2)
-			cols = 2;
-		dao_adjust (dao, cols, 3 + rows);
-		return FALSE;
-	}
-	case TOOL_ENGINE_CLEAN_UP:
-		return analysis_tool_generic_b_clean (specs);
-	case TOOL_ENGINE_LAST_VALIDITY_CHECK:
-		return FALSE;
-	case TOOL_ENGINE_PREPARE_OUTPUT_RANGE:
-		dao_prepare_output (NULL, dao, _("Advanced Filter"));
-		return FALSE;
-	case TOOL_ENGINE_FORMAT_OUTPUT_RANGE:
-		return dao_format_output (dao, _("Advanced Filter"));
-	case TOOL_ENGINE_PERFORM_CALC:
-	default:
-		return analysis_tool_advanced_filter_engine_run (dao, info);
-	}
-	return TRUE;  /* We shouldn't get here */
-}
-
-

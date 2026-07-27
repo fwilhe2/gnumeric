@@ -44,7 +44,7 @@ static struct FontInfo {
 	const char *font_name;
 	const char *font_substitute_name;
 	int override_codepage;
-} font_info[] = {
+} const font_info[] = {
         { "Times New Roman",        "Times",          -1 },
         { "Times New Roman CYR",    "Times",          1251 },
         { "Times New Roman Greek",  "Times",          1253 },
@@ -63,17 +63,17 @@ static struct FontInfo {
         { "Courier New Greek",      "Courier",        1253 },
         { "Courier New Tur",        "Courier",        1254 },
         { "Courier New Baltic",     "Courier",        1257 },
-        { "£Í£Ó £Ð¥´¥·¥Ã¥¯",        "Kochi Gothic",   -1 },
-        { "£Í£Ó ¥´¥·¥Ã¥¯",          "Kochi Gothic",   -1 },
-        { "¥´¥·¥Ã¥¯",               "Kochi Gothic",   -1 },
+        { "ï¼­ï¼³ ï¼°ã‚´ã‚·ãƒƒã‚¯",        "Kochi Gothic",   -1 },
+        { "ï¼­ï¼³ ã‚´ã‚·ãƒƒã‚¯",          "Kochi Gothic",   -1 },
+        { "ã‚´ã‚·ãƒƒã‚¯",               "Kochi Gothic",   -1 },
         { "MS UI Gothic",           "Kochi Gothic",   -1 },
-        { "£Í£Ó £ÐÌÀÄ«",            "Kochi Mincho",   -1 },
-        { "£Í£Ó ÌÀÄ«",              "Kochi Mincho",   -1 },
-        { "ÌÀÄ«",                   "Kochi Mincho",   -1 },
+        { "ï¼­ï¼³ ï¼°æ˜Žæœ",            "Kochi Mincho",   -1 },
+        { "ï¼­ï¼³ æ˜Žæœ",              "Kochi Mincho",   -1 },
+        { "æ˜Žæœ",                   "Kochi Mincho",   -1 },
 	{ "GulimChe",               NULL,             949 }
 };
 
-static struct FontInfo *
+static const struct FontInfo *
 find_font (const char *font_name)
 {
 	unsigned ui;
@@ -92,28 +92,29 @@ find_font (const char *font_name)
  * gnm_font_override_codepage:
  * @font_name: The win32 font name
  *
- * Returns a codepage for the named Win32 font, or -1 if no such codepage
+ * Returns: a codepage for the named Win32 font, or -1 if no such codepage
  * is known.
  */
 int
 gnm_font_override_codepage (gchar const *font_name)
 {
-	struct FontInfo *fi = find_font (font_name);
+	const struct FontInfo *fi = find_font (font_name);
 	return fi ? fi->override_codepage : -1;
 }
 
 
 /*
  * get_substitute_font:
- * @font_name    The font name
+ * @font_name: The font name
  *
  * Tries to find a gnome font which matches the Excel font.
- * Returns the name of the substitute font if found. Otherwise returns %NULL
+ *
+ * Returns: (nullable): the name of the substitute font if found.
  */
 static gchar const *
 get_substitute_font (gchar const *font_name)
 {
-	struct FontInfo *fi = find_font (font_name);
+	const struct FontInfo *fi = find_font (font_name);
 	return fi ? fi->font_substitute_name : NULL;
 }
 
@@ -204,6 +205,16 @@ style_font_new_simple (PangoContext *context,
 	return font;
 }
 
+/**
+ * gnm_font_new:
+ * @context: #PangoContext
+ * @font_name: The font name
+ * @size_pts: font size in points
+ * @bold: whether the font should be bold
+ * @italic: whether the font should be italic
+ *
+ * Returns: (transfer full): a new #GnmFont.
+ **/
 GnmFont *
 gnm_font_new (PangoContext *context,
 	      char const *font_name, double size_pts,
@@ -246,6 +257,12 @@ gnm_font_new (PangoContext *context,
 	abort ();
 }
 
+/**
+ * gnm_font_ref:
+ * @gfont: #GnmFont
+ *
+ * Returns: (transfer full): the font itself with an increased reference count.
+ **/
 GnmFont *
 gnm_font_ref (GnmFont *sf)
 {
@@ -263,6 +280,13 @@ gnm_font_ref (GnmFont *sf)
 	return sf;
 }
 
+/**
+ * gnm_font_unref:
+ * @gfont: (nullable): #GnmFont
+ *
+ * Decreases the reference count of @gfont. If it reaches 0, the font
+ * is destroyed.
+ **/
 void
 gnm_font_unref (GnmFont *sf)
 {
@@ -302,6 +326,11 @@ gnm_font_unref (GnmFont *sf)
 	g_free (sf);
 }
 
+/**
+ * gnm_font_get_type:
+ *
+ * Returns: the GType for GnmFont.
+ **/
 GType
 gnm_font_get_type (void)
 {
@@ -315,6 +344,13 @@ gnm_font_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_font_equal:
+ * @v: first #GnmFont
+ * @v2: second #GnmFont
+ *
+ * Returns: TRUE if @v and @v2 are equal.
+ **/
 gint
 gnm_font_equal (gconstpointer v, gconstpointer v2)
 {
@@ -328,6 +364,12 @@ gnm_font_equal (gconstpointer v, gconstpointer v2)
 		strcmp (k1->font_name, k2->font_name) == 0);
 }
 
+/**
+ * gnm_font_hash:
+ * @v: #GnmFont
+ *
+ * Returns: a hash value for @v.
+ **/
 guint
 gnm_font_hash (gconstpointer v)
 {
@@ -339,6 +381,11 @@ gnm_font_hash (gconstpointer v)
 		GPOINTER_TO_UINT (k->context);
 }
 
+/**
+ * gnm_align_h_get_type:
+ *
+ * Returns: the GType for GnmHAlign.
+ **/
 GType
 gnm_align_h_get_type (void)
 {
@@ -364,6 +411,11 @@ gnm_align_h_get_type (void)
 	return etype;
 }
 
+/**
+ * gnm_align_v_get_type:
+ *
+ * Returns: the GType for GnmVAlign.
+ **/
 GType
 gnm_align_v_get_type (void)
 {
@@ -605,7 +657,7 @@ gnm_style_default_halign (GnmStyle const *style, GnmCell const *c)
 		case VALUE_ARRAY:
 			/* Tail recurse into the array */
 			if (v->v_array.x > 0 && v->v_array.y > 0) {
-				v = v->v_array.vals [0][0];
+				v = v->v_array.vals[0][0];
 				continue;
 			}
 
@@ -617,6 +669,12 @@ gnm_style_default_halign (GnmStyle const *style, GnmCell const *c)
 	return GNM_HALIGN_RIGHT;
 }
 
+/**
+ * gnm_translate_underline_to_pango:
+ * @ul: #GnmUnderline
+ *
+ * Returns: the #PangoUnderline corresponding to @ul.
+ **/
 PangoUnderline
 gnm_translate_underline_to_pango (GnmUnderline ul)
 {
@@ -637,6 +695,12 @@ gnm_translate_underline_to_pango (GnmUnderline ul)
 	}
 }
 
+/**
+ * gnm_translate_underline_from_pango:
+ * @pul: #PangoUnderline
+ *
+ * Returns: the #GnmUnderline corresponding to @pul.
+ **/
 GnmUnderline
 gnm_translate_underline_from_pango (PangoUnderline pul)
 {

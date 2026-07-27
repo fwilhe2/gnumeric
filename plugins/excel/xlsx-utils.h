@@ -21,8 +21,8 @@
 
 /*****************************************************************************/
 
-#ifndef GNM_XLSX_UTILS_H
-#define GNM_XLSX_UTILS_H
+#ifndef GNM_XLSX_UTILS_H_
+#define GNM_XLSX_UTILS_H_
 
 #include <gnumeric.h>
 
@@ -53,7 +53,6 @@ enum {
 #define XLSX_MaxRow	1048576
 
 GnmConventions	*xlsx_conventions_new  (gboolean output);
-void		 xlsx_conventions_free (GnmConventions *conv);
 Workbook	*xlsx_conventions_add_extern_ref (GnmConventions *conv,
 						  char const *path);
 GOFormat        *xlsx_pivot_date_fmt   (void);
@@ -93,7 +92,7 @@ typedef struct {
 	unsigned reversed : 1;
 } XLSXGradientInfo;
 
-extern XLSXGradientInfo xlsx_gradient_info[GO_GRADIENT_MAX];
+extern const XLSXGradientInfo xlsx_gradient_info[GO_GRADIENT_MAX];
 
 /*****************************************************************************/
 
@@ -101,4 +100,4 @@ long xlsx_relaxed_strtol (const char *s, char **endp, int base);
 
 /*****************************************************************************/
 
-#endif /* GNM_XLSX_UTILS_H */
+#endif /* GNM_XLSX_UTILS_H_ */

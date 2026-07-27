@@ -41,7 +41,6 @@
 #include <commands.h>
 #include <gnm-format.h>
 #include <number-match.h>
-#include <mstyle.h>
 #include <style-border.h>
 #include <sheet-style.h>
 #include <style-color.h>
@@ -150,16 +149,11 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 	int dims = 0;
 	int row;
 	gboolean with_coordinates;
-	GnmTabulateInfo *data;
+	GnmTabulate *tab;
 	/* we might get the 4 below from the positon of some of the widgets inside the grid */
 	int nrows = 4;
-	GnmCell **cells;
-	gnm_float *minima, *maxima, *steps;
 
-	cells = g_new (GnmCell *, nrows);
-	minima = g_new (gnm_float, nrows);
-	maxima = g_new (gnm_float, nrows);
-	steps = g_new (gnm_float, nrows);
+	tab = gnm_tabulate_new (nrows);
 
 	for (row = 1; row < nrows; row++) {
 		GtkEntry *e_w;
@@ -168,15 +162,15 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 		if (!w || gnm_expr_entry_is_blank (w))
 			continue;
 
-		cells[dims] = single_cell (dd->sheet, w);
-		if (!cells[dims]) {
+		tab->cells[dims] = single_cell (dd->sheet, w);
+		if (!tab->cells[dims]) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("You should introduce a single valid cell as dependency cell"));
 			gnm_expr_entry_grab_focus (GNM_EXPR_ENTRY (w), TRUE);
 			goto error;
 		}
-		if (gnm_cell_has_expr (cells[dims])) {
+		if (gnm_cell_has_expr (tab->cells[dims])) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("The dependency cells should not contain an expression"));
@@ -184,8 +178,8 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 			goto error;
 		}
 
-		if (get_grid_float_entry (dd->grid, row, COL_MIN, cells[dims],
-					   &(minima[dims]), &e_w, FALSE, 0.0)) {
+		if (get_grid_float_entry (dd->grid, row, COL_MIN, tab->cells[dims],
+					   &(tab->minima[dims]), &e_w, FALSE, 0.0)) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("You should introduce a valid number as minimum"));
@@ -193,8 +187,8 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 			goto error;
 		}
 
-		if (get_grid_float_entry (dd->grid, row, COL_MAX, cells[dims],
-					   &(maxima[dims]), &e_w, FALSE, 0.0)) {
+		if (get_grid_float_entry (dd->grid, row, COL_MAX, tab->cells[dims],
+					   &(tab->maxima[dims]), &e_w, FALSE, 0.0)) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("You should introduce a valid number as maximum"));
@@ -202,16 +196,16 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 			goto error;
 		}
 
-		if (maxima[dims] < minima[dims]) {
+		if (tab->maxima[dims] < tab->minima[dims]) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
-					 _("The maximum value should be bigger than the minimum"));
+					 _("The maximum value should be greater than the minimum"));
 			focus_on_entry (e_w);
 			goto error;
 		}
 
-		if (get_grid_float_entry (dd->grid, row, COL_STEP, cells[dims],
-					   &(steps[dims]), &e_w, TRUE, 1.0)) {
+		if (get_grid_float_entry (dd->grid, row, COL_STEP, tab->cells[dims],
+					   &(tab->steps[dims]), &e_w, TRUE, 1.0)) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("You should introduce a valid number as step size"));
@@ -219,7 +213,7 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 			goto error;
 		}
 
-		if (steps[dims] <= 0) {
+		if (tab->steps[dims] <= 0) {
 			go_gtk_notice_dialog (GTK_WINDOW (dd->dialog),
 					 GTK_MESSAGE_ERROR,
 					 _("The step size should be positive"));
@@ -262,26 +256,19 @@ tabulate_ok_clicked (G_GNUC_UNUSED GtkWidget *widget, DialogState *dd)
 		with_coordinates = (i == -1) ? TRUE : (gboolean)i;
 	}
 
-	data = g_new (GnmTabulateInfo, 1);
-	data->target = resultcell;
-	data->dims = dims;
-	data->cells = cells;
-	data->minima = minima;
-	data->maxima = maxima;
-	data->steps = steps;
-	data->with_coordinates = with_coordinates;
+	tab->target = resultcell;
+	tab->dims = dims;
+	tab->with_coordinates = with_coordinates;
 
-	if (!cmd_tabulate (GNM_WBC (dd->wbcg), data)) {
+	if (!cmd_tabulate (GNM_WBC (dd->wbcg), tab)) {
 		gtk_widget_destroy (GTK_WIDGET (dialog));
 		return;
 	}
 
-	g_free (data);
+	return;
+
  error:
-	g_free (minima);
-	g_free (maxima);
-	g_free (steps);
-	g_free (cells);
+	g_clear_object (&tab);
 }
 
 void
@@ -295,7 +282,7 @@ dialog_tabulate (WBCGtk *wbcg, Sheet *sheet)
 	g_return_if_fail (wbcg != NULL);
 
 	/* Only one guru per workbook. */
-	if (wbc_gtk_get_guru (wbcg))
+	if (wbcg_get_guru (wbcg))
 		return;
 
 	if (gnm_dialog_raise_if_exists (wbcg, TABULATE_KEY))
@@ -351,8 +338,7 @@ dialog_tabulate (WBCGtk *wbcg, Sheet *sheet)
 					   GNM_DIALOG_DESTROY_SHEET_REMOVED);
 
 	gtk_widget_show_all (gtk_dialog_get_content_area (dialog));
-	wbc_gtk_attach_guru (wbcg, GTK_WIDGET (dialog));
+	wbcg_attach_guru (wbcg, GTK_WIDGET (dialog));
 
 	non_model_dialog (wbcg, dialog, TABULATE_KEY);
 }
-

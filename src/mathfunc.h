@@ -1,5 +1,5 @@
-#ifndef _GNM_MATHFUNC_H_
-# define _GNM_MATHFUNC_H_
+#ifndef GNM_MATHFUNC_H_
+#define GNM_MATHFUNC_H_
 
 #include <numbers.h>
 #include <math.h>
@@ -28,18 +28,21 @@ G_BEGIN_DECLS
 /* ------------------------------------------------------------------------- */
 
 gnm_float log1pmx (gnm_float x);
+gnm_float lgamma1p (gnm_float a);
+gnm_float bd0(gnm_float x, gnm_float M);
+gnm_float gnm_taylor_log1p (gnm_float x, int k);
 gnm_float swap_log_tail (gnm_float lp);
 gnm_float pow1p (gnm_float x, gnm_float y);
 gnm_float pow1pm1 (gnm_float x, gnm_float y);
-gnm_float gnm_trunc (gnm_float x);
 gnm_float logspace_add (gnm_float logx, gnm_float logy);
 gnm_float logspace_sub (gnm_float logx, gnm_float logy);
 gnm_float gnm_owent (gnm_float h, gnm_float a);
-gnm_float gnm_logcf (gnm_float x, gnm_float i, gnm_float d);
+gnm_float gnm_logcf (gnm_float x, gnm_float i, gnm_float d, gnm_float tol);
 gnm_float expmx2h (gnm_float x);
-gnm_float gnm_agm(gnm_float a, gnm_float b);
-gnm_float gnm_lambert_w(gnm_float x, int k);
+gnm_float gnm_agm (gnm_float a, gnm_float b);
+gnm_float gnm_lambert_w (gnm_float x, int k);
 gnm_float gnm_ilog (gnm_float x, gnm_float b);
+gnm_float gnm_logbase (gnm_float x, gnm_float b);
 
 /* "d": density.  */
 /* "p": distribution function.  */
@@ -119,8 +122,8 @@ gnm_float random_laplace_pdf    (gnm_float x, gnm_float a);
 
 /* Studentized range distribution */
 /* Note: argument order differs from R.  */
-gnm_float ptukey(gnm_float x, gnm_float nmeans, gnm_float df, gnm_float nranges, gboolean lower_tail, gboolean log_p);
-gnm_float qtukey(gnm_float p, gnm_float nmeans, gnm_float df, gnm_float nranges, gboolean lower_tail, gboolean log_p);
+gnm_float ptukey (gnm_float x, gnm_float nmeans, gnm_float df, gnm_float nranges, gboolean lower_tail, gboolean log_p);
+gnm_float qtukey (gnm_float p, gnm_float nmeans, gnm_float df, gnm_float nranges, gboolean lower_tail, gboolean log_p);
 
 /* ------------------------------------------------------------------------- */
 
@@ -167,4 +170,4 @@ void mathfunc_init (void);
 
 G_END_DECLS
 
-#endif /* _GNM_MATHFUNC_H_ */
+#endif /* GNM_MATHFUNC_H_ */

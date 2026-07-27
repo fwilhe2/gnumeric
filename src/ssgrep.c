@@ -54,7 +54,7 @@ static char *ssgrep_pattern_file = NULL;
 static gboolean ssgrep_error = FALSE;
 static gboolean ssgrep_any_matches = FALSE;
 
-static GOptionEntry const ssgrep_options [] = {
+static GOptionEntry const ssgrep_options[] = {
 	{
 		"count", 'c',
 		0, G_OPTION_ARG_NONE, &ssgrep_count,
@@ -367,6 +367,7 @@ ssgrep (const char *arg, char const *uri, GOIOContext *ioc, GHashTable *targets,
 			case GNM_SRL_COMMENT: {
 				GnmComment *comment = sheet_get_comment (item->ep.sheet, &item->ep.eval);
 				txt = g_strdup (cell_comment_text_get (comment));
+				g_object_unref (comment);
 				locus_type = _("comment");
 				break;
 			}

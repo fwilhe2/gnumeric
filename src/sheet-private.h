@@ -1,9 +1,9 @@
-#ifndef _GNM_SHEET_PRIVATE_H_
-# define _GNM_SHEET_PRIVATE_H_
+#ifndef GNM_SHEET_PRIVATE_H_
+#define GNM_SHEET_PRIVATE_H_
 
 G_BEGIN_DECLS
 
-struct _SheetPrivate {
+struct SheetPrivate_ {
 	GnmRange	 unhidden_region;
 
 	/* State of menu items */
@@ -18,6 +18,8 @@ struct _SheetPrivate {
 	GnmCellPos	 reposition_objects;
 	unsigned char	 filters_changed;
 	unsigned char	 objects_changed;
+
+	double           pixels_per_pt;
 };
 
 /* for internal use only */
@@ -26,4 +28,4 @@ void gnm_sheet_cell_shutdown (void);
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_PRIVATE_H_ */
+#endif /* GNM_SHEET_PRIVATE_H_ */

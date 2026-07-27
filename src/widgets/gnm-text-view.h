@@ -19,8 +19,8 @@
  * USA
 */
 
-#ifndef GNM_TEXT_VIEW_H
-#define GNM_TEXT_VIEW_H
+#ifndef GNM_TEXT_VIEW_H_
+#define GNM_TEXT_VIEW_H_
 
 #include <gnumeric-fwd.h>
 
@@ -28,7 +28,7 @@
 #define GNM_TEXT_VIEW(o)	(G_TYPE_CHECK_INSTANCE_CAST ((o), GNM_TEXT_VIEW_TYPE, GnmTextView))
 #define GNM_IS_TEXT_VIEW(o)	(G_TYPE_CHECK_INSTANCE_TYPE ((o), GNM_TEXT_VIEW_TYPE))
 
-typedef struct _GnmTextView GnmTextView;
+typedef struct GnmTextView_ GnmTextView;
 
 GType gnm_text_view_get_type (void);
 GnmTextView *gnm_text_view_new       (void);

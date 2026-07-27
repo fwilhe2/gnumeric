@@ -171,8 +171,7 @@ oleo_parse_cell (OleoReader *state, guint8 *str, GnmStyle *style)
 		if (texpr != NULL)
 			gnm_cell_set_expr (cell, texpr);
 	}
-	if (texpr)
-		gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 /* NOTE : We don't care too much about formatting as such, but we need to
@@ -293,6 +292,6 @@ oleo_read (GOIOContext *io_context, Workbook *wb, GsfInput *input)
 		gnm_style_unref (style);
 
 	g_iconv_close (state.converter);
-	gnm_conventions_unref (state.convs);
+	g_object_unref (state.convs);
 	g_object_unref (state.textline);
 }

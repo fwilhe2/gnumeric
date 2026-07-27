@@ -28,6 +28,7 @@
 #include <cell.h>
 #include <expr.h>
 #include <value.h>
+#include <collect.h>
 #include <gnm-i18n.h>
 
 #include <goffice/goffice.h>
@@ -55,38 +56,34 @@ static GnmFuncHelp const help_and[] = {
 	{ GNM_FUNC_HELP_END }
 };
 
-static GnmValue *
-callback_function_and (GnmEvalPos const *ep, GnmValue const *value, void *closure)
+static int
+gnm_range_and (gnm_float const *xs, int n, gnm_float *res)
 {
-	int *result = closure;
+	if (n > 0) {
+		*res = TRUE;
+		for (int i = 0; i < n; i++) {
+			gnm_float thisx = xs[i];
+			if (thisx == 0) {
+				*res = FALSE;
+				break;
+			}
+		}
 
-	if (!VALUE_IS_STRING (value)) {
-		gboolean err;
-		*result = value_get_as_bool (value, &err) && *result;
-		if (err)
-			return value_new_error_VALUE (ep);
-	}
-
-	return NULL;
+		return 0;
+	} else
+		return 1;
 }
 
 static GnmValue *
 gnumeric_and (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
-	int result = -1;
-
-	/* Yes, AND is actually strict.  */
-	GnmValue *v = function_iterate_argument_values
-		(ei->pos, callback_function_and, &result,
-		 argc, argv, TRUE, CELL_ITER_IGNORE_BLANK);
-	if (v != NULL)
-		return v;
-
-	/* See if there was any value worth using */
-	if (result == -1)
-		return value_new_error_VALUE (ei->pos);
-
-	return value_new_bool (result);
+	return bool_range_function (argc, argv, ei,
+				    gnm_range_and,
+				    COLLECT_IGNORE_STRINGS |
+				    COLLECT_STRINGS_DIRECT_COMBO1 |
+				    COLLECT_ZEROONE_BOOLS |
+				    COLLECT_IGNORE_BLANKS,
+				    GNM_ERROR_VALUE);
 }
 
 /***************************************************************************/
@@ -108,9 +105,9 @@ static GnmFuncHelp const help_not[] = {
 static GnmValue *
 gnumeric_not (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gboolean err, val = value_get_as_bool (argv [0], &err);
+	gboolean err, val = value_get_as_bool (argv[0], &err);
 	if (err)
-		return value_new_error (ei->pos, _("Type Mismatch"));
+		return value_new_error_VALUE (ei->pos);
 	return value_new_bool (!val);
 }
 
@@ -134,38 +131,34 @@ static GnmFuncHelp const help_or[] = {
 	{ GNM_FUNC_HELP_END }
 };
 
-static GnmValue *
-callback_function_or (GnmEvalPos const *ep, GnmValue const *value, void *closure)
+static int
+gnm_range_or (gnm_float const *xs, int n, gnm_float *res)
 {
-	int *result = closure;
+	if (n > 0) {
+		*res = FALSE;
+		for (int i = 0; i < n; i++) {
+			gnm_float thisx = xs[i];
+			if (thisx != 0) {
+				*res = TRUE;
+				break;
+			}
+		}
 
-	if (!VALUE_IS_STRING (value)) {
-		gboolean err;
-		*result = value_get_as_bool (value, &err) || *result == 1;
-		if (err)
-			return value_new_error_VALUE (ep);
-	}
-
-	return NULL;
+		return 0;
+	} else
+		return 1;
 }
 
 static GnmValue *
 gnumeric_or (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
-	int result = -1;
-
-	/* Yes, OR is actually strict.  */
-	GnmValue *v = function_iterate_argument_values
-		(ei->pos, callback_function_or, &result,
-		 argc, argv, TRUE, CELL_ITER_IGNORE_BLANK);
-	if (v != NULL)
-		return v;
-
-	/* See if there was any value worth using */
-	if (result == -1)
-		return value_new_error_VALUE (ei->pos);
-
-	return value_new_bool (result);
+	return bool_range_function (argc, argv, ei,
+				    gnm_range_or,
+				    COLLECT_IGNORE_STRINGS |
+				    COLLECT_STRINGS_DIRECT_COMBO1 |
+				    COLLECT_ZEROONE_BOOLS |
+				    COLLECT_IGNORE_BLANKS,
+				    GNM_ERROR_VALUE);
 }
 
 /***************************************************************************/
@@ -179,6 +172,7 @@ static GnmFuncHelp const help_xor[] = {
 	{ GNM_FUNC_HELP_NOTE, F_("Strings and empty values are ignored.")},
 	{ GNM_FUNC_HELP_NOTE, F_("If no logical values are provided, then the error #VALUE! is returned.")},
 	{ GNM_FUNC_HELP_NOTE, F_("This function is strict: if any argument is an error, the result will be the first such error.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=XOR(TRUE,FALSE)" },
         { GNM_FUNC_HELP_EXAMPLES, "=XOR(0,1)" },
         { GNM_FUNC_HELP_EXAMPLES, "=XOR(TRUE,NA())" },
@@ -187,38 +181,33 @@ static GnmFuncHelp const help_xor[] = {
 	{ GNM_FUNC_HELP_END }
 };
 
-static GnmValue *
-callback_function_xor (GnmEvalPos const *ep, GnmValue const *value, void *closure)
+static int
+gnm_range_xor (gnm_float const *xs, int n, gnm_float *res)
 {
-	int *result = closure;
+	if (n > 0) {
+		gboolean b = FALSE;
+		for (int i = 0; i < n; i++) {
+			gnm_float thisx = xs[i];
+			b ^= (thisx != 0);
+		}
 
-	if (!VALUE_IS_STRING (value)) {
-		gboolean err;
-		*result = value_get_as_bool (value, &err) ^ (*result == 1);
-		if (err)
-			return value_new_error_VALUE (ep);
-	}
-
-	return NULL;
+		*res = b;
+		return 0;
+	} else
+		return 1;
 }
+
 
 static GnmValue *
 gnumeric_xor (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
-	int result = -1;
-
-	/* Yes, XOR is actually strict.  */
-	GnmValue *v = function_iterate_argument_values
-		(ei->pos, callback_function_xor, &result,
-		 argc, argv, TRUE, CELL_ITER_IGNORE_BLANK);
-	if (v != NULL)
-		return v;
-
-	/* See if there was any value worth using */
-	if (result == -1)
-		return value_new_error_VALUE (ei->pos);
-
-	return value_new_bool (result);
+	return bool_range_function (argc, argv, ei,
+				    gnm_range_xor,
+				    COLLECT_IGNORE_STRINGS |
+				    COLLECT_STRINGS_DIRECT_COMBO1 |
+				    COLLECT_ZEROONE_BOOLS |
+				    COLLECT_IGNORE_BLANKS,
+				    GNM_ERROR_VALUE);
 }
 
 /***************************************************************************/
@@ -228,6 +217,7 @@ static GnmFuncHelp const help_iferror[] = {
 	{ GNM_FUNC_HELP_ARG, F_("x:value to test for error") },
 	{ GNM_FUNC_HELP_ARG, F_("y:alternate value") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("This function returns the first value, unless that is an error, in which case it returns the second.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=IFERROR(1/0,14)" },
 	{ GNM_FUNC_HELP_SEEALSO, "IF,ISERROR" },
 	{ GNM_FUNC_HELP_END }
@@ -246,6 +236,7 @@ static GnmFuncHelp const help_ifna[] = {
 	{ GNM_FUNC_HELP_ARG, F_("x:value to test for #N/A error") },
 	{ GNM_FUNC_HELP_ARG, F_("y:alternate value") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("This function returns the first value, unless that is #N/A, in which case it returns the second.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=IFNA(12,14)" },
         { GNM_FUNC_HELP_EXAMPLES, "=IFNA(1/0,14)" },
         { GNM_FUNC_HELP_EXAMPLES, "=IFNA(NA(),14)" },
@@ -267,8 +258,10 @@ static GnmFuncHelp const help_ifs[] = {
 	{ GNM_FUNC_HELP_ARG, F_("value1:value if @{condition1} is true") },
 	{ GNM_FUNC_HELP_ARG, F_("cond2:condition") },
 	{ GNM_FUNC_HELP_ARG, F_("value2:value if @{condition2} is true") },
-	{ GNM_FUNC_HELP_DESCRIPTION, F_("This function returns the value after the first true conditional.  If no conditional is true, #VALUE! is returned.") },
-        { GNM_FUNC_HELP_EXAMPLES, "=IFS(false,1/0,true,42)" },
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("This function returns the value after the first true conditional.  If no conditional is true, #N/A is returned.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_NOTE, F_("Each @{condition} must be a boolean value. Any other type will result in a #VALUE! error.") },
+	{ GNM_FUNC_HELP_EXAMPLES, "=IFS(FALSE,1/0,TRUE,42)" },
 	{ GNM_FUNC_HELP_SEEALSO, "IF" },
 	{ GNM_FUNC_HELP_END }
 };
@@ -278,29 +271,30 @@ gnumeric_ifs (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	int a;
 
+	if (argc % 2 != 0)
+		return value_new_error_VALUE (ei->pos);
+
 	for (a = 0; a + 1 <= argc; a += 2) {
 		GnmValue *v;
-		gboolean err, c;
+		gboolean c;
 
 		v = gnm_expr_eval (argv[a], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
-		// Strict in conditional arguments
 		if (VALUE_IS_ERROR (v))
 			return v;
 
-		// Docs says to err on any non-boolean, but until tests
-		// verify that, we use regular boolean interpretation
-		c = value_get_as_bool (v, &err);
+		if (!VALUE_IS_BOOLEAN (v)) {
+			value_release (v);
+			return value_new_error_VALUE (ei->pos);
+		}
+
+		c = v->v_bool.val;
 		value_release (v);
-		if (err)
-			break;
 
 		if (c)
-			// Flags?
 			return gnm_expr_eval (argv[a + 1], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
 	}
 
-	// No match
-	return value_new_error_VALUE (ei->pos);
+	return value_new_error_NA (ei->pos);
 }
 
 /***************************************************************************/
@@ -308,12 +302,15 @@ gnumeric_ifs (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 static GnmFuncHelp const help_switch[] = {
 	{ GNM_FUNC_HELP_NAME, F_("SWITCH:multi-branch selector") },
 	{ GNM_FUNC_HELP_ARG, F_("ref:value") },
-	{ GNM_FUNC_HELP_ARG, F_("choice1:first choice value") },
-	{ GNM_FUNC_HELP_ARG, F_("value1:first result value") },
-	{ GNM_FUNC_HELP_ARG, F_("choice2:second choice value") },
-	{ GNM_FUNC_HELP_ARG, F_("value2:second result value") },
-	{ GNM_FUNC_HELP_DESCRIPTION, F_("This function compares the reference value, @{ref}, against the choice values, @{choice1} etc., and returns the corresponding result value when it finds a match.  The choices may be followed by a default value to use.  If there are no choices that match and no default value, #N/A is return.") },
-        { GNM_FUNC_HELP_EXAMPLES, "=SWITCH(WEEKDAY(TODAY()),0,\"Sunday\",1,\"Saturday\",\"not weekend\")" },
+	{ GNM_FUNC_HELP_ARG, F_("choice1:value") },
+	{ GNM_FUNC_HELP_ARG, F_("value1:result") },
+	{ GNM_FUNC_HELP_ARG, F_("choice2:value") },
+	{ GNM_FUNC_HELP_ARG, F_("value2:result") },
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("SWITCH compares @{ref} against @{choice1}, @{choice2}, etc. and returns the corresponding @{value} for the first match. A final optional argument may be provided as a default value.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If no match is found and no default is provided, #N/A is returned.") },
+	{ GNM_FUNC_HELP_EXAMPLES, "=SWITCH(2,1,\"A\",2,\"B\",3,\"C\")" },
+	{ GNM_FUNC_HELP_EXAMPLES, "=SWITCH(7,1,\"A\",2,\"B\",\"None\")" },
 	{ GNM_FUNC_HELP_SEEALSO, "IF,IFS" },
 	{ GNM_FUNC_HELP_END }
 };
@@ -323,12 +320,11 @@ gnumeric_switch (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	int a;
 	GnmValue *res = NULL;
-	GnmValue *ref;
 
 	if (argc < 1)
 		return value_new_error_VALUE (ei->pos);
 
-	ref = gnm_expr_eval (argv[0], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
+	GnmValue *ref = gnm_expr_eval (argv[0], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
 	if (VALUE_IS_ERROR (ref))
 		return ref;
 
@@ -420,7 +416,7 @@ GnmFuncDescriptor const logical_functions[] = {
 	{ "ifna", "EE",  help_ifna,
 	  gnumeric_ifna, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_SECOND,
-	  GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC,
+	  GNM_FUNC_IMPL_STATUS_COMPLETE,
 	  GNM_FUNC_TEST_STATUS_NO_TESTSUITE},
 	{ "ifs", NULL,  help_ifs,
 	  NULL, gnumeric_ifs,
@@ -439,6 +435,6 @@ GnmFuncDescriptor const logical_functions[] = {
 	{ "xor", NULL,  help_xor, NULL,
 	  gnumeric_xor,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
-	  GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         {NULL}
 };

@@ -1,14 +1,17 @@
 #include <gnumeric-config.h>
 #include <sf-dpq.h>
+#include <sf-gamma.h>
 #include <mathfunc.h>
 
 #define give_log log_p
-#define R_D__0	(log_p ? gnm_ninf : 0.0)
-#define R_D__1	(log_p ? 0.0 : 1.0)
+#define R_D__0	(log_p ? gnm_ninf : GNM_const(0.0))
+#define R_D__1	(log_p ? GNM_const(0.0) : GNM_const(1.0))
 #define R_DT_0	(lower_tail ? R_D__0 : R_D__1)
 #define R_DT_1	(lower_tail ? R_D__1 : R_D__0)
 #define M_1_SQRT_2PI    GNM_const(0.398942280401432677939946059934)  /* 1/sqrt(2pi) */
 #define M_SQRT_2PI GNM_const(2.506628274631000502415765284811045253006986740609938316629923)
+#define M_LN_2PI        GNM_const(1.837877066409345483560659472811)
+#define R_D_exp(x)	(log_p	?  (x)	 : gnm_exp(x))	/* exp(x) */
 
 /* ------------------------------------------------------------------------- */
 
@@ -80,9 +83,9 @@ pfuncinverter (gnm_float p, const gnm_float shape[],
 			if (have_xlow && have_xhigh)
 				x = (xlow + xhigh) / 2;
 			else if (have_xlow)
-				x = xlow * 1.1;
+				x = xlow * GNM_const(1.1);
 			else
-				x = xhigh / 1.1;
+				x = xhigh / GNM_const(1.1);
 		} else if (have_xlow && have_xhigh) {
 			switch (i % 8) {
 			case 0:
@@ -152,7 +155,7 @@ pfuncinverter (gnm_float p, const gnm_float shape[],
 				goto done;
 			}
 
-			if (dpfunc_dx && i % 3 < 2 && (i == 0 || prec < 0.05)) {
+			if (dpfunc_dx && i % 3 < 2 && (i == 0 || prec < GNM_const(0.05))) {
 				gnm_float d = dpfunc_dx (x, shape, log_p);
 				if (log_p) d = gnm_exp (d - px);
 #ifdef DEBUG_pfuncinverter
@@ -164,7 +167,7 @@ pfuncinverter (gnm_float p, const gnm_float shape[],
 					 * with getting good points on both
 					 * sides of the root.
 					 */
-					x = x - e / d * 1.000001;
+					x = x - e / d * GNM_const(1.000001);
 					if (x > xlow && x < xhigh) {
 #ifdef DEBUG_pfuncinverter
 						g_printerr ("Newton ok\n");
@@ -241,7 +244,7 @@ discpfuncinverter (gnm_float p, const gnm_float shape[],
 		x0 = xlow;
 	else
 		x0 = 0;
-	x0 = gnm_floor (x0 + 0.5);
+	x0 = gnm_round (x0);
 	step = 1 + gnm_floor (gnm_abs (x0) * GNM_EPSILON);
 
 #if 0
@@ -264,7 +267,7 @@ discpfuncinverter (gnm_float p, const gnm_float shape[],
 
 		if (i > 1 && have_xlow && have_xhigh) {
 			gnm_float xmid = gnm_floor ((xlow + xhigh) / 2);
-			if (xmid - xlow < 0.5 ||
+			if (xmid - xlow < GNM_const(0.5) ||
 			    xmid - xlow < gnm_abs (xlow) * GNM_EPSILON) {
 				if (check_left) {
 					/*
@@ -322,6 +325,7 @@ discpfuncinverter (gnm_float p, const gnm_float shape[],
 gnm_float
 dnorm (gnm_float x, gnm_float mu, gnm_float sigma, gboolean give_log)
 {
+	static gnm_float xlim;
 	gnm_float x0;
 
 	if (gnm_isnan (x) || gnm_isnan (mu) || gnm_isnan (sigma))
@@ -334,26 +338,35 @@ dnorm (gnm_float x, gnm_float mu, gnm_float sigma, gboolean give_log)
 	x /= sigma;
 
 	if (give_log)
-		return -(M_LN_SQRT_2PI + 0.5 * x * x + gnm_log (sigma));
-	else if (x > 3 + 2 * gnm_sqrt (gnm_log (GNM_MAX)))
-		/* Far into the tail; x > ~100 for long double  */
-		return 0;
-	else if (x > 4) {
-		/*
-		 * Split x into xh+xl such that:
-		 * 1) xh*xh is exact
-		 * 2) 0 <= xl <= 1/65536
-		 * 3) 0 <= xl*xh < ~100/65536
-		 */
-		gnm_float xh = gnm_floor (x * 65536) / 65536;  /* At most 24 bits */
-		gnm_float xl = (x0 - xh * sigma) / sigma;
-		return M_1_SQRT_2PI *
-			gnm_exp (-0.5 * (xh * xh)) *
-			gnm_exp (-xl * (0.5 * xl + xh)) /
-			sigma;
-	} else
+		return -(M_LN_SQRT_2PI + GNM_const(0.5) * x * x + gnm_log (sigma));
+
+	if (x < 4)
 		/* Near-center case.  */
 		return M_1_SQRT_2PI * expmx2h (x) / sigma;
+
+	if (!xlim)
+		xlim = 10 + gnm_sqrt (-2 * (GNM_MIN_EXP - GNM_MANT_DIG) * gnm_log (GNM_RADIX));
+
+	if (x >= xlim)
+		/* Far into the tail; x > ~100 for long double  */
+		return 0;
+	else {
+#if GNM_RADIX == 2
+		// Split x into xh+xl such that:
+		// 1) xh*xh is exact
+		// 2) 0 <= xl <= 1/65536
+		// 3) 0 <= xl*xh < ~100/65536
+		gnm_float xh = gnm_round (x * 65536) / 65536;  /* At most 24 bits */
+		gnm_float xl = (x0 - xh * sigma) / sigma;
+#else
+		gnm_float xh = gnm_round (x * 100000) / 100000;
+		gnm_float xl = (x0 - xh * sigma) / sigma;
+#endif
+		return M_1_SQRT_2PI *
+			gnm_exp (GNM_const(-0.5) * (xh * xh)) *
+			gnm_exp (-xl * (GNM_const(0.5) * xl + xh)) /
+			sigma;
+	}
 }
 
 gnm_float
@@ -446,7 +459,7 @@ dlnorm (gnm_float x, gnm_float logmean, gnm_float logsd, gboolean give_log)
 	gnm_quad_init (&qs, logsd);
 	gnm_quad_div (&qy, &qy, &qs);
 	gnm_quad_mul (&qy, &qy, &qy);
-	qy.h *= -0.5; qy.l *= -0.5;
+	qy.h *= GNM_const(-0.5); qy.l *= GNM_const(-0.5);
 	gnm_quad_mul (&qt, &qs, &qx);
 	gnm_quad_mul (&qt, &qt, &qsqrt2pi);
 	if (give_log) {
@@ -561,14 +574,14 @@ qcauchy (gnm_float p, gnm_float location, gnm_float scale,
 			p = gnm_exp (p);
 		log_p = FALSE;
 	} else {
-		if (p > 0.5) {
+		if (p > GNM_const(0.5)) {
 			p = 1 - p;
 			lower_tail = !lower_tail;
 		}
 	}
 	x = location + (lower_tail ? -scale : scale) * gnm_cotpi (p);
 
-	if (location != 0 && gnm_abs (x / location) < 0.25) {
+	if (location != 0 && gnm_abs (x / location) < GNM_const(0.25)) {
 		/* Cancellation has occurred.  */
 		gnm_float shape[2];
 		shape[0] = location;
@@ -691,3 +704,221 @@ qrayleigh (gnm_float p, gnm_float scale, gboolean lower_tail, gboolean log_p)
 }
 
 /* ------------------------------------------------------------------------ */
+// log1px3(x) = log(1+x) - x + x^2/2
+//    (In other words, terms x^3 and above from log(1+x).)
+//
+// p(x) = -x+x^/2
+
+static gnm_float
+log1px3 (gnm_float x)
+{
+	// Lift p(x) by 1/2
+	gnm_float c1 = GNM_const(0.6065306597126334);  // Exp[-1/2]
+	gnm_float d1 = GNM_const(0.64872127070012814684865); // (1/c1)/c1
+
+	// Lift p(x) by -p(d1) (i.e., b2 = 0.43830162717073367601715756
+	gnm_float c2 = GNM_const(0.6451311644197896784284); // Exp[-b2]
+	gnm_float d2 = GNM_const(0.5500723808612904238765);  // (1/c2)/c2
+
+	gnm_float l0 = GNM_const(-0.5727756120801021849831095);  // 1/f1-1
+	gnm_float l1 = GNM_const(-0.643439019336053015559896);   // 1/f2-1
+	gnm_float l2 = GNM_const(-0.75);                         // 1/f3-1
+	gnm_float l3 = GNM_const(-0.9423152993887941976504422);  // left root of p(x) + log(4)
+
+	if (gnm_isnan (x))
+		return x;
+
+	if (x >= 2) {
+		// Two positive terms
+		return gnm_log1p (x) + x * (x - 2) / 2;
+	}
+
+	// c * (1 + x) = 1 + cx - (1-c) = 1 + c * (x - d)
+
+	if (x >= d1) {
+		// Two positive terms
+		return gnm_log1p (c1 * (x - d1)) + (x - 1) * (x - 1) / 2;
+	}
+
+	if (x >= d2) {
+		// Two positive terms
+		return gnm_log1p (c2 * (x - d2)) + (x - d1) * (x - 1 - (1 - d1)) / 2;
+	}
+
+	if (x > l0)
+		return gnm_taylor_log1p (x, 3);
+
+	// In the following, (l,r) are roots of p(x)+log(f)
+	// We have l<x<0<2<r
+	// Moreover, (1+x)*f <= 1, so two negative terms are added
+
+	if (x > l1) {
+		gnm_float r1 = 2 - l1;
+		gnm_float f1 = GNM_const(2.3406903451108563844727);  // Exp[l1*r1/2]
+		return gnm_log ((1 + x) * f1) + (x - l1) * (x - r1) / 2;
+	}
+
+	if (x > l2) {
+		gnm_float r2 = 2 - l2;
+		gnm_float f2 = GNM_const(2.80456935623722661204591);  // Exp[l2*r2/2]
+		return gnm_log ((1 + x) * f2) + (x - l2) * (x - r2) / 2;
+	}
+
+	if (x > l3) {
+		gnm_float r3 = 2 - l3;
+		gnm_float f3 = 4;                                     // Exp[l3*r3/2]
+		return gnm_log ((1 + x) * f3) + (x - l3) * (x - r3) / 2;
+	}
+
+	// Dominated by logarithm
+	return gnm_log1p (x) + x * (x - 2) / 2;
+}
+
+
+gnm_float
+dpois_raw(gnm_float x, gnm_float lambda, gboolean give_log)
+{
+	gnm_float d, d_l, res;
+
+	// x >= 0 ; integer for dpois(), but not e.g. for pgamma()!
+        // lambda >= 0
+
+	if (isnan (x) || !(lambda >= 0)) return gnm_nan;
+	if (lambda == 0) return( (x == 0) ? R_D__1 : R_D__0 );
+	if (lambda == gnm_pinf) return R_D__0; // including for the case where  x = lambda = +Inf
+	if (x < 0) return R_D__0;
+	if (x <= lambda * GNM_MIN) return give_log ? -lambda : gnm_exp(-lambda);
+
+	d = x - lambda;
+	d_l = d / lambda;
+
+	if (!give_log && x <= 140 && lambda <= 140) {
+		// Not going to overflow
+		gnm_float f1 = gnm_pow (lambda, x);
+		gnm_float f2 = gnm_exp (-lambda);
+		gnm_float f3 = gnm_fact (x);
+		return f1 * f2 / f3;
+	}
+
+	if (!give_log && x <= 1000000 && lambda <= 1000000) {
+		gnm_float e1, e2, res, eres;
+		int e3;
+		GnmQuad qx, ql, qf1, qf2, qf3, qres;
+		void *state = gnm_quad_start ();
+
+		gnm_quad_init (&qx, x);
+		gnm_quad_init (&ql, lambda);
+
+		gnm_quad_pow (&qf1, &e1, &ql, &qx);
+		gnm_quad_negate (&ql, &ql);
+		gnm_quad_exp (&qf2, &e2, &ql);
+		qfactf (x, &qf3, &e3);
+
+		gnm_quad_mul (&qres, &qf1, &qf2);
+		gnm_quad_div (&qres, &qres, &qf3);
+		res = gnm_quad_value (&qres);
+		eres = e1 + e2 - e3;
+
+		gnm_quad_end (state);
+
+		return gnm_scalbn (res, CLAMP (eres, G_MININT, G_MAXINT));
+	}
+
+	if (give_log && lambda <= 1) {
+		gnm_float t1 = x * gnm_log (lambda); // <= 0
+		gnm_float t2 = -lambda;              // <= 0
+		gnm_float t3 = -lgamma1p (x);        // ]-Inf;0.12]
+		// up to 20% cancellation near x = lambda = 0.25
+		return t1 + t2 + t3;
+	}
+
+	// g_printerr ("x=%.16g   l=%.16g    d/l=%.16g\n", x, lambda, d_l);
+	if (x >= GNM_const(0.16) && x <= 2 * lambda) {
+		// If n>=l (i.e., d>=0) then t1-t4 are all negative
+		// and hence no cancellation occurs in the summing.
+		//
+		// If d<0, then t1 is positive and some cancellation
+		// occurs.  However, it looks like |t1| < .2|t2| so
+		// the situation is not bad.
+		gnm_float t1 = -x * log1px3 (d_l);
+		gnm_float t2 = d_l * d_l * GNM_const(0.5) * (d - lambda);
+		gnm_float t3 = gnm_log (2 * M_PIgnum * x) * GNM_const(-0.5);
+		gnm_float t4 = -stirlerr (x);
+
+#if 0
+		g_printerr ("t1=%.16g\n", t1);
+		g_printerr ("t2=%.16g\n", t2);
+		g_printerr ("t3=%.16g\n", t3);
+		g_printerr ("t4=%.16g\n", t4);
+#endif
+		res = t1 + t2 + t3 + t4;
+	} else {
+		res = -bd0 (x, lambda);
+		res -= stirlerr (x);
+		res -= gnm_log (2 * M_PIgnum * x) * GNM_const(0.5);
+	}
+	return give_log ? res : gnm_exp (res);
+}
+
+gnm_float
+dbinom_raw (gnm_float x, gnm_float n, gnm_float p, gnm_float q, gboolean give_log)
+{
+	gnm_float lf, lc;
+
+	if (p == 0) return((x == 0) ? R_D__1 : R_D__0);
+	if (q == 0) return((x == n) ? R_D__1 : R_D__0);
+
+	if (x == 0) {
+		// The smaller of p and q is the most accurate
+		if (p > q)
+			return give_log ? n * gnm_log(q) : gnm_pow (q, n);
+		else
+			return give_log ? n * gnm_log1p (-p) : pow1p (-p, n);
+	}
+	if (x == n) {
+		// The smaller of p and q is the most accurate
+		if (p > q)
+			return give_log ? n * gnm_log1p (-q) : pow1p (-q, n);
+		else
+			return give_log ? n * gnm_log (p) : gnm_pow (p, n);
+	}
+	if (x < 0 || x > n) return( R_D__0 );
+
+	if (!give_log) {
+		void *state = gnm_quad_start ();
+		GnmQuad qp, qq, qx, qnmx, qf1, qf2, qf3, qf4, qf5, qres;
+		int e1, e2, e3, bad = 0;
+		gnm_float e4, e5, e;
+
+		gnm_quad_init (&qp, p);
+		gnm_quad_init (&qq, q);
+		gnm_quad_init (&qx, x);
+		gnm_quad_init (&qnmx, n - x);
+
+		bad += qfactf (n, &qf1, &e1);
+		bad += qfactf (x, &qf2, &e2);
+		bad += qfactf (n - x, &qf3, &e3);
+		// FIXME?  We should only use the smaller of p and q
+		gnm_quad_pow (&qf4, &e4, &qp, &qx);
+		gnm_quad_pow (&qf5, &e5, &qq, &qnmx);
+
+		gnm_quad_mul (&qres, &qf2, &qf3);
+		gnm_quad_div (&qres, &qf1, &qres);
+		gnm_quad_mul (&qres, &qres, &qf4);
+		gnm_quad_mul (&qres, &qres, &qf5);
+		e = e4 + e5 + e1 - e2 - e3;
+
+		gnm_quad_end (state);
+
+		if (!bad && gnm_finite (qres.h) && qres.h > 0) {
+			e = CLAMP (e, G_MININT, G_MAXINT);
+			return gnm_scalbn (gnm_quad_value (&qres), e);
+		}
+	}
+
+	// From R:
+	lc = stirlerr(n) - stirlerr(x) - stirlerr(n-x) - bd0(x,n*p) - bd0(n-x,n*q);
+	lf = M_LN_2PI + gnm_log(x) + gnm_log1p(- x/n);
+
+	return R_D_exp(lc - GNM_const(0.5)*lf);
+}

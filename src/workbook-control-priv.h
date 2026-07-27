@@ -1,12 +1,12 @@
-#ifndef _GNM_WORKBOOK_CONTROL_PRIV_H_
-# define _GNM_WORKBOOK_CONTROL_PRIV_H_
+#ifndef GNM_WORKBOOK_CONTROL_PRIV_H_
+#define GNM_WORKBOOK_CONTROL_PRIV_H_
 
 #include <workbook-control.h>
 #include <goffice/goffice.h>
 
 G_BEGIN_DECLS
 
-struct _WorkbookControl {
+struct WorkbookControl_ {
 	GODocControl base;
 
 	WorkbookView *wb_view;
@@ -27,13 +27,13 @@ typedef struct {
 	void (*edit_finish)	    (WorkbookControl *wbc, gboolean accept);
 	void (*selection_descr_set) (WorkbookControl *wbc, char const *text);
 	void (*update_action_sensitivity)  (WorkbookControl *wbc);
-	struct _WbcSheetManager {
+	struct WbcSheetManager_ {
 		void (*add)	(WorkbookControl *wbc, SheetView *sv);
 		void (*remove)	(WorkbookControl *wbc, Sheet *sheet);
 		void (*focus)   (WorkbookControl *wbc, Sheet *sheet);
 		void (*remove_all) (WorkbookControl *wbc);
 	} sheet;
-	struct _WbcUndoRedo {
+	struct WbcUndoRedo_ {
 		void (*truncate)(WorkbookControl *wbc, int n, gboolean is_undo);
 		void (*pop)	(WorkbookControl *wbc, gboolean is_undo);
 		void (*push)	(WorkbookControl *wbc, gboolean is_undo,
@@ -41,7 +41,7 @@ typedef struct {
 		void (*labels)	(WorkbookControl *wbc,
 				 char const *undo, char const *redo);
 	} undo_redo;
-	struct _WbcMenuState {
+	struct WbcMenuState_ {
 		void (*update)      (WorkbookControl *wbc, int flags);
 	} menu_state;
 
@@ -56,4 +56,4 @@ typedef struct {
 
 G_END_DECLS
 
-#endif /* _GNM_WORKBOOK_CONTROL_PRIV_H_ */
+#endif /* GNM_WORKBOOK_CONTROL_PRIV_H_ */

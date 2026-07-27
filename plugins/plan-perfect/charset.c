@@ -400,12 +400,18 @@ pln_get_str (guint8 const *ch, unsigned len)
 		if (32 <= *ch && *ch <= 126)
 			g_string_append_c (buf, *ch++);
 		else if (*ch == 0xC0) {
-			g_string_append_unichar (buf,
-				map_wp_char (ch[2], ch[1]));
-			ch += 4;
-		} else if (*ch == 0xC3 || *ch == 0xC4)
-			ch += 3; /* ignore */
-		else
+			if (ch + 3 < end) {
+				g_string_append_unichar (buf,
+					map_wp_char (ch[2], ch[1]));
+				ch += 4;
+			} else
+				ch = end;
+		} else if (*ch == 0xC3 || *ch == 0xC4) {
+			if (ch + 2 < end)
+				ch += 3; /* ignore */
+			else
+				ch = end;
+		} else
 			ch++;
 	}
 

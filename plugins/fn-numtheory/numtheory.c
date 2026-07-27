@@ -38,7 +38,7 @@ GNM_PLUGIN_MODULE_HEADER;
  * represented in a gnm_float _and_ in a guint64.  (For regular "double",
  * the latter part is irrelevant.)
  */
-static const double bit_max = MIN (1 / GNM_EPSILON, (gnm_float)G_MAXUINT64);
+static const gnm_float bit_max = MIN (GNM_RADIX / GNM_EPSILON, (gnm_float)G_MAXUINT64);
 
 /* ------------------------------------------------------------------------- */
 
@@ -48,18 +48,55 @@ value_new_guint64 (guint64 n)
 	return value_new_float (n);
 }
 
-
+// Integer power function
 static guint64
-intpow (int p, int v)
+intpow (guint64 p, unsigned int v)
 {
-	guint64 temp;
+	guint64 res = 1;
+	while (v > 0) {
+		if (v & 1) res *= p;
+		v >>= 1;
+		if (v > 0) p *= p;
+	}
+	return res;
+}
 
-	if (v == 0) return 1;
-	if (v == 1) return p;
+// Modular addition (a + b) % m without overflow.
+static guint64
+add_mod (guint64 a, guint64 b, guint64 m)
+{
+	if (a < m - b)
+		return a + b;
+	else
+		return a - (m - b);
+}
 
-	temp = intpow (p, v / 2);
-	temp *= temp;
-	return (v % 2) ? temp * p : temp;
+// Modular multiplication (a * b) % m without overflow.
+static guint64
+mul_mod (guint64 a, guint64 b, guint64 m)
+{
+	guint64 res = 0;
+	a %= m;
+	while (b > 0) {
+		if (b & 1) res = add_mod (res, a, m);
+		a = add_mod (a, a, m);
+		b >>= 1;
+	}
+	return res;
+}
+
+// Modular exponentiation (a ^ b) % m without overflow.
+static guint64
+pow_mod (guint64 a, guint64 b, guint64 m)
+{
+	guint64 res = 1;
+	a %= m;
+	while (b > 0) {
+		if (b & 1) res = mul_mod (res, a, m);
+		a = mul_mod (a, a, m);
+		b >>= 1;
+	}
+	return res;
 }
 
 #define ITHPRIME_LIMIT 100000000
@@ -70,7 +107,7 @@ static guint prime_table_size = 0;
 #define SIEVE_ITEM(u_) sieve[((u_) - base) >> 4]
 #define SIEVE_BIT(u_) (1u << ((((u_) - base) >> 1) & 7))
 
-/* Calculate the i-th prime.  Returns TRUE on too-big-to-handle error.  */
+// Calculate the i-th prime.  Returns TRUE on too-big-to-handle error.
 static gboolean
 ithprime (int i, guint64 *res)
 {
@@ -91,6 +128,7 @@ ithprime (int i, guint64 *res)
 		base = N ? prime_table[N - 1] + 1 : 0;
 		// Compute an upper bound of the largest prime we need.
 		// See https://en.wikipedia.org/wiki/Prime_number_theorem
+		// This bound is valid for n >= 6.
 		ub = (guint)
 			(newsize * (log (newsize) + log (log (newsize))));
 		// Largest candidate that needs sieving.  Note that this
@@ -153,6 +191,8 @@ ithprime (int i, guint64 *res)
 #undef SIEVE_BIT
 
 
+static int isprime (guint64 n);
+
 /*
  * A function useful for computing multiplicative arithmetic functions.
  * Returns TRUE on error.
@@ -163,6 +203,14 @@ walk_factorization (guint64 n, void *data,
 {
 	int index = 1, v;
 	guint64 p = 2;
+
+	if (n <= 1)
+		return FALSE;
+
+	if (isprime (n)) {
+		walk_term (n, 1, data);
+		return FALSE;
+	}
 
 	while (n > 1 && p * p <= n) {
 		if (ithprime (index, &p))
@@ -177,6 +225,8 @@ walk_factorization (guint64 n, void *data,
 		if (v) {
 			/* We found a prime factor, p, with arity v.  */
 			walk_term (p, v, data);
+			if (isprime (n))
+				break;
 		}
 
 		index++;
@@ -230,22 +280,50 @@ compute_nt_pi (guint64 n)
 	return (p == n) ? lower + 1 : lower;
 }
 
+// Miller-Rabin primality test for base a.
+static gboolean
+miller_rabin_test (guint64 n, guint64 a)
+{
+	guint64 d = n - 1;
+	int s = 0;
+	guint64 x;
+
+	while (d % 2 == 0) {
+		d /= 2;
+		s++;
+	}
+
+	x = pow_mod (a, d, n);
+	if (x == 1 || x == n - 1)
+		return TRUE;
+
+	while (s > 1) {
+		x = mul_mod (x, x, n);
+		if (x == n - 1)
+			return TRUE;
+		s--;
+	}
+
+	return FALSE;
+}
+
 /*
  * Returns -1 (out of bounds), 0 (non-prime), or 1 (prime).
  */
 static int
 isprime (guint64 n)
 {
-	int i = 1;
-	guint64 p = 2;
+	// Deterministic up to 3,825,123,056,546,413,051
+	static const guint8 bases[] = { 2, 3, 5, 7, 11, 13, 17, 19, 23 };
+	unsigned int i;
 
-	if (n <= 1)
-		return 0;
+	if (n < 2) return 0;
+	if (n == 2 || n == 3) return 1;
+	if (n % 2 == 0 || n % 3 == 0) return 0;
 
-	for (i = 1; p * p <= n; i++) {
-		if (ithprime (i, &p))
-			return -1;
-		if (n % p == 0)
+	for (i = 0; i < G_N_ELEMENTS (bases); i++) {
+		if (n == bases[i]) return 1;
+		if (!miller_rabin_test (n, bases[i]))
 			return 0;
 	}
 
@@ -255,7 +333,7 @@ isprime (guint64 n)
 /* ------------------------------------------------------------------------- */
 
 static GnmFuncHelp const help_nt_omega[] = {
- 	{ GNM_FUNC_HELP_NAME, F_("NT_OMEGA:Number of distinct prime factors")},
+	{ GNM_FUNC_HELP_NAME, F_("NT_OMEGA:Number of distinct prime factors")},
 	{ GNM_FUNC_HELP_ARG, F_("n:positive integer")},
 	{ GNM_FUNC_HELP_NOTE, F_("Returns the number of distinct prime factors without multiplicity.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=NT_PHI(9)" },
@@ -288,7 +366,7 @@ gnumeric_nt_omega (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 /* ------------------------------------------------------------------------- */
 
 static GnmFuncHelp const help_phi[] = {
- 	{ GNM_FUNC_HELP_NAME, F_("NT_PHI:Euler's totient function")},
+	{ GNM_FUNC_HELP_NAME, F_("NT_PHI:Euler's totient function")},
 	{ GNM_FUNC_HELP_ARG, F_("n:positive integer")},
 	{ GNM_FUNC_HELP_NOTE, F_("Euler's totient function gives the number of integers less than or equal to @{n} that are relatively prime (coprime) to @{n}.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=NT_PHI(9)" },
@@ -355,7 +433,7 @@ gnumeric_radical (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 /* ------------------------------------------------------------------------- */
 
 static GnmFuncHelp const help_nt_mu[] = {
- 	{ GNM_FUNC_HELP_NAME, F_("NT_MU:Möbius mu function")},
+	{ GNM_FUNC_HELP_NAME, F_("NT_MU:Möbius mu function")},
 	{ GNM_FUNC_HELP_ARG, F_("n:positive integer")},
 	{ GNM_FUNC_HELP_DESCRIPTION,
 	  F_("NT_MU function (Möbius mu function) returns 0  if @{n} is "
@@ -441,7 +519,15 @@ static void
 walk_for_sigma (guint64 p, int v, void *data_)
 {
 	guint64 *data = data_;
-	*data *= ( v == 1 ? p + 1 : (intpow (p, v + 1) - 1) / (p - 1) );
+	guint64 s;
+	if (v == 1)
+		s = p + 1;
+	else {
+		// Compute the overflow-safe 1+...+p^(v-1) first
+		s = (intpow (p, v) - 1) / (p - 1);
+		s = s * p + 1;
+	}
+	*data *= s;
 }
 
 static GnmValue *
@@ -462,7 +548,7 @@ gnumeric_sigma (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 /* ------------------------------------------------------------------------- */
 
 static GnmFuncHelp const help_ithprime[] = {
- 	{ GNM_FUNC_HELP_NAME, F_("ITHPRIME:@{i}th prime")},
+	{ GNM_FUNC_HELP_NAME, F_("ITHPRIME:@{i}th prime")},
 	{ GNM_FUNC_HELP_ARG, F_("i:positive integer")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ITHPRIME finds the @{i}th prime.")},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ITHPRIME(7)" },
@@ -521,7 +607,7 @@ gnumeric_isprime (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 /*
  * Returns
  *    0 (n <= 1) or (out of bounds)
- *    smallest prime facter
+ *    smallest prime factor
  */
 static guint64
 prime_factor (guint64 n)
@@ -537,7 +623,6 @@ prime_factor (guint64 n)
 			return 0;
 		if (n % p == 0)
 			return p;
-
 	}
 
 	return n;
@@ -609,6 +694,7 @@ static GnmFuncHelp const help_bitor[] = {
 	{ GNM_FUNC_HELP_NAME, F_("BITOR:bitwise or")},
 	{ GNM_FUNC_HELP_ARG, F_("values:non-negative integers")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("BITOR returns the bitwise or of the binary representations of its arguments.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BITOR(9,5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BITXOR,BITAND"},
 	{ GNM_FUNC_HELP_END }
@@ -636,7 +722,7 @@ func_bitor (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	return float_range_function (argc, argv, ei,
 				     gnm_range_bitor,
-				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_COERCE_STRINGS |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -648,6 +734,7 @@ static GnmFuncHelp const help_bitxor[] = {
 	{ GNM_FUNC_HELP_NAME, F_("BITXOR:bitwise exclusive or")},
 	{ GNM_FUNC_HELP_ARG, F_("values:non-negative integers")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("BITXOR returns the bitwise exclusive or of the binary representations of its arguments.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BITXOR(9,5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BITOR,BITAND"},
 	{ GNM_FUNC_HELP_END }
@@ -678,7 +765,7 @@ func_bitxor (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	return float_range_function (argc, argv, ei,
 				     gnm_range_bitxor,
-				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_COERCE_STRINGS |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -690,6 +777,7 @@ static GnmFuncHelp const help_bitand[] = {
 	{ GNM_FUNC_HELP_NAME, F_("BITAND:bitwise and")},
 	{ GNM_FUNC_HELP_ARG, F_("values:non-negative integers")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("BITAND returns the bitwise and of the binary representations of its arguments.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BITAND(9,5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BITOR,BITXOR"},
 	{ GNM_FUNC_HELP_END }
@@ -720,7 +808,7 @@ func_bitand (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	return float_range_function (argc, argv, ei,
 				     gnm_range_bitand,
-				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_COERCE_STRINGS |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -733,6 +821,7 @@ static GnmFuncHelp const help_bitlshift[] = {
 	{ GNM_FUNC_HELP_ARG, F_("a:non-negative integer")},
 	{ GNM_FUNC_HELP_ARG, F_("n:integer")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("BITLSHIFT returns the binary representations of @{a} shifted @{n} positions to the left.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{n} is negative, BITLSHIFT shifts the bits to the right by ABS(@{n}) positions.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BITLSHIFT(9,5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BITRSHIFT"},
@@ -759,10 +848,11 @@ func_bitlshift (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /* ------------------------------------------------------------------------- */
 
 static GnmFuncHelp const help_bitrshift[] = {
- 	{ GNM_FUNC_HELP_NAME, F_("BITRSHIFT:bit-shift to the right")},
+	{ GNM_FUNC_HELP_NAME, F_("BITRSHIFT:bit-shift to the right")},
 	{ GNM_FUNC_HELP_ARG, F_("a:non-negative integer")},
 	{ GNM_FUNC_HELP_ARG, F_("n:integer")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("BITRSHIFT returns the binary representations of @{a} shifted @{n} positions to the right.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{n} is negative, BITRSHIFT shifts the bits to the left by ABS(@{n}) positions.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BITRSHIFT(137,5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BITLSHIFT"},
@@ -788,16 +878,97 @@ func_bitrshift (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 /* ------------------------------------------------------------------------- */
 
+static GnmFuncHelp const help_partitions[] = {
+	{ GNM_FUNC_HELP_NAME, F_("PARTITIONS:number of partitions")},
+	{ GNM_FUNC_HELP_ARG, F_("n:non-negative integer")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("PARTITIONS calculates the number of ways of writing the integer @{n} as a sum of positive integers.")},
+	{ GNM_FUNC_HELP_EXTREF, "wiki:en:Partition_(number_theory)"},
+	{ GNM_FUNC_HELP_EXAMPLES, "=PARTITIONS(5)" },
+	{ GNM_FUNC_HELP_SEEALSO, "NT_PHI,NT_SIGMA"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static gnm_float *partition_cache = NULL;
+static unsigned *sigma_cache = NULL;
+static int partition_cache_size = 0;
+static int partition_cache_edge = 0;
+
+static void
+partitions_helper (int n)
+{
+	guint64 sigma = 1;
+	if (walk_factorization (n, &sigma, walk_for_sigma) ||
+	    sigma > G_MAXUINT)
+		g_assert_not_reached();
+	sigma_cache[n] = sigma;
+
+	// This is a formula that only deals with positive numbers.
+	// Unlike Euler's recursion it avoids cancellation
+	// We overflow a bit early due to the late division, but
+	// I can't be bothered.
+	gnm_float sum = 0;
+	for (int k = 1; k <= n; k++)
+		sum += sigma_cache[k] * partition_cache[n - k];
+	partition_cache[n] = sum / n;
+}
+
+static gnm_float
+partitions (int n)
+{
+	if (n < 0) return 0;
+
+	if (n >= partition_cache_size) {
+		partition_cache_size = MAX (n + 1, partition_cache_size * 2);
+		partition_cache = g_renew (gnm_float, partition_cache, partition_cache_size);
+		sigma_cache = g_renew (unsigned, sigma_cache, partition_cache_size);
+		if (partition_cache_edge == 0) {
+			partition_cache[0] = 1;
+			partition_cache_edge++;
+		}
+	}
+
+	while (n >= partition_cache_edge) {
+		partitions_helper (partition_cache_edge);
+		partition_cache_edge++;
+	}
+
+	return partition_cache[n];
+}
+
+static GnmValue *
+gnumeric_partitions (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	gnm_float fn = value_get_as_float (argv[0]);
+
+	if (fn < 0)
+		return value_new_error_NUM (ei->pos);
+	if (fn > 100000)
+		return value_new_error_VALUE (ei->pos);  // Presumed overflow
+
+	int n = (int)fn;
+	return value_new_float (partitions (n));
+}
+
+/* ------------------------------------------------------------------------- */
+
 G_MODULE_EXPORT void
 go_plugin_shutdown (GOPlugin *plugin, GOCmdContext *cc)
 {
 	g_free (prime_table);
 	prime_table = NULL;
+
+	g_free (partition_cache);
+	partition_cache = NULL;
+	g_free (sigma_cache);
+	sigma_cache = NULL;
 }
 
 const GnmFuncDescriptor num_theory_functions[] = {
 	{"ithprime", "f", help_ithprime,
 	 &gnumeric_ithprime, NULL,
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
+	{"partitions", "f", help_partitions,
+	 &gnumeric_partitions, NULL,
 	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
 	{"pfactor", "f", help_pfactor,
 	 &gnumeric_pfactor, NULL,
@@ -833,18 +1004,18 @@ const GnmFuncDescriptor num_theory_functions[] = {
 const GnmFuncDescriptor bitwise_functions[] = {
 	{"bitor", NULL, help_bitor,
 	 NULL, &func_bitor,
-	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
 	{"bitxor", NULL, help_bitxor,
 	 NULL, &func_bitxor,
-	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
 	{"bitand", NULL, help_bitand,
 	 NULL,  &func_bitand,
-	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
 	{"bitlshift", "ff", help_bitlshift,
 	 &func_bitlshift, NULL,
-	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
 	{"bitrshift", "ff", help_bitrshift,
 	 &func_bitrshift, NULL,
-	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
+	 GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
 	{NULL}
 };

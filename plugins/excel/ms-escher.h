@@ -1,5 +1,5 @@
-#ifndef GNM_MS_OFFICE_ESCHER_H
-#define GNM_MS_OFFICE_ESCHER_H
+#ifndef GNM_MS_OFFICE_ESCHER_H_
+#define GNM_MS_OFFICE_ESCHER_H_
 
 /**
  * ms-escher.h: MS Office drawing layer support
@@ -63,7 +63,7 @@ GOLineDashType ms_escher_xl_to_line_type (guint16 pattern);
 int ms_escher_line_type_to_xl (GOLineDashType ld);
 
 
-struct _MSEscherBlip {
+struct MSEscherBlip_ {
 	char const   *type;
 	guint8       *data;
 	guint32	      data_len;
@@ -102,4 +102,4 @@ void ms_escher_clientdata (GString *buf);
 
 /******************************************************/
 
-#endif /* GNM_MS_OFFICE_ESCHER_H */
+#endif /* GNM_MS_OFFICE_ESCHER_H_ */

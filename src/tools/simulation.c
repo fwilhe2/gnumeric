@@ -1,4 +1,3 @@
-
 /*
  * simulation.c: Monte Carlo Simulation tool.
  *
@@ -29,7 +28,7 @@
 #include <value.h>
 #include <workbook-view.h>
 #include <workbook-control.h>
-#include <sheet.h>
+#include <tools/dao.h>
 
 #include <mathfunc.h>
 #include <rangefunc.h>
@@ -84,7 +83,7 @@ eval_inputs_list (simulation_t *sim, gnm_float **outputs, int iter,
 	for (cur = sim->list_inputs; cur != NULL; cur = cur->next) {
 		GnmCell *cell = cur->data;
 
-		cell_queue_recalc (cell);
+		gnm_cell_queue_recalc (cell);
 		gnm_cell_eval (cell);
 
 		if (cell->value == NULL || ! VALUE_IS_NUMBER (cell->value)) {
@@ -231,8 +230,8 @@ create_reports (WorkbookControl *wbc, simulation_t *sim, simstats_t **stats,
 	n_rounds = 1 + sim->last_round - sim->first_round;
 
 	dao_prepare_output (wbc, dao, _("Simulation Report"));
-	if (dao->type == NewSheetOutput || dao->type == NewWorkbookOutput)
-		g_object_set (dao->sheet, "display-grid", FALSE, NULL);
+	if (dao->type == GNM_DAO_OUTPUT_NEWSHEET || dao->type == GNM_DAO_OUTPUT_NEWWORKBOOK)
+		g_object_set (dao->dst_sheet, "display-grid", FALSE, NULL);
 
 	/*
 	 * Set this to fool the autofit_column function.  (It will be
@@ -452,4 +451,10 @@ simulation_tool_destroy (simulation_t *sim)
 		g_free (sim->cellnames[i]);
 
 	g_free (sim->cellnames);
+
+	g_slist_free (sim->list_inputs);
+	g_slist_free (sim->list_outputs);
+
+	g_free (sim->ref_outputs);
+	g_free (sim->ref_inputs);
 }

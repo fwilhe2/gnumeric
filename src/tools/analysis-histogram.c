@@ -1,4 +1,3 @@
-/* vm: set sw=8: -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
 /*
  * analysis-histogram.c:
  *
@@ -39,7 +38,7 @@
 #include <sheet.h>
 
 static GnmExpr const *
-make_hist_expr (analysis_tools_data_histogram_t *info,
+make_hist_expr (GnmHistogramTool *htool,
 		int col, GnmValue *val,
 		gboolean fromminf, gboolean topinf,
 		data_analysis_output_t *dao)
@@ -50,12 +49,12 @@ make_hist_expr (analysis_tools_data_histogram_t *info,
 	GnmExprOp from, to;
 	GnmFunc *fd_if = gnm_func_lookup_or_add_placeholder ("IF");
 	GnmFunc *fd_sum = gnm_func_lookup_or_add_placeholder ("SUM");
-	GnmFunc *fd_count = info->percentage ?
-		gnm_func_lookup_or_add_placeholder (info->only_numbers ? "COUNT" : "COUNTA") : NULL;
-	GnmFunc *fd_isnumber = gnm_func_lookup_or_add_placeholder (info->only_numbers ? "ISNUMBER" : "ISBLANK");
-	gint to_col = (info->cumulative) ? 0 : 1;
+	GnmFunc *fd_count = htool->percentage ?
+		gnm_func_lookup_or_add_placeholder (htool->only_numbers ? "COUNT" : "COUNTA") : NULL;
+	GnmFunc *fd_isnumber = gnm_func_lookup_or_add_placeholder (htool->only_numbers ? "ISNUMBER" : "ISBLANK");
+	gint to_col = (htool->cumulative) ? 0 : 1;
 
-	if (info->bin_type & bintype_no_inf_upper) {
+	if (htool->bin_type & bintype_no_inf_upper) {
 		from = GNM_EXPR_OP_LT;
 		to = GNM_EXPR_OP_GTE;
 	} else {
@@ -75,7 +74,7 @@ make_hist_expr (analysis_tools_data_histogram_t *info,
 			 gnm_expr_new_constant (value_new_int (0)),
 			 gnm_expr_new_constant (value_new_int (1)));
 
-	if (info->cumulative)
+	if (htool->cumulative)
 		expr = expr_if_to;
 	else {
 		GnmExpr const *one = gnm_expr_new_constant (value_new_int (1));
@@ -94,7 +93,7 @@ make_hist_expr (analysis_tools_data_histogram_t *info,
 					      expr_if_to);
 	}
 
-	if (info->only_numbers)
+	if (htool->only_numbers)
 		expr = gnm_expr_new_binary (expr,
 					    GNM_EXPR_OP_MULT,
 					    gnm_expr_new_funcall3
@@ -114,7 +113,7 @@ make_hist_expr (analysis_tools_data_histogram_t *info,
 
 	expr = gnm_expr_new_funcall1 (fd_sum, expr);
 
-	if (info->percentage)
+	if (htool->percentage)
 		expr = gnm_expr_new_binary (expr,
 					    GNM_EXPR_OP_DIV,
 					    gnm_expr_new_funcall1
@@ -126,28 +125,232 @@ make_hist_expr (analysis_tools_data_histogram_t *info,
 	return expr;
 }
 
-static gboolean
-analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
-				    analysis_tools_data_histogram_t *info)
+
+GType
+gnm_hist_tool_chart_get_type (void)
 {
+	static GType etype = 0;
+	if (etype == 0) {
+		static GEnumValue const values[] = {
+			{ GNM_HIST_TOOL_NO_CHART,
+			  "GNM_HIST_TOOL_NO_CHART",
+			  "none"
+			},
+			{ GNM_HIST_TOOL_HISTOGRAM_CHART,
+			  "GNM_HIST_TOOL_HISTOGRAM_CHART",
+			  "histogram"
+			},
+			{ GNM_HIST_TOOL_BAR_CHART,
+			  "GNM_HIST_TOOL_BAR_CHART",
+			  "bar"
+			},
+			{ GNM_HIST_TOOL_COLUMN_CHART,
+			  "GNM_HIST_TOOL_COLUMN_CHART",
+			  "column"
+			},
+			{ 0, NULL, NULL }
+		};
+		etype = g_enum_register_static ("gnm_hist_tool_chart_t", values);
+	}
+	return etype;
+}
+
+G_DEFINE_TYPE (GnmHistogramTool, gnm_histogram_tool, GNM_TYPE_GENERIC_ANALYSIS_TOOL)
+
+enum {
+	HISTOGRAM_PROP_0,
+	HISTOGRAM_PROP_PREDETERMINED,
+	HISTOGRAM_PROP_BIN_TYPE,
+	HISTOGRAM_PROP_MAX_GIVEN,
+	HISTOGRAM_PROP_MIN_GIVEN,
+	HISTOGRAM_PROP_MAX,
+	HISTOGRAM_PROP_MIN,
+	HISTOGRAM_PROP_N,
+	HISTOGRAM_PROP_PERCENTAGE,
+	HISTOGRAM_PROP_CUMULATIVE,
+	HISTOGRAM_PROP_ONLY_NUMBERS,
+	HISTOGRAM_PROP_CHART
+};
+
+static void
+gnm_histogram_tool_set_property (GObject *object, guint property_id,
+				 GValue const *value, GParamSpec *pspec)
+{
+	GnmHistogramTool *tool = GNM_HISTOGRAM_TOOL (object);
+
+	switch (property_id) {
+	case HISTOGRAM_PROP_PREDETERMINED:
+		tool->predetermined = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_BIN_TYPE:
+		tool->bin_type = g_value_get_int (value);
+		break;
+	case HISTOGRAM_PROP_MAX_GIVEN:
+		tool->max_given = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_MIN_GIVEN:
+		tool->min_given = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_MAX:
+		tool->max = g_value_get_double (value);
+		break;
+	case HISTOGRAM_PROP_MIN:
+		tool->min = g_value_get_double (value);
+		break;
+	case HISTOGRAM_PROP_N:
+		tool->n = g_value_get_int (value);
+		break;
+	case HISTOGRAM_PROP_PERCENTAGE:
+		tool->percentage = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_CUMULATIVE:
+		tool->cumulative = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_ONLY_NUMBERS:
+		tool->only_numbers = g_value_get_boolean (value);
+		break;
+	case HISTOGRAM_PROP_CHART:
+		tool->chart = g_value_get_enum (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_histogram_tool_get_property (GObject *object, guint property_id,
+				 GValue *value, GParamSpec *pspec)
+{
+	GnmHistogramTool *tool = GNM_HISTOGRAM_TOOL (object);
+
+	switch (property_id) {
+	case HISTOGRAM_PROP_PREDETERMINED:
+		g_value_set_boolean (value, tool->predetermined);
+		break;
+	case HISTOGRAM_PROP_BIN_TYPE:
+		g_value_set_int (value, tool->bin_type);
+		break;
+	case HISTOGRAM_PROP_MAX_GIVEN:
+		g_value_set_boolean (value, tool->max_given);
+		break;
+	case HISTOGRAM_PROP_MIN_GIVEN:
+		g_value_set_boolean (value, tool->min_given);
+		break;
+	case HISTOGRAM_PROP_MAX:
+		g_value_set_double (value, tool->max);
+		break;
+	case HISTOGRAM_PROP_MIN:
+		g_value_set_double (value, tool->min);
+		break;
+	case HISTOGRAM_PROP_N:
+		g_value_set_int (value, tool->n);
+		break;
+	case HISTOGRAM_PROP_PERCENTAGE:
+		g_value_set_boolean (value, tool->percentage);
+		break;
+	case HISTOGRAM_PROP_CUMULATIVE:
+		g_value_set_boolean (value, tool->cumulative);
+		break;
+	case HISTOGRAM_PROP_ONLY_NUMBERS:
+		g_value_set_boolean (value, tool->only_numbers);
+		break;
+	case HISTOGRAM_PROP_CHART:
+		g_value_set_enum (value, tool->chart);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_histogram_tool_init (GnmHistogramTool *tool)
+{
+	tool->predetermined = FALSE;
+	tool->bin_type = 0;
+	tool->max_given = FALSE;
+	tool->min_given = FALSE;
+	tool->max = 0.0;
+	tool->min = 0.0;
+	tool->n = 1;
+	tool->percentage = FALSE;
+	tool->cumulative = FALSE;
+	tool->only_numbers = FALSE;
+	tool->chart = GNM_HIST_TOOL_NO_CHART;
+	tool->bin = NULL;
+}
+
+static void
+gnm_histogram_tool_finalize (GObject *obj)
+{
+	GnmHistogramTool *tool = GNM_HISTOGRAM_TOOL (obj);
+	value_release (tool->bin);
+	G_OBJECT_CLASS (gnm_histogram_tool_parent_class)->finalize (obj);
+}
+
+static gboolean
+gnm_histogram_tool_update_dao (GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	GnmHistogramTool *htool = GNM_HISTOGRAM_TOOL (tool);
+	GnmGenericAnalysisTool *gtool = &htool->parent;
+	int i, j;
+
+	analysis_tool_prepare_input_range (gtool);
+	if (!analysis_tool_check_input_homogeneity (gtool)) {
+		gtool->base.err = gtool->base.group_by + 1;
+		return TRUE;
+	}
+
+	i = g_slist_length (gtool->base.input);
+	if (htool->predetermined) {
+		j = (htool->bin->v_range.cell.b.col - htool->bin->v_range.cell.a.col + 1) *
+			(htool->bin->v_range.cell.b.row - htool->bin->v_range.cell.a.row + 1);
+	} else
+		j = htool->n;
+
+	if (htool->bin_type & bintype_p_inf_lower) j++;
+	if (htool->bin_type & bintype_m_inf_lower) j++;
+
+	dao_adjust (dao, 1 + i, 1 + j);
+	return FALSE;
+}
+
+static char *
+gnm_histogram_tool_update_descriptor (G_GNUC_UNUSED GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	return dao_command_descriptor (dao, _("Histogram (%s)"));
+}
+
+static gboolean
+gnm_histogram_tool_prepare_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	dao_prepare_output (wbc, dao, _("Histogram"));
+	return FALSE;
+}
+
+static gboolean
+gnm_histogram_tool_format_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	return dao_format_output (wbc, dao, _("Histogram"));
+}
+
+static gboolean
+gnm_histogram_tool_perform_calc (GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	GnmHistogramTool *htool = GNM_HISTOGRAM_TOOL (tool);
+	GnmGenericAnalysisTool *gtool = &htool->parent;
 	GnmRange range;
 	gint i, i_limit, i_start, i_end, col;
 	GSList *l;
-	gint to_col = (info->cumulative) ? 0 : 1;
-
+	gint to_col = (htool->cumulative) ? 0 : 1;
 	GnmExpr const *expr_bin = NULL;
-
-	GnmFunc *fd_small;
 	GnmFunc *fd_index = NULL;
-
 	char const *format;
+	GnmFunc *fd_small = gnm_func_get_and_use ("SMALL");
 
-	fd_small = gnm_func_lookup_or_add_placeholder ("SMALL");
-	gnm_func_inc_usage (fd_small);
-
-	if (info->base.labels) {
-		fd_index = gnm_func_lookup_or_add_placeholder ("INDEX");
-		gnm_func_inc_usage (fd_index);
+	if (gtool->base.labels) {
+		fd_index = gnm_func_get_and_use ("INDEX");
 	}
 
 
@@ -158,34 +361,34 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 
 	/* Setting up the bins */
 
-	if (info->predetermined) {
-		range_init_value (&range, info->bin);
+	if (htool->predetermined) {
+		range_init_value (&range, htool->bin);
 		i_limit = range_height (&range) * range_width (&range);
 	} else {
-		i_limit = info->n;
+		i_limit = htool->n;
 	}
 
 	i_end = i_limit;
-	if (info->bin_type & bintype_p_inf_lower)
+	if (htool->bin_type & bintype_p_inf_lower)
 		i_end++;
-	if (info->bin_type & bintype_m_inf_lower)
+	if (htool->bin_type & bintype_m_inf_lower)
 		i_end++;
 	dao_set_format  (dao, to_col, 1, to_col, 1, "\"\";\"\"");
-	format = (info->bin_type & bintype_no_inf_upper) ?
+	format = (htool->bin_type & bintype_no_inf_upper) ?
 		/* translator note: only translate the */
 		/* "to below" and "up to" exclusive of */
 		/* the quotation marks: */
 		_("\"to below\" * General") : _("\"up to\" * General");
 	dao_set_format  (dao, to_col, 2, to_col, i_end, format);
 
-	if (info->bin_type & bintype_m_inf_lower) {
+	if (htool->bin_type & bintype_m_inf_lower) {
 		dao_set_cell_value (dao, to_col, 1, value_new_float (-GNM_MAX));
 		i_start = 2;
 	} else
 		i_start = 1;
 
-	if (info->predetermined) {
-		expr_bin = gnm_expr_new_constant (info->bin);
+	if (htool->predetermined) {
+		expr_bin = gnm_expr_new_constant (htool->bin);
 		for (i = 0; i < i_limit; i++)
 			dao_set_cell_expr (dao, to_col, i_start + i,
 					   gnm_expr_new_funcall2 (fd_small,
@@ -193,13 +396,13 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 								  gnm_expr_new_constant
 								  (value_new_int (i + 1))));
 	} else {
-		GnmValue *val = value_dup (info->base.input->data);
+		GnmValue *val = value_dup (gtool->base.input->data);
 		GnmExpr const *expr_min;
 		GnmExpr const *expr_max;
 
-		if (info->base.labels)
-			switch (info->base.group_by) {
-			case GROUPED_BY_ROW:
+		if (gtool->base.labels)
+			switch (gtool->base.group_by) {
+			case GNM_TOOL_GROUPED_BY_ROW:
 				val->v_range.cell.a.col++;
 				break;
 			default:
@@ -207,13 +410,10 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 				break;
 			}
 
-		if (info->min_given)
-			dao_set_cell_float (dao, to_col, i_start, info->min);
+		if (htool->min_given)
+			dao_set_cell_float (dao, to_col, i_start, htool->min);
 		else {
-			GnmFunc *fd_min;
-
-			fd_min = gnm_func_lookup_or_add_placeholder ("MIN");
-			gnm_func_inc_usage (fd_min);
+			GnmFunc *fd_min = gnm_func_get_and_use ("MIN");
 			dao_set_cell_expr (dao, to_col, i_start,
 					   gnm_expr_new_funcall1
 					   (fd_min,
@@ -221,13 +421,10 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 			gnm_func_dec_usage (fd_min);
 		}
 
-		if (info->max_given)
-			dao_set_cell_float (dao, to_col, i_start + i_limit - 1, info->max);
+		if (htool->max_given)
+			dao_set_cell_float (dao, to_col, i_start + i_limit - 1, htool->max);
 		else {
-			GnmFunc *fd_max;
-
-			fd_max = gnm_func_lookup_or_add_placeholder ("MAX");
-			gnm_func_inc_usage (fd_max);
+			GnmFunc *fd_max = gnm_func_get_and_use ("MAX");
 			dao_set_cell_expr (dao, to_col, i_start + i_limit - 1,
 					   gnm_expr_new_funcall1
 					   (fd_max,
@@ -253,13 +450,13 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 								   GNM_EXPR_OP_SUB,
 								   gnm_expr_copy (expr_min)),
 								  GNM_EXPR_OP_DIV,
-								  gnm_expr_new_constant (value_new_int (info->n - 1))))));
+								  gnm_expr_new_constant (value_new_int (htool->n - 1))))));
 
 		gnm_expr_free (expr_min);
 		gnm_expr_free (expr_max);
 	}
 
-	if (info->bin_type & bintype_p_inf_lower) {
+	if (htool->bin_type & bintype_p_inf_lower) {
 		dao_set_format  (dao, to_col, i_end, to_col, i_end,
 		/* translator note: only translate the */
 		/* "to" and "\xe2\x88\x9e" exclusive of */
@@ -270,16 +467,16 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 
 	/* format the lower end of the bins */
 
-	if (!info->cumulative) {
+	if (!htool->cumulative) {
 		GnmExpr const *expr_cr = make_cellref (1,-1);
 
-		format = (info->bin_type & bintype_no_inf_upper) ?
+		format = (htool->bin_type & bintype_no_inf_upper) ?
 		/* translator note: only translate the */
 		/* "from" and "above" exclusive of */
 		/* the quotation marks: */
 			_("\"from\" * General") : _("\"above\" * General");
 		dao_set_format  (dao, 0, 2, 0, i_end, format);
-		if (info->bin_type & bintype_m_inf_lower)
+		if (htool->bin_type & bintype_m_inf_lower)
 			dao_set_format  (dao, 0, 2, 0, 2,
 		/* translator note: only translate the */
 		/* "from" and "\xe2\x88\x92\xe2\x88\x9e" exclusive of */
@@ -294,15 +491,15 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 
 	/* insert formulas for histogram values */
 
-	for (l = info->base.input, col = to_col + 1; l; col++, l = l->next) {
+	for (l = gtool->base.input, col = to_col + 1; l; col++, l = l->next) {
 		GnmValue *val = l->data;
 		GnmValue *val_c = NULL;
 
 		dao_set_italic (dao, col, 1, col, 1);
-		if (info->base.labels) {
+		if (gtool->base.labels) {
 			val_c = value_dup (val);
-			switch (info->base.group_by) {
-			case GROUPED_BY_ROW:
+			switch (gtool->base.group_by) {
+			case GNM_TOOL_GROUPED_BY_ROW:
 				val->v_range.cell.a.col++;
 				break;
 			default:
@@ -315,11 +512,11 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 		} else {
 			char const *format;
 
-			switch (info->base.group_by) {
-			case GROUPED_BY_ROW:
+			switch (gtool->base.group_by) {
+			case GNM_TOOL_GROUPED_BY_ROW:
 				format = _("Row %d");
 				break;
-			case GROUPED_BY_COL:
+			case GNM_TOOL_GROUPED_BY_COL:
 				format = _("Column %d");
 				break;
 			default:
@@ -329,17 +526,17 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 			dao_set_cell_printf (dao, col, 1, format, col - to_col);
 		}
 
-		if (info->percentage)
+		if (htool->percentage)
 			dao_set_format (dao, col, 2, col, i_end, "0.0%");
 
 		for (i = 2; i <= i_end; i++) {
 			gboolean fromminf = (i == 2) &&
-				(info->bin_type & bintype_m_inf_lower);
+				(htool->bin_type & bintype_m_inf_lower);
 			gboolean topinf = (i == i_end) &&
-				(info->bin_type & bintype_p_inf_lower);
+				(htool->bin_type & bintype_p_inf_lower);
 			dao_set_cell_array_expr
 				(dao, col, i,
-				 make_hist_expr (info, col, val,
+				 make_hist_expr (htool, col, val,
 						 fromminf, topinf, dao));
 		}
 	}
@@ -353,7 +550,7 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 		gnm_func_dec_usage (fd_index);
 
 	/* Create Chart if requested */
-	if (info->chart != NO_CHART) {
+	if (htool->chart != GNM_HIST_TOOL_NO_CHART) {
 		SheetObject *so;
 		GogGraph     *graph;
 		GogChart     *chart;
@@ -368,7 +565,7 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 		chart = GOG_CHART (gog_object_add_by_name (
 						   GOG_OBJECT (graph), "Chart", NULL));
 
-		if (info->chart == HISTOGRAM_CHART) {
+		if (htool->chart == GNM_HIST_TOOL_HISTOGRAM_CHART) {
 			plot = gog_plot_new_by_name ("GogHistogramPlot");
 			limits_start =  i_start;
 			limits_end =  i_start + i_limit - 1;
@@ -380,7 +577,7 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 			limits_end =  i_end;
 			values_start = 2;
 			values_end = i_end;
-			if (info->chart == BAR_CHART)
+			if (htool->chart == GNM_HIST_TOOL_BAR_CHART)
 				go_object_toggle (plot, "horizontal");
 		}
 
@@ -401,7 +598,7 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 		}
 		g_object_unref (limits);
 
-		if (info->chart == HISTOGRAM_CHART) {
+		if (htool->chart == GNM_HIST_TOOL_HISTOGRAM_CHART) {
 			GogObject *axis;
 			GogObject *label;
 			GnmExprTop const *label_string;
@@ -412,10 +609,10 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 						NULL, NULL);
 			axis = gog_object_get_child_by_name (GOG_OBJECT (chart), "Y-Axis");
 			label_string = gnm_expr_top_new_constant (value_new_string (_("Frequency Density")));
-			data = gnm_go_data_scalar_new_expr (dao->sheet, label_string);
+			data = gnm_go_data_scalar_new_expr (dao->dst_sheet, label_string);
 			label = gog_object_add_by_name (axis, "Label", NULL);
 			gog_dataset_set_dim (GOG_DATASET (label), 0, data, NULL);
-		} else if (info->chart == COLUMN_CHART) {
+		} else if (htool->chart == GNM_HIST_TOOL_COLUMN_CHART) {
 			GogObject *axis;
 			GogObject *label;
 			GnmExprTop const *label_string;
@@ -426,10 +623,10 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 						NULL, NULL);
 			axis = gog_object_get_child_by_name (GOG_OBJECT (chart), "Y-Axis");
 			label_string = gnm_expr_top_new_constant (value_new_string (_("Frequency")));
-			data = gnm_go_data_scalar_new_expr (dao->sheet, label_string);
+			data = gnm_go_data_scalar_new_expr (dao->dst_sheet, label_string);
 			label = gog_object_add_by_name (axis, "Label", NULL);
 			gog_dataset_set_dim (GOG_DATASET (label), 0, data, NULL);
-		} else if (info->chart == BAR_CHART) {
+		} else if (htool->chart == GNM_HIST_TOOL_BAR_CHART) {
 			GogObject *axis;
 			GogObject *label;
 			GnmExprTop const *label_string;
@@ -440,7 +637,7 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 						NULL, NULL);
 			axis = gog_object_get_child_by_name (GOG_OBJECT (chart), "X-Axis");
 			label_string = gnm_expr_top_new_constant (value_new_string (_("Frequency")));
-			data = gnm_go_data_scalar_new_expr (dao->sheet, label_string);
+			data = gnm_go_data_scalar_new_expr (dao->dst_sheet, label_string);
 			label = gog_object_add_by_name (axis, "Label", NULL);
 			gog_dataset_set_dim (GOG_DATASET (label), 0, data, NULL);
 		}
@@ -456,61 +653,71 @@ analysis_tool_histogram_engine_run (data_analysis_output_t *dao,
 	return FALSE;
 }
 
-
-static gint
-calc_length (GnmValue   *bin)
+static void
+gnm_histogram_tool_class_init (GnmHistogramToolClass *klass)
 {
-	g_return_val_if_fail (bin != NULL, 0);
-	g_return_val_if_fail (VALUE_IS_CELLRANGE (bin), 0);
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	GnmAnalysisToolClass *at_class = GNM_ANALYSIS_TOOL_CLASS (klass);
 
-	return ((bin->v_range.cell.b.col - bin->v_range.cell.a.col + 1) *
-		(bin->v_range.cell.b.row - bin->v_range.cell.a.row + 1));
+	gobject_class->set_property = gnm_histogram_tool_set_property;
+	gobject_class->get_property = gnm_histogram_tool_get_property;
+
+	gobject_class->finalize = gnm_histogram_tool_finalize;
+	at_class->update_dao = gnm_histogram_tool_update_dao;
+	at_class->update_descriptor = gnm_histogram_tool_update_descriptor;
+	at_class->prepare_output_range = gnm_histogram_tool_prepare_output_range;
+	at_class->format_output_range = gnm_histogram_tool_format_output_range;
+	at_class->perform_calc = gnm_histogram_tool_perform_calc;
+
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_PREDETERMINED,
+		g_param_spec_boolean ("predetermined", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_BIN_TYPE,
+		g_param_spec_int ("bin-type", NULL, NULL,
+			0, 100, 0, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_MAX_GIVEN,
+		g_param_spec_boolean ("max-given", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_MIN_GIVEN,
+		g_param_spec_boolean ("min-given", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_MAX,
+		g_param_spec_double ("max", NULL, NULL,
+			-GNM_MAX, GNM_MAX, 0.0, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_MIN,
+		g_param_spec_double ("min", NULL, NULL,
+			-GNM_MAX, GNM_MAX, 0.0, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_N,
+		g_param_spec_int ("n", NULL, NULL,
+			1, G_MAXINT, 1, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_PERCENTAGE,
+		g_param_spec_boolean ("percentage", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_CUMULATIVE,
+		g_param_spec_boolean ("cumulative", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_ONLY_NUMBERS,
+		g_param_spec_boolean ("only-numbers", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		HISTOGRAM_PROP_CHART,
+		g_param_spec_enum ("chart", NULL, NULL,
+			GNM_HIST_TOOL_CHART_TYPE, GNM_HIST_TOOL_NO_CHART,
+			G_PARAM_READWRITE));
 }
 
-gboolean
-analysis_tool_histogram_engine (G_GNUC_UNUSED GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-			      analysis_tool_engine_t selector, gpointer result)
+GnmAnalysisTool *
+gnm_histogram_tool_new (void)
 {
-	analysis_tools_data_histogram_t *info = specs;
-
-	switch (selector) {
-	case TOOL_ENGINE_UPDATE_DESCRIPTOR:
-		return (dao_command_descriptor (dao, _("Histogram (%s)"), result)
-			== NULL);
-	case TOOL_ENGINE_UPDATE_DAO:
-	{
-		int i, j;
-
-		prepare_input_range (&info->base.input, info->base.group_by);
-
-		i = 1 + ((info->predetermined) ? calc_length (info->bin) : info->n);
-		if (info->bin_type & bintype_p_inf_lower)
-			i++;
-		if (info->bin_type & bintype_m_inf_lower)
-			i++;
-
-		j = g_slist_length (info->base.input) + ((info->cumulative) ? 1 : 2);
-
-		dao_adjust (dao, j, i);
-
-		return FALSE;
-	}
-	case TOOL_ENGINE_CLEAN_UP:
-		return analysis_tool_generic_clean (specs);
-	case TOOL_ENGINE_LAST_VALIDITY_CHECK:
-		return FALSE;
-	case TOOL_ENGINE_PREPARE_OUTPUT_RANGE:
-		dao_prepare_output (NULL, dao, _("Histogram"));
-		return FALSE;
-	case TOOL_ENGINE_FORMAT_OUTPUT_RANGE:
-		return dao_format_output (dao, _("Histogram"));
-	case TOOL_ENGINE_PERFORM_CALC:
-	default:
-		return analysis_tool_histogram_engine_run (dao, specs);
-	}
-	return TRUE;
+	return g_object_new (GNM_TYPE_HISTOGRAM_TOOL, NULL);
 }
-
-
-
-

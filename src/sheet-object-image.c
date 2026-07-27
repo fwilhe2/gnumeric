@@ -1,4 +1,3 @@
-
 /*
  * sheet-object-image.c: a wrapper for gdkpixbuf to display images.
  *
@@ -54,10 +53,10 @@ so_image_view_set_bounds (SheetObjectView *sov, double const *coords, gboolean v
 		double old_x1, old_y1, old_x2, old_y2, old_width, old_height;
 		GdkPixbuf *placeholder = g_object_get_data (G_OBJECT (item), "tile");
 
-		x = MIN (coords [0], coords [2]) / scale;
-		y = MIN (coords [1], coords [3]) / scale;
-		width  = fabs (coords [2] - coords [0]) / scale;
-		height = fabs (coords [3] - coords [1]) / scale;
+		x = MIN (coords[0], coords[2]) / scale;
+		y = MIN (coords[1], coords[3]) / scale;
+		width  = fabs (coords[2] - coords[0]) / scale;
+		height = fabs (coords[3] - coords[1]) / scale;
 
 		goc_item_get_bounds (item, &old_x1, &old_y1, &old_x2, &old_y2);
 		goc_item_set (item,
@@ -93,7 +92,7 @@ static GSF_CLASS (SOImageGocView, so_image_goc_view,
 	GNM_SO_VIEW_TYPE)
 
 /****************************************************************************/
-struct _SheetObjectImage {
+struct SheetObjectImage_ {
 	SheetObject  sheet_object;
 
 	GOImage      *image;
@@ -122,12 +121,11 @@ enum {
 /**
  * sheet_object_image_set_image:
  * @soi: #SheetObjectImage
- * @type:
- * @data:
- * @data_len
+ * @type: (nullable): image type
+ * @data: (in) (array length=data_len) (element-type guint8): image data
+ * @data_len: image data length
  *
  * Assign raw data and type to @soi.
- * yet.
  **/
 void
 sheet_object_image_set_image (SheetObjectImage *soi,
@@ -154,6 +152,16 @@ sheet_object_image_set_image (SheetObjectImage *soi,
 	}
 }
 
+/**
+ * sheet_object_image_set_crop:
+ * @soi: #SheetObjectImage
+ * @crop_left: crop left
+ * @crop_top: crop top
+ * @crop_right: crop right
+ * @crop_bottom: crop bottom
+ *
+ * Set the cropping parameters for @soi.
+ **/
 void
 sheet_object_image_set_crop (SheetObjectImage *soi,
 			     double crop_left,  double crop_top,
@@ -181,6 +189,13 @@ gnm_soi_finalize (GObject *object)
 	G_OBJECT_CLASS (gnm_soi_parent_class)->finalize (object);
 }
 
+/**
+ * gnm_soi_new_view:
+ * @so: #SheetObject
+ * @container: #SheetObjectViewContainer
+ *
+ * Returns: (transfer none): the newly created view.
+ **/
 static SheetObjectView *
 gnm_soi_new_view (SheetObject *so, SheetObjectViewContainer *container)
 {
@@ -218,6 +233,12 @@ gnm_soi_new_view (SheetObject *so, SheetObjectViewContainer *container)
 	return gnm_pane_object_register (so, item, TRUE);
 }
 
+/**
+ * gnm_soi_get_target_list:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full): the target list for drag-and-drop.
+ **/
 static GtkTargetList *
 gnm_soi_get_target_list (SheetObject const *so)
 {

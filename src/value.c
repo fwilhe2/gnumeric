@@ -1,5 +1,5 @@
 /*
- * value.c:  Utilies for handling, creating, removing values.
+ * value.c:  Utilities for handling, creating, removing values.
  *
  * Authors:
  *   Miguel de Icaza (miguel@gnu.org).
@@ -51,6 +51,8 @@ static int value_allocations = 0;
 #endif
 
 
+// Errors corresponding to GnmStdError
+// Note, that #N/A and #GETTING_DATA lack "!".  For reasons, obviously
 static struct {
 	char const *C_name;
 	char const *locale_name;
@@ -63,6 +65,8 @@ static struct {
 	{ N_("#NAME?"), NULL, NULL },
 	{ N_("#NUM!"), NULL, NULL },
 	{ N_("#N/A"), NULL, NULL },
+	{ N_("#GETTING_DATA"), NULL, NULL },
+	{ N_("#SPILL!"), NULL, NULL },
 	{ N_("#UNKNOWN!"), NULL, NULL }
 };
 
@@ -130,7 +134,9 @@ value_new_float (gnm_float f)
 }
 
 /**
- * value_new_error: (skip)
+ * value_new_error:
+ * @pos: evaluation position
+ * @mesg: (transfer none): error string
  *
  * Returns: (transfer full): a new error value.
  */
@@ -145,7 +151,9 @@ value_new_error (G_GNUC_UNUSED GnmEvalPos const *ep, char const *mesg)
 }
 
 /**
- * value_new_error_str: (skip)
+ * value_new_error_str:
+ * @pos: evaluation position
+ * @mesg: (transfer none): error string
  *
  * Returns: (transfer full): a new error value.
  */
@@ -160,7 +168,9 @@ value_new_error_str (G_GNUC_UNUSED GnmEvalPos const *ep, GOString *mesg)
 }
 
 /**
- * value_new_error_std: (skip)
+ * value_new_error_std:
+ * @pos: evaluation position
+ * @err: error code
  *
  * Returns: (transfer full): a new error value.
  */
@@ -174,7 +184,8 @@ value_new_error_std (GnmEvalPos const *pos, GnmStdError err)
 }
 
 /**
- * value_new_error_NULL: (skip)
+ * value_new_error_NULL:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#NULL! error value.
  */
@@ -185,9 +196,10 @@ value_new_error_NULL (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_DIV0: (skip)
+ * value_new_error_DIV0:
+ * @pos: evaluation position
  *
- * Returns: (transfer full): a new \#DIV0! error value.  This is used for
+ * Returns: (transfer full): a new \#DIV/0! error value.  This is used for
  * division by zero.
  */
 GnmValue *
@@ -197,7 +209,8 @@ value_new_error_DIV0 (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_VALUE: (skip)
+ * value_new_error_VALUE:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#VALUE! error value.  This is used for
  * example for type errors.
@@ -209,7 +222,8 @@ value_new_error_VALUE (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_REF: (skip)
+ * value_new_error_REF:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#REF! error value.  This is used for
  * references that are no longer valid, for example because the column they
@@ -222,7 +236,8 @@ value_new_error_REF (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_NAME: (skip)
+ * value_new_error_NAME:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#NAME! error value.  This is used for
  * references to undefined names.
@@ -234,7 +249,8 @@ value_new_error_NAME (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_NUM: (skip)
+ * value_new_error_NUM:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#NUM! error value.  This is used
  * for errors in numerical computations such as overflow or taking the
@@ -247,7 +263,8 @@ value_new_error_NUM (GnmEvalPos const *pos)
 }
 
 /**
- * value_new_error_NA: (skip)
+ * value_new_error_NA:
+ * @pos: evaluation position
  *
  * Returns: (transfer full): a new \#NA! error value.  This is used for data
  * that is not available.
@@ -256,6 +273,19 @@ GnmValue *
 value_new_error_NA (GnmEvalPos const *pos)
 {
 	return value_new_error_str (pos, standard_errors[GNM_ERROR_NA].locale_name_str);
+}
+
+/**
+ * value_new_error_SPILL:
+ * @pos: evaluation position
+ *
+ * Returns: (transfer full): a new \#SPILL! error value.  This is used for
+ * (still unsupported) dynamic arrays.
+ */
+GnmValue *
+value_new_error_SPILL (GnmEvalPos const *pos)
+{
+	return value_new_error_str (pos, standard_errors[GNM_ERROR_SPILL].locale_name_str);
 }
 
 /**
@@ -279,13 +309,13 @@ value_error_name (GnmStdError err, gboolean translated)
 
 /**
  * value_error_set_pos:
- * @err:
- * @pos:
+ * @err: #GnmValueErr
+ * @pos: #GnmEvalPos
  *
  * Change the position of a ValueError.
  *
  * Returns: (transfer none): @err as a #GnmValue.
- */
+ **/
 GnmValue *
 value_error_set_pos (GnmValueErr *err, G_GNUC_UNUSED GnmEvalPos const *pos)
 {
@@ -296,6 +326,12 @@ value_error_set_pos (GnmValueErr *err, G_GNUC_UNUSED GnmEvalPos const *pos)
     return (GnmValue *)err;
 }
 
+/**
+ * value_error_classify:
+ * @v: #GnmValue
+ *
+ * Returns: the #GnmStdError corresponding to @v, or GNM_ERROR_UNKNOWN.
+ **/
 GnmStdError
 value_error_classify (GnmValue const *v)
 {
@@ -347,7 +383,7 @@ value_new_string (char const *str)
 }
 
 /**
- * value_new_string_nocopy: (skip)
+ * value_new_string_nocopy:
  * @str: (transfer full): string to use for value
  *
  * Returns: (transfer full): a new string object.
@@ -359,7 +395,7 @@ value_new_string_nocopy (char *str)
 }
 
 /**
- * value_new_cellrange_unsafe: (skip)
+ * value_new_cellrange_unsafe:
  * @a: (transfer none): first #GnmCellRef
  * @b: (transfer none): second #GnmCellRef
  *
@@ -435,6 +471,7 @@ value_new_cellrange (GnmCellRef const *a, GnmCellRef const *b,
 
 /**
  * value_new_cellrange_r:
+ * @sheet: Sheet
  * @r: #GnmRange
  *
  * Returns: (transfer full): a new cell range value for @r
@@ -468,8 +505,10 @@ value_new_cellrange_r (Sheet *sheet, GnmRange const *r)
  *         the range given does not include a sheet specification.
  * @str: a range specification (ex: "A1", "A1:C3", "Sheet1!A1:C3", "R1C1").
  *
- * Parse @str using the convention associated with @sheet.
- * Returns a (GnmValue *) of type VALUE_CELLRANGE if the @range was
+ * Parse @str using the convention associated with @sheet.  The
+ * parsing is done relative to the full sheet.
+ *
+ * Returns: (transfer full) (nullable): a cell-range #GnmValue if the range was
  * successfully parsed or %NULL on failure.
  */
 GnmValue *
@@ -491,10 +530,13 @@ value_new_cellrange_str (Sheet *sheet, char const *str)
  * @pp:  if a relative range is specified, then it will be interpreted relative
  *       to this position (affects only A1-style relative references).
  * @str: a range specification (ex: "A1", "A1:C3", "Sheet1!A1:C3", "R1C1").
+ * @flags:
  *
- * Parse @str using the convention associated with @sheet.
- * Returns a (GnmValue *) of type VALUE_CELLRANGE if the @range was
- * successfully parsed or %NULL on failure.
+ * Parse @str using the convention associated with @pp's associated
+ * sheet.
+ *
+ * Returns: (transfer full) (nullable): a cell-range #GnmValue if the
+ * range was successfully parsed, or %NULL on failure.
  */
 GnmValue *
 value_new_cellrange_parsepos_str (GnmParsePos const *pp, char const *str,
@@ -531,11 +573,15 @@ GnmValue *
 value_new_array_non_init (guint cols, guint rows)
 {
 	GnmValueArray *v = CHUNK_ALLOC (GnmValueArray, value_array_pool);
+	guint i;
+
 	*((GnmValueType *)&(v->type)) = VALUE_ARRAY;
 	v->fmt = NULL;
 	v->x = cols;
 	v->y = rows;
 	v->vals = g_new (GnmValue **, cols);
+	for (i = 0; i < cols; i++)
+		v->vals[i] = g_new (GnmValue *, rows);
 	return (GnmValue *)v;
 }
 
@@ -554,7 +600,6 @@ value_new_array (guint cols, guint rows)
 	GnmValueArray *v = (GnmValueArray *)value_new_array_non_init (cols, rows);
 
 	for (x = 0; x < cols; x++) {
-		v->vals[x] = g_new (GnmValue *, rows);
 		for (y = 0; y < rows; y++)
 			v->vals[x][y] = value_new_int (0);
 	}
@@ -576,7 +621,6 @@ value_new_array_empty (guint cols, guint rows)
 	GnmValueArray *v = (GnmValueArray *)value_new_array_non_init (cols, rows);
 
 	for (x = 0; x < cols; x++) {
-		v->vals[x] = g_new (GnmValue *, rows);
 		for (y = 0; y < rows; y++)
 			v->vals[x][y] = value_new_empty ();
 	}
@@ -584,7 +628,7 @@ value_new_array_empty (guint cols, guint rows)
 }
 
 /*
- * Returns TRUE, FALSE, or -1.
+ * Returns: TRUE, FALSE, or -1.
  */
 static int
 value_parse_boolean (char const *str, gboolean translated)
@@ -608,6 +652,15 @@ value_parse_boolean (char const *str, gboolean translated)
 }
 
 
+/**
+ * value_new_from_string:
+ * @t: #GnmValueType
+ * @str: string representation of the value
+ * @sf: (nullable): #GOFormat
+ * @translated: whether the string is translated
+ *
+ * Returns: (transfer full) (nullable): a new #GnmValue created from @str.
+ **/
 GnmValue *
 value_new_from_string (GnmValueType t, char const *str, GOFormat *sf,
 		       gboolean translated)
@@ -679,7 +732,7 @@ value_new_from_string (GnmValueType t, char const *str, GOFormat *sf,
 
 /**
  * value_release:
- * @v: (transfer full) (allow-none): value to dispose of
+ * @v: (transfer full) (nullable): value to dispose of
  *
  * Free the value.
  */
@@ -796,7 +849,6 @@ value_dup (GnmValue const *src)
 			src->v_array.x, src->v_array.y);
 
 		for (x = 0; x < array->x; x++) {
-			array->vals[x] = g_new (GnmValue *, array->y);
 			for (y = 0; y < array->y; y++)
 				array->vals[x][y] = value_dup (src->v_array.vals[x][y]);
 		}
@@ -831,9 +883,9 @@ value_cmp (void const *ptr_a, void const *ptr_b)
 	GnmValue const *a = *(GnmValue const **)ptr_a;
 	GnmValue const *b = *(GnmValue const **)ptr_b;
 	switch (value_compare_real (a, b, TRUE, TRUE)) {
-	case IS_EQUAL :   return  0;
-	case IS_LESS :    return -1;
-	case IS_GREATER : return  1;
+	case IS_EQUAL:   return  0;
+	case IS_LESS:    return -1;
+	case IS_GREATER: return  1;
 	default:
 		break;
 	}
@@ -967,6 +1019,12 @@ value_hash (GnmValue const *v)
 }
 
 
+/**
+ * value_type_of:
+ * @v: #GnmValue
+ *
+ * Returns: the #GnmValueType of @v.
+ **/
 GnmValueType
 value_type_of (const GnmValue *v)
 {
@@ -974,6 +1032,13 @@ value_type_of (const GnmValue *v)
 }
 
 
+/**
+ * value_get_as_bool:
+ * @v: #GnmValue
+ * @err: (out): location to store error flag
+ *
+ * Returns: @v interpreted as a boolean.
+ **/
 gboolean
 value_get_as_bool (GnmValue const *v, gboolean *err)
 {
@@ -1001,7 +1066,7 @@ value_get_as_bool (GnmValue const *v, gboolean *err)
 	}
 
 	case VALUE_FLOAT:
-		return v->v_float.val != 0.0;
+		return v->v_float.val != 0;
 
 	default:
 		g_warning ("Unhandled value in value_get_as_bool.");
@@ -1076,9 +1141,16 @@ value_get_as_gstring (GnmValue const *v, GString *target,
 
 	case VALUE_FLOAT:
 		if (conv->output.decimal_digits < 0)
-			go_dtoa (target, "!^" GNM_FORMAT_g, v->v_float.val);
+			go_dtoa (target,
+				 (conv->output.uppercase_E
+				  ? "!^" GNM_FORMAT_G
+				  : "!^" GNM_FORMAT_g),
+				 v->v_float.val);
 		else
-			g_string_append_printf (target, "%.*" GNM_FORMAT_g,
+			g_string_append_printf (target,
+						(conv->output.uppercase_E
+						 ? "%.*" GNM_FORMAT_G
+						 : "%.*" GNM_FORMAT_g),
 						conv->output.decimal_digits,
 						v->v_float.val);
 		return;
@@ -1368,11 +1440,12 @@ value_get_rangeref (GnmValue const *v)
 
 /**
  * value_coerce_to_number:
- * @v:
- * @valid:
+ * @v: (transfer full): value to coerce.
+ * @valid: (out): %TRUE is coercion succeeded.
+ * @ep: evaluation position.
  *
- * If the value can be used as a number return that number
- * otherwise free it at return an appropriate error
+ * Returns: (transfer full): coerce @v to a numeric value and return
+ * it.  If it cannot be coerced, return an appropriate error value.
  **/
 GnmValue *
 value_coerce_to_number (GnmValue *v, gboolean *valid, GnmEvalPos const *ep)
@@ -1473,7 +1546,7 @@ compare_error_error (GnmValue const *va, GnmValue const *vb)
  *
  * IGNORES format.
  *
- * Returns a non-negative difference between 2 values
+ * Returns: a non-negative difference between 2 values
  */
 gnm_float
 value_diff (GnmValue const *a, GnmValue const *b)
@@ -1494,7 +1567,7 @@ value_diff (GnmValue const *a, GnmValue const *b)
 		case VALUE_EMPTY:
 			if (*a->v_str.val->str == '\0')
 				return 0.;
-			return DBL_MAX;
+			return GNM_MAX;
 
 		/* If both are strings compare as string */
 		case VALUE_STRING:
@@ -1503,7 +1576,7 @@ value_diff (GnmValue const *a, GnmValue const *b)
 
 		case VALUE_FLOAT: case VALUE_BOOLEAN:
 		default:
-			return DBL_MAX;
+			return GNM_MAX;
 		}
 
 	} else if (tb == VALUE_STRING) {
@@ -1513,24 +1586,24 @@ value_diff (GnmValue const *a, GnmValue const *b)
 			if (*b->v_str.val->str == '\0')
 				return 0.;
 
-		case VALUE_FLOAT : case VALUE_BOOLEAN:
+		case VALUE_FLOAT: case VALUE_BOOLEAN:
 		default:
-			return DBL_MAX;
+			return GNM_MAX;
 		}
 	}
 
 	/* Booleans > all numbers (Why did excel do this ?? ) */
 	if (ta == VALUE_BOOLEAN && tb == VALUE_FLOAT)
-		return DBL_MAX;
+		return GNM_MAX;
 	if (tb == VALUE_BOOLEAN && ta == VALUE_FLOAT)
-		return DBL_MAX;
+		return GNM_MAX;
 
 	switch ((ta > tb) ? ta : tb) {
 	case VALUE_EMPTY:	/* Empty Empty compare */
 		return 0.;
 
 	case VALUE_BOOLEAN:
-		return (compare_bool_bool (a, b) == IS_EQUAL) ? 0. : DBL_MAX;
+		return (compare_bool_bool (a, b) == IS_EQUAL) ? 0 : GNM_MAX;
 
 	case VALUE_FLOAT: {
 		gnm_float const da = value_get_as_float (a);
@@ -1702,14 +1775,31 @@ value_compare_real (GnmValue const *a, GnmValue const *b,
 	return res;
 }
 #undef PAIR
+#undef CPAIR
 
 
+/**
+ * value_compare:
+ * @a: first #GnmValue
+ * @b: second #GnmValue
+ * @case_sensitive: whether string comparison should be case sensitive
+ *
+ * Returns: the difference between @a and @b.
+ **/
 GnmValDiff
 value_compare (GnmValue const *a, GnmValue const *b, gboolean case_sensitive)
 {
 	return value_compare_real (a, b, case_sensitive, TRUE);
 }
 
+/**
+ * value_compare_no_cache:
+ * @a: first #GnmValue
+ * @b: second #GnmValue
+ * @case_sensitive: whether string comparison should be case sensitive
+ *
+ * Returns: the difference between @a and @b, without using the cache.
+ **/
 GnmValDiff
 value_compare_no_cache (GnmValue const *a, GnmValue const *b,
 			gboolean case_sensitive)
@@ -1739,6 +1829,11 @@ value_set_fmt (GnmValue *v, GOFormat const *fmt)
 
 /****************************************************************************/
 
+/**
+ * gnm_value_get_type:
+ *
+ * Returns: the GType for GnmValue.
+ **/
 GType
 gnm_value_get_type (void)
 {

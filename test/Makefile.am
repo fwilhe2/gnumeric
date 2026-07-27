@@ -50,6 +50,10 @@ TESTS =	t1000-statfuns.pl			\
 	t1017-countif.pl			\
 	t1018-ifs-funcs.pl			\
 	t1019-numtheory.pl			\
+	t1020-erlang.pl				\
+	t1021-dsa.pl				\
+	t1022-isa.pl				\
+	t1023-dba.pl				\
 	t1100-chitest.pl			\
 	t1101-ftest.pl				\
 	t1102-ttest.pl				\
@@ -59,6 +63,12 @@ TESTS =	t1000-statfuns.pl			\
 	t1106-vdb.pl				\
 	t1107-cronbach.pl			\
 	t1108-ilog.pl				\
+	t1109-unique.pl				\
+	t1110-xlookup.pl			\
+	t1111-switch.pl				\
+	t1112-regextest.pl			\
+	t1113-regexextract.pl			\
+	t1114-regexreplace.pl			\
 	t1800-operators.pl			\
 	t1900-array.pl				\
 	t1901-regress.pl			\
@@ -71,9 +81,12 @@ TESTS =	t1000-statfuns.pl			\
 	t2004-insdel-colrow.pl			\
 	t2005-recalc.pl				\
 	t2006-cond-format-deps.pl		\
+	t2007-auto-format.pl			\
 	t2800-style-optimizer.pl		\
 	t5800-csv-date.pl			\
 	t5801-csv-number.pl			\
+	t5802-csv-separator.pl			\
+	t5803-csv-terminator.pl			\
 	t5900-sc.pl				\
 	t5901-qpro.pl				\
 	t5902-applix.pl				\
@@ -125,6 +138,8 @@ TESTS =	t1000-statfuns.pl			\
 	t6590-samples.pl			\
 	t6900-sylk.pl				\
 	t6910-graph-image-svg.pl		\
+	t6920-cplex.pl				\
+	t6921-lpsolve.pl			\
 	t7000-goal-seek.pl			\
 	t7100-solver-blend.pl			\
 	t7101-solver-afiro.pl			\
@@ -157,6 +172,24 @@ TESTS =	t1000-statfuns.pl			\
 	t7147-solver-Bennett5.pl		\
 	t7200-regression.pl			\
 	t7201-anova.pl				\
+	t7202-moving-average.pl			\
+	t7203-descriptive-statistics.pl		\
+	t7204-correlation.pl			\
+	t7205-covariance.pl			\
+	t7206-exponential-smoothing.pl		\
+	t7207-histogram.pl			\
+	t7208-frequency-tables.pl		\
+	t7209-fourier-analysis.pl		\
+	t7210-sampling.pl			\
+	t7211-ranking.pl			\
+	t7212-principal-components.pl		\
+	t7213-auto-expression.pl		\
+	t7214-normality-test.pl			\
+	t7215-sign-test.pl			\
+	t7216-wilcoxon-signed-rank-test.pl	\
+	t7217-chi-squared-independence.pl	\
+	t7218-fill-series.pl			\
+	t7219-one-mean-test.pl			\
 	t8000-valgrind.pl			\
 	t8001-valgrind-xls.pl			\
 	t8002-valgrind-gnumeric.pl		\
@@ -166,12 +199,23 @@ TESTS =	t1000-statfuns.pl			\
 	t8006-valgrind-ods-no-styles.pl		\
 	t8010-valgrind-ods.pl			\
 	t8011-valgrind-xlsx.pl			\
+	t8012-valgrind-applix.pl		\
+	t8013-valgrind-dif.pl			\
+	t8014-valgrind-mps.pl			\
+	t8015-valgrind-sylk.pl			\
+	t8016-valgrind-qpro.pl			\
+	t8017-valgrind-sc.pl			\
+	t8018-valgrind-lpsolve.pl		\
+	t8019-valgrind-cplex.pl			\
 	t8050-valgrind-sstest.pl		\
 	t8100-null-false.pl			\
 	t8101-gfree.pl				\
 	t8102-glade-visible.pl			\
 	t8103-gtk.pl				\
 	t8104-glade-parsing.pl			\
+	t8105-disallow-none.pl			\
+	t8106-duplicate-include.pl		\
+	t8107-disallow-bool.pl			\
 	t8200-gslice1.pl			\
 	t8201-gslice2.pl			\
 	t8202-gslice3.pl			\
@@ -186,6 +230,7 @@ TESTS =	t1000-statfuns.pl			\
 	t9010-ssgrep.pl				\
 	t9100-number-match.pl			\
 	t9999-epilogue.pl
+XFAIL_TESTS = 
 
 SUPPS = common.supp gui.supp t8003-valgrind-pdf.supp
 
@@ -206,15 +251,25 @@ if HAVE_PYTHON_GI
 endif
 endif
 
-
-import-db:
-	for t in $(srcdir)/t59[0-9][0-9]-*.pl; do echo "*** $$t ***"; $(PERL) $$t create-db; done
-
 EXTRA_DIST = GnumericTest.pm \
 	$(SUPPS) $(TESTS) \
 	$(INTROSPECTION_SUPPS) $(INTROSPECTION_TSTS) \
 	normalize-gnumeric \
 	ods-ext-schema.patch 
 
-.PHONY: import-db
-.NOTPARALLEL:
+# Groups of tests for convenience
+
+import-db:
+	for t in $(srcdir)/t59[0-9][0-9]-*.pl; do echo "*** $$t ***"; $(PERL) $$t create-db; done
+	for t in $(srcdir)/t2007-*.pl; do echo "*** $$t ***"; $(PERL) $$t create-db; done
+
+run-calc-tests:
+	for t in $(srcdir)/t1[0-9][0-9][0-9]-*.pl; do $$t; done
+
+run-tool-tests:
+	for t in $(srcdir)/t72[0-9][0-9]-*.pl; do $$t; done
+
+run-tool-tests-valgrind:
+	for t in $(srcdir)/t72[0-9][0-9]-*.pl; do $$t --valgrind; done
+
+.PHONY: import-db run-calc-tests run-tool-tests run-tool-tests-valgrind

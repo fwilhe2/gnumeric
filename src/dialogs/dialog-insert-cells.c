@@ -75,23 +75,23 @@ cb_insert_cell_ok_clicked (G_GNUC_UNUSED GtkWidget *button,
 	rows = state->sel->end.row - state->sel->start.row + 1;
 
 	switch (i) {
-	case 0 :
+	case 0:
 		cmd_shift_rows (wbc, state->sheet,
 				state->sel->start.col,
 				state->sel->start.row,
 				state->sel->end.row, cols);
 		break;
-	case 1 :
+	case 1:
 		cmd_shift_cols (wbc, state->sheet,
 				state->sel->start.col,
 				state->sel->end.col,
 				state->sel->start.row, rows);
 		break;
-	case 2 :
+	case 2:
 		cmd_insert_rows (wbc, state->sheet,
 				 state->sel->start.row, rows);
 		break;
-	default :
+	default:
 		cmd_insert_cols (wbc, state->sheet,
 				 state->sel->start.col, cols);
 		break;
@@ -170,14 +170,14 @@ dialog_insert_cells (WBCGtk *wbcg)
 
 	gnm_init_help_button (
 		go_gtk_builder_get_widget (state->gui, "helpbutton"),
-		GNUMERIC_HELP_LINK_INSERT_CELS);
+		GNUMERIC_HELP_LINK_INSERT_CELLS);
 	gtk_toggle_button_set_active
 		(GTK_TOGGLE_BUTTON (go_gtk_builder_get_widget
 				    (state->gui, cols < rows
 				     ? "radio_0" : "radio_1")),
 		 TRUE);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_insert_cell_destroy);
 

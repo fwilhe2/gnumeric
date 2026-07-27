@@ -8,8 +8,8 @@
  * (C) 1998-2001 Michael Meeks
  * (C) 2002-2005 Jody Goldberg
  **/
-#ifndef GNM_MS_EXCEL_READ_H
-#define GNM_MS_EXCEL_READ_H
+#ifndef GNM_MS_EXCEL_READ_H_
+#define GNM_MS_EXCEL_READ_H_
 
 #include "ms-biff.h"
 #include "ms-excel-biff.h"
@@ -103,7 +103,7 @@ typedef struct {
 	GOFormat	*markup;
 } ExcelStringEntry;
 
-struct _GnmXLImporter {
+struct GnmXLImporter_ {
 	MSContainer	  container;
 	GOIOContext	 *context;
 	WorkbookView	 *wbv;
@@ -180,4 +180,4 @@ void xls_read_SXIVD	 (BiffQuery *q, ExcelReadSheet *esheet);
 void excel_read_cleanup (void);
 void excel_read_init (void);
 
-#endif /* GNM_MS_EXCEL_READ_H */
+#endif /* GNM_MS_EXCEL_READ_H_ */

@@ -1,4 +1,3 @@
-
 /*
  * sheet-object-widget.c: SheetObject wrappers for simple gtk widgets.
  *
@@ -76,6 +75,15 @@ cb_so_get_ref (GnmDependent *dep, G_GNUC_UNUSED SheetObject *so, gpointer user)
 	*pdep = dep;
 }
 
+/**
+ * so_get_ref:
+ * @so: #SheetObject
+ * @res: (out): resulting cell reference
+ * @force_sheet: whether to fill @res->sheet if it's NULL
+ *
+ * Retrieves the cell reference linked to @so.
+ * Returns: (transfer none) (nullable): @res if a reference was found, else %NULL.
+ **/
 static GnmCellRef *
 so_get_ref (SheetObject const *so, GnmCellRef *res, gboolean force_sheet)
 {
@@ -111,6 +119,13 @@ cb_so_clear_sheet (GnmDependent *dep, G_GNUC_UNUSED SheetObject *so, G_GNUC_UNUS
 	dep->sheet = NULL;
 }
 
+/**
+ * so_clear_sheet:
+ * @so: #SheetObject
+ *
+ * Clears the sheet association for all dependencies of @so.
+ * Returns: %FALSE.
+ **/
 static gboolean
 so_clear_sheet (SheetObject *so)
 {
@@ -131,10 +146,10 @@ so_widget_view_set_bounds (SheetObjectView *sov, double const *coords, gboolean 
 {
 	GocItem *view = GOC_ITEM (sov);
 	double scale = goc_canvas_get_pixels_per_unit (view->canvas);
-	double left = MIN (coords [0], coords [2]) / scale;
-	double top = MIN (coords [1], coords [3]) / scale;
-	double width = (fabs (coords [2] - coords [0]) + 1.) / scale;
-	double height = (fabs (coords [3] - coords [1]) + 1.) / scale;
+	double left = MIN (coords[0], coords[2]) / scale;
+	double top = MIN (coords[1], coords[3]) / scale;
+	double width = (fabs (coords[2] - coords[0]) + 1.) / scale;
+	double height = (fabs (coords[3] - coords[1]) + 1.) / scale;
 
 	/* We only need the next check for frames, but it doesn't hurt otherwise. */
 	if (width < 8.)
@@ -217,6 +232,14 @@ typedef struct {
 
 static GObjectClass *sheet_object_widget_class = NULL;
 
+/**
+ * sow_create_widget:
+ * @sow: #SheetObjectWidget
+ *
+ * Internal wrapper to create the GtkWidget for @sow and apply standard
+ * style classes.
+ * Returns: (transfer full): the newly created widget.
+ **/
 static GtkWidget *
 sow_create_widget (SheetObjectWidget *sow)
 {
@@ -226,6 +249,16 @@ sow_create_widget (SheetObjectWidget *sow)
 	return w;
 }
 
+/**
+ * sheet_widget_draw_cairo:
+ * @so: #SheetObject
+ * @cr: #cairo_t
+ * @width: width in points
+ * @height: height in points
+ *
+ * Default drawing routine for widgets that don't implement their own.
+ * It uses an offscreen window to capture the widget's appearance.
+ **/
 static void
 sheet_widget_draw_cairo (SheetObject const *so, cairo_t *cr,
 			 double width, double height)
@@ -245,6 +278,15 @@ sheet_widget_draw_cairo (SheetObject const *so, cairo_t *cr,
 		g_warning (_("Because of GTK bug #705640, a sheet object widget is not being printed."));
 }
 
+/**
+ * sax_write_dep:
+ * @output: #GsfXMLOut
+ * @dep: #GnmDependent
+ * @id: attribute name
+ * @convs: #GnmConventions
+ *
+ * Serializes a dependency @dep to @output as an XML attribute @id.
+ **/
 static void
 sax_write_dep (GsfXMLOut *output, GnmDependent const *dep, char const *id,
 	       GnmConventions const *convs)
@@ -260,6 +302,17 @@ sax_write_dep (GsfXMLOut *output, GnmDependent const *dep, char const *id,
 	}
 }
 
+/**
+ * sax_read_dep:
+ * @attrs: XML attributes
+ * @name: attribute name to look for
+ * @dep: (out): destination dependency
+ * @xin: #GsfXMLIn
+ * @convs: #GnmConventions
+ *
+ * Parses a dependency from the XML attributes.
+ * Returns: %TRUE if the attribute @name was found and handled.
+ **/
 static gboolean
 sax_read_dep (xmlChar const * const *attrs, char const *name,
 	      GnmDependent *dep, GsfXMLIn *xin, GnmConventions const *convs)
@@ -285,6 +338,14 @@ sax_read_dep (xmlChar const * const *attrs, char const *name,
 	return TRUE;
 }
 
+/**
+ * sheet_object_widget_new_view:
+ * @so: #SheetObject
+ * @container: #SheetObjectViewContainer
+ *
+ * Creates a new canvas view for @so in @container.
+ * Returns: (transfer none): the newly created view.
+ **/
 static SheetObjectView *
 sheet_object_widget_new_view (SheetObject *so, SheetObjectViewContainer *container)
 {
@@ -354,7 +415,7 @@ enum {
 
 static void
 sheet_widget_frame_get_property (GObject *obj, guint param_id,
-				  GValue *value, GParamSpec *pspec)
+				 GValue *value, GParamSpec *pspec)
 {
 	SheetWidgetFrame *swf = GNM_SOW_FRAME (obj);
 
@@ -389,6 +450,7 @@ sheet_widget_frame_set_property (GObject *obj, guint param_id,
 static void
 sheet_widget_frame_init_full (SheetWidgetFrame *swf, char const *text)
 {
+	g_free (swf->label);
 	swf->label = g_strdup (text);
 }
 
@@ -473,7 +535,7 @@ cb_frame_config_destroy (FrameConfigState *state)
 static void
 cb_frame_config_ok_clicked (G_GNUC_UNUSED GtkWidget *button, FrameConfigState *state)
 {
-	gchar const *text = gtk_entry_get_text(GTK_ENTRY(state->label));
+	gchar const *text = gtk_entry_get_text (GTK_ENTRY (state->label));
 
 	cmd_so_set_frame_label (GNM_WBC (state->wbcg),
 				GNM_SO (state->swf),
@@ -481,6 +543,13 @@ cb_frame_config_ok_clicked (G_GNUC_UNUSED GtkWidget *button, FrameConfigState *s
 	gtk_widget_destroy (state->dialog);
 }
 
+/**
+ * sheet_widget_frame_set_label:
+ * @so: #SheetObject
+ * @str: (nullable): new label
+ *
+ * Sets the label for @so to @str.
+ **/
 void
 sheet_widget_frame_set_label (SheetObject *so, char const* str)
 {
@@ -517,7 +586,7 @@ cb_frame_label_changed (GtkWidget *entry, FrameConfigState *state)
 {
 	gchar const *text;
 
-	text = gtk_entry_get_text(GTK_ENTRY(entry));
+	text = gtk_entry_get_text (GTK_ENTRY (entry));
 	sheet_widget_frame_set_label (GNM_SO (state->swf), text);
 }
 
@@ -543,7 +612,7 @@ sheet_widget_frame_user_config (SheetObject *so, SheetControl *sc)
 	state->wbcg = wbcg;
 	state->sheet = sc_sheet	(sc);
 	state->old_focus = NULL;
-	state->old_label = g_strdup(swf->label);
+	state->old_label = g_strdup (swf->label);
 	state->dialog = go_gtk_builder_get_widget (gui, "so_frame");
 
 	state->label = go_gtk_builder_get_widget (gui, "entry");
@@ -572,7 +641,7 @@ sheet_widget_frame_user_config (SheetObject *so, SheetControl *sc)
 	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
 			       SHEET_OBJECT_CONFIG_KEY);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_frame_config_destroy);
 	g_object_unref (gui);
@@ -580,6 +649,13 @@ sheet_widget_frame_user_config (SheetObject *so, SheetControl *sc)
 	gtk_widget_show (state->dialog);
 }
 
+/**
+ * get_font:
+ *
+ * Internal helper to retrieve a system default font description suitable
+ * for rendering widget contents in Cairo.
+ * Returns: (transfer full): a new #PangoFontDescription.
+ **/
 static PangoFontDescription *
 get_font (void)
 {
@@ -653,9 +729,24 @@ get_font (void)
 	return desc;
 }
 
+/**
+ * draw_cairo_text:
+ * @cr: #cairo_t
+ * @text: UTF-8 string to draw
+ * @pwidth: (inout) (optional): available/result width
+ * @pheight: (inout) (optional): available/result height
+ * @centered_v: whether to center vertically
+ * @centered_h: whether to center horizontally
+ * @single: whether to use single-paragraph mode
+ * @highlight_n: line index to highlight (1-based, 0 for none)
+ * @scale: whether to scale text to fit bounds
+ *
+ * Renders @text onto @cr with the specified alignment and effects.
+ **/
 static void
 draw_cairo_text (cairo_t *cr, char const *text, int *pwidth, int *pheight,
-		 gboolean centered_v, gboolean centered_h, gboolean single, gint highlight_n, gboolean scale)
+		 gboolean centered_v, gboolean centered_h,
+		 gboolean single, gint highlight_n, gboolean scale)
 {
 	PangoLayout *layout = pango_cairo_create_layout (cr);
 	double const scale_h = 72. / gnm_app_display_dpi_get (TRUE);
@@ -706,11 +797,11 @@ draw_cairo_text (cairo_t *cr, char const *text, int *pwidth, int *pheight,
 			cairo_new_path (cr);
 			cairo_rectangle (cr, -4/scale_h, dy0,
 					 *pwidth/scale_h, dy1 - dy0);
-			cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+			cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
 			cairo_fill (cr);
 		}
 		pango_layout_iter_free (pliter);
-		cairo_set_source_rgb(cr, 0, 0, 0);
+		cairo_set_source_rgb (cr, 0, 0, 0);
 	}
 	pango_cairo_show_layout (cr, layout);
 	pango_font_description_free (desc);
@@ -733,13 +824,13 @@ sheet_widget_frame_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_move_to (cr, 10, 0);
 
 	cairo_save (cr);
-	cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+	cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
 	draw_cairo_text (cr, swf->label, &twidth, &theight, FALSE, FALSE, TRUE, 0, FALSE);
 	cairo_restore (cr);
 
 	cairo_set_line_width (cr, 1);
 	cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 	cairo_new_path (cr);
 	cairo_move_to (cr, 6, theight/2);
 	cairo_line_to (cr, 0, theight/2);
@@ -749,7 +840,7 @@ sheet_widget_frame_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_line_to (cr, 14 + twidth, theight/2);
 	cairo_stroke (cr);
 
-	cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+	cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
 	cairo_new_path (cr);
 	cairo_move_to (cr, 6, theight/2 + 1);
 	cairo_line_to (cr, 1, theight/2 + 1);
@@ -821,7 +912,7 @@ sheet_widget_button_get_property (GObject *obj, guint param_id,
 
 static void
 sheet_widget_button_set_property (GObject *obj, guint param_id,
-				    GValue const *value, GParamSpec *pspec)
+				  GValue const *value, GParamSpec *pspec)
 {
 	SheetWidgetButton *swb = GNM_SOW_BUTTON (obj);
 
@@ -877,15 +968,22 @@ sheet_widget_button_init_full (SheetWidgetButton *swb,
 	SheetObject *so = GNM_SO (swb);
 
 	so->flags &= ~SHEET_OBJECT_PRINT;
+
+	g_free (swb->label);
 	swb->label = g_strdup (text);
+
+	if (swb->markup) pango_attr_list_unref (swb->markup);
 	swb->markup = markup;
+	if (markup) pango_attr_list_ref (markup);
+
 	swb->value = FALSE;
+
+	gnm_expr_top_unref (swb->dep.texpr);
 	swb->dep.sheet = NULL;
 	swb->dep.flags = button_get_dep_type ();
 	swb->dep.texpr = (ref != NULL)
 		? gnm_expr_top_new (gnm_expr_new_cellref (ref))
 		: NULL;
-	if (markup) pango_attr_list_ref (markup);
 }
 
 static void
@@ -990,7 +1088,7 @@ cb_button_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widget,
 		     ButtonConfigState *state)
 {
 	/* Note:  half of the set-focus action is handle by the default
-	 *        callback installed by wbc_gtk_attach_guru */
+	 *        callback installed by wbcg_attach_guru */
 
 	/* Force an update of the content in case it needs tweaking (eg make it
 	 * absolute) */
@@ -1001,8 +1099,7 @@ cb_button_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widget,
 			(GNM_EXPR_ENTRY (gtk_widget_get_parent (state->old_focus)),
 			 parse_pos_init_sheet (&pp, state->sheet),
 			 NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
-		if (texpr != NULL)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 	state->old_focus = focus_widget;
 }
@@ -1026,7 +1123,7 @@ cb_button_config_ok_clicked (G_GNUC_UNUSED GtkWidget *button, ButtonConfigState 
 	GnmExprTop const *texpr = gnm_expr_entry_parse (state->expression,
 		parse_pos_init_sheet (&pp, so->sheet),
 		NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
-	gchar const *text = gtk_entry_get_text(GTK_ENTRY(state->label));
+	gchar const *text = gtk_entry_get_text (GTK_ENTRY (state->label));
 
 	cmd_so_set_button (GNM_WBC (state->wbcg), so,
 			     texpr, g_strdup (state->old_label), g_strdup (text));
@@ -1113,12 +1210,12 @@ sheet_widget_button_user_config (SheetObject *so, SheetControl *sc)
 	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
 			       SHEET_OBJECT_CONFIG_KEY);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_button_config_destroy);
 
 	/* Note:  half of the set-focus action is handle by the default */
-	/*        callback installed by wbc_gtk_attach_guru */
+	/*        callback installed by wbcg_attach_guru */
 	g_signal_connect (G_OBJECT (state->dialog), "set-focus",
 		G_CALLBACK (cb_button_set_focus), state);
 	g_object_unref (gui);
@@ -1138,8 +1235,8 @@ sheet_widget_button_set_sheet (SheetObject *so, Sheet *sheet)
 
 static void
 sheet_widget_button_foreach_dep (SheetObject *so,
-				   SheetObjectForeachDepFunc func,
-				   gpointer user)
+				 SheetObjectForeachDepFunc func,
+				 gpointer user)
 {
 	SheetWidgetButton *swb = GNM_SOW_BUTTON (so);
 	func (&swb->dep, so, user);
@@ -1171,28 +1268,47 @@ sheet_widget_button_prep_sax_parser (SheetObject *so, GsfXMLIn *xin,
 			;
 }
 
+/**
+ * sheet_widget_button_set_link:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new expression
+ *
+ * Sets the link for @so to @texpr.
+ **/
 void
 sheet_widget_button_set_link (SheetObject *so, GnmExprTop const *texpr)
 {
- 	SheetWidgetButton *swb = GNM_SOW_BUTTON (so);
- 	dependent_set_expr (&swb->dep, texpr);
- 	if (texpr && swb->dep.sheet)
- 		dependent_link (&swb->dep);
+	SheetWidgetButton *swb = GNM_SOW_BUTTON (so);
+	dependent_set_expr (&swb->dep, texpr);
+	if (texpr && swb->dep.sheet)
+		dependent_link (&swb->dep);
 }
 
+/**
+ * sheet_widget_button_get_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the link for @so.
+ **/
 GnmExprTop const *
 sheet_widget_button_get_link	 (SheetObject *so)
 {
- 	SheetWidgetButton *swb = GNM_SOW_BUTTON (so);
- 	GnmExprTop const *texpr = swb->dep.texpr;
+	SheetWidgetButton *swb = GNM_SOW_BUTTON (so);
+	GnmExprTop const *texpr = swb->dep.texpr;
 
- 	if (texpr)
- 		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
- 	return texpr;
+	return texpr;
 }
 
 
+/**
+ * sheet_widget_button_set_label:
+ * @so: #SheetObject
+ * @str: (nullable): new label
+ *
+ * Sets the label for @so to @str.
+ **/
 void
 sheet_widget_button_set_label (SheetObject *so, char const *str)
 {
@@ -1214,6 +1330,13 @@ sheet_widget_button_set_label (SheetObject *so, char const *str)
 	}
 }
 
+/**
+ * sheet_widget_button_set_markup:
+ * @so: #SheetObject
+ * @markup: (nullable): new markup
+ *
+ * Sets the markup for @so to @markup.
+ **/
 void
 sheet_widget_button_set_markup (SheetObject *so, PangoAttrList *markup)
 {
@@ -1255,7 +1378,7 @@ sheet_widget_button_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 2 * half_line);
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 
 	cairo_new_path (cr);
 	cairo_arc (cr, radius + half_line, radius + half_line, radius, M_PI, - M_PI/2);
@@ -1268,7 +1391,7 @@ sheet_widget_button_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_close_path (cr);
 	cairo_stroke (cr);
 
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 
 	cairo_move_to (cr, width/2., height/2.);
 
@@ -1329,14 +1452,12 @@ enum {
 	SWA_PROP_HORIZONTAL
 };
 
-#ifndef g_signal_handlers_disconnect_by_data
-#define g_signal_handlers_disconnect_by_data(instance, data) \
-  g_signal_handlers_disconnect_matched ((instance), G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, (data))
-#endif
 static void
 cb_range_destroyed (GtkWidget *w, SheetWidgetAdjustment *swa)
 {
 	GObject *accessible = G_OBJECT (gtk_widget_get_accessible (w));
+	// This seems to be working around some gtk+ related bug.  I don't
+	// actually see the crash, but *shrugs*
 	if (accessible)
 		g_signal_handlers_disconnect_by_data (swa->adjustment, accessible);
 }
@@ -1364,6 +1485,12 @@ sheet_widget_adjustment_get_adjustment (SheetObject *so)
 	return (GNM_SOW_ADJUSTMENT (so)->adjustment);
 }
 
+/**
+ * sheet_widget_adjustment_get_horizontal:
+ * @so: #SheetObject
+ *
+ * Returns: %TRUE if the adjustment is horizontal.
+ **/
 gboolean
 sheet_widget_adjustment_get_horizontal (SheetObject *so)
 {
@@ -1371,6 +1498,13 @@ sheet_widget_adjustment_get_horizontal (SheetObject *so)
 	return (GNM_SOW_ADJUSTMENT (so)->horizontal);
 }
 
+/**
+ * sheet_widget_adjustment_set_link:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new expression
+ *
+ * Sets the link for @so to @texpr.
+ **/
 void
 sheet_widget_adjustment_set_link (SheetObject *so, GnmExprTop const *texpr)
 {
@@ -1380,14 +1514,19 @@ sheet_widget_adjustment_set_link (SheetObject *so, GnmExprTop const *texpr)
 		dependent_link (&swa->dep);
 }
 
+/**
+ * sheet_widget_adjustment_get_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the link for @so.
+ **/
 GnmExprTop const *
 sheet_widget_adjustment_get_link (SheetObject *so)
 {
 	SheetWidgetAdjustment *swa = GNM_SOW_ADJUSTMENT (so);
 	GnmExprTop const *texpr = swa->dep.texpr;
 
-	if (texpr)
-		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
 	return texpr;
 }
@@ -1401,7 +1540,7 @@ adjustment_eval (GnmDependent *dep)
 
 	v = gnm_expr_top_eval (dep->texpr, eval_pos_init_dep (&pos, dep),
 			       GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
-	sheet_widget_adjustment_set_value (DEP_TO_ADJUSTMENT(dep),
+	sheet_widget_adjustment_set_value (DEP_TO_ADJUSTMENT (dep),
 		value_get_as_float (v));
 	value_release (v);
 }
@@ -1442,6 +1581,13 @@ cb_adjustment_widget_value_changed (GtkWidget *widget,
 	}
 }
 
+/**
+ * sheet_widget_adjustment_set_horizontal:
+ * @so: #SheetObject
+ * @horizontal: boolean
+ *
+ * Sets the orientation of the adjustment for @so.
+ **/
 void
 sheet_widget_adjustment_set_horizontal (SheetObject *so,
 					gboolean horizontal)
@@ -1510,11 +1656,15 @@ sheet_widget_adjustment_init_full (SheetWidgetAdjustment *swa,
 	so = GNM_SO (swa);
 	so->flags &= ~SHEET_OBJECT_PRINT;
 
-	swa->adjustment = GTK_ADJUSTMENT (gtk_adjustment_new (0., 0., 100., 1., 10., 0.));
-	g_object_ref_sink (swa->adjustment);
+	if (!swa->adjustment) {
+		swa->adjustment = GTK_ADJUSTMENT (gtk_adjustment_new (0., 0., 100., 1., 10., 0.));
+		g_object_ref_sink (swa->adjustment);
+	}
 
 	swa->horizontal = horizontal;
 	swa->being_updated = FALSE;
+
+	gnm_expr_top_unref (swa->dep.texpr);
 	swa->dep.sheet = NULL;
 	swa->dep.flags = adjustment_get_dep_type ();
 	swa->dep.texpr = (ref != NULL)
@@ -1535,11 +1685,8 @@ sheet_widget_adjustment_finalize (GObject *obj)
 
 	g_return_if_fail (swa != NULL);
 
+	g_clear_object (&swa->adjustment);
 	dependent_set_expr (&swa->dep, NULL);
-	if (swa->adjustment != NULL) {
-		g_object_unref (swa->adjustment);
-		swa->adjustment = NULL;
-	}
 
 	sheet_object_widget_class->finalize (obj);
 }
@@ -1593,7 +1740,7 @@ cb_adjustment_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widge
 	GtkWidget *ofp;
 
 	/* Note:  half of the set-focus action is handle by the default
-	 *        callback installed by wbc_gtk_attach_guru. */
+	 *        callback installed by wbcg_attach_guru. */
 
 	ofp = state->old_focus
 		? gtk_widget_get_parent (state->old_focus)
@@ -1606,8 +1753,7 @@ cb_adjustment_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widge
 			GNM_EXPR_ENTRY (ofp),
 			parse_pos_init_sheet (&pp, state->sheet),
 			NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
-		if (texpr != NULL)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 	state->old_focus = focus_widget;
 }
@@ -1755,12 +1901,12 @@ sheet_widget_adjustment_user_config_impl (SheetObject *so, SheetControl *sc, cha
 	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
 			       SHEET_OBJECT_CONFIG_KEY);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_adjustment_config_destroy);
 
 	/* Note:  half of the set-focus action is handle by the default */
-	/*        callback installed by wbc_gtk_attach_guru           */
+	/*        callback installed by wbcg_attach_guru           */
 	g_signal_connect (G_OBJECT (state->dialog), "set-focus",
 		G_CALLBACK (cb_adjustment_set_focus), state);
 	g_object_unref (gui);
@@ -1846,6 +1992,18 @@ sheet_widget_adjustment_prep_sax_parser (SheetObject *so, GsfXMLIn *xin,
 	swa->dep.flags = adjustment_get_dep_type ();
 }
 
+/**
+ * sheet_widget_adjustment_set_details:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new link expression
+ * @value: current value
+ * @min: minimum value
+ * @max: maximum value
+ * @inc: step increment
+ * @page: page increment
+ *
+ * Sets the details for the adjustment of @so.
+ **/
 void
 sheet_widget_adjustment_set_details (SheetObject *so, GnmExprTop const *tlink,
 				     int value, int min, int max,
@@ -1934,7 +2092,7 @@ sheet_widget_scrollbar_horizontal_draw_cairo (SheetObject const *so, cairo_t *cr
 					      double width, double height)
 {
 	cairo_save (cr);
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, 0., height/2);
@@ -2045,7 +2203,7 @@ sheet_widget_spinbutton_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 0.5);
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, 0, 0);
@@ -2060,7 +2218,7 @@ sheet_widget_spinbutton_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_rel_line_to (cr, 0, height);
 	cairo_stroke (cr);
 
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, width - 5, 3);
@@ -2077,7 +2235,7 @@ sheet_widget_spinbutton_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_fill (cr);
 
 	str = g_strdup_printf ("%i", ivalue);
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 	cairo_move_to (cr, 4., halfheight);
 	draw_cairo_text (cr, str, NULL, NULL, TRUE, FALSE, TRUE, 0, FALSE);
 	g_free (str);
@@ -2152,7 +2310,7 @@ sheet_widget_slider_horizontal_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 5);
-	cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+	cairo_set_source_rgb (cr, 0.8, 0.8, 0.8);
 	cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
 
 	cairo_new_path (cr);
@@ -2161,7 +2319,7 @@ sheet_widget_slider_horizontal_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_stroke (cr);
 
 	cairo_set_line_width (cr, 15);
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 	cairo_set_line_cap (cr, CAIRO_LINE_CAP_ROUND);
 
 	cairo_new_path (cr);
@@ -2338,9 +2496,13 @@ sheet_widget_checkbox_init_full (SheetWidgetCheckbox *swc,
 
 	g_return_if_fail (swc != NULL);
 
+	g_free (swc->label);
 	swc->label = label ? g_strdup (label) : g_strdup_printf (_("CheckBox %d"), ++counter);
+
 	swc->being_updated = FALSE;
 	swc->value = FALSE;
+
+	gnm_expr_top_unref (swc->dep.texpr);
 	swc->dep.sheet = NULL;
 	swc->dep.flags = checkbox_get_dep_type ();
 	swc->dep.texpr = (ref != NULL)
@@ -2439,7 +2601,7 @@ cb_checkbox_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widget,
 	GtkWidget *ofp;
 
 	/* Note:  half of the set-focus action is handle by the default
-	 *        callback installed by wbc_gtk_attach_guru. */
+	 *        callback installed by wbcg_attach_guru. */
 
 	ofp = state->old_focus
 		? gtk_widget_get_parent (state->old_focus)
@@ -2453,8 +2615,7 @@ cb_checkbox_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widget,
 			GNM_EXPR_ENTRY (ofp),
 			parse_pos_init_sheet (&pp, state->sheet),
 			NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
-		if (texpr != NULL)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 	state->old_focus = focus_widget;
 }
@@ -2478,7 +2639,7 @@ cb_checkbox_config_ok_clicked (G_GNUC_UNUSED GtkWidget *button, CheckboxConfigSt
 	GnmExprTop const *texpr = gnm_expr_entry_parse (state->expression,
 		parse_pos_init_sheet (&pp, so->sheet),
 		NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
-	gchar const *text = gtk_entry_get_text(GTK_ENTRY(state->label));
+	gchar const *text = gtk_entry_get_text (GTK_ENTRY (state->label));
 
 	cmd_so_set_checkbox (GNM_WBC (state->wbcg), so,
 			     texpr, g_strdup (state->old_label), g_strdup (text));
@@ -2565,12 +2726,12 @@ sheet_widget_checkbox_user_config (SheetObject *so, SheetControl *sc)
 	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
 			       SHEET_OBJECT_CONFIG_KEY);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_checkbox_config_destroy);
 
 	/* Note:  half of the set-focus action is handle by the default */
-	/*        callback installed by wbc_gtk_attach_guru */
+	/*        callback installed by wbcg_attach_guru */
 	g_signal_connect (G_OBJECT (state->dialog), "set-focus",
 		G_CALLBACK (cb_checkbox_set_focus), state);
 	g_object_unref (gui);
@@ -2625,6 +2786,13 @@ sheet_widget_checkbox_prep_sax_parser (SheetObject *so, GsfXMLIn *xin,
 			; /* ??? */
 }
 
+/**
+ * sheet_widget_checkbox_set_link:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new link expression
+ *
+ * Sets the link for the checkbox @so to @texpr.
+ **/
 void
 sheet_widget_checkbox_set_link (SheetObject *so, GnmExprTop const *texpr)
 {
@@ -2634,19 +2802,31 @@ sheet_widget_checkbox_set_link (SheetObject *so, GnmExprTop const *texpr)
 		dependent_link (&swc->dep);
 }
 
+/**
+ * sheet_widget_checkbox_get_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the link for the checkbox @so.
+ **/
 GnmExprTop const *
 sheet_widget_checkbox_get_link	 (SheetObject *so)
 {
 	SheetWidgetCheckbox *swc = GNM_SOW_CHECKBOX (so);
 	GnmExprTop const *texpr = swc->dep.texpr;
 
-	if (texpr)
-		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
 	return texpr;
 }
 
 
+/**
+ * sheet_widget_checkbox_set_label:
+ * @so: #SheetObject
+ * @str: (nullable): new label
+ *
+ * Sets the label for the checkbox @so to @str.
+ **/
 void
 sheet_widget_checkbox_set_label	(SheetObject *so, char const *str)
 {
@@ -2684,7 +2864,7 @@ sheet_widget_checkbox_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 0.5);
-	cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+	cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, dxh, halfheight - dxh);
@@ -2694,7 +2874,7 @@ sheet_widget_checkbox_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_rel_line_to (cr, -dx, 0.);
 	cairo_close_path (cr);
 	cairo_fill_preserve (cr);
-	cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+	cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
 	cairo_stroke (cr);
 
 	if (swc->value) {
@@ -2878,6 +3058,12 @@ sheet_widget_radio_button_set_property (GObject *obj, guint param_id,
 	}
 }
 
+/**
+ * sheet_widget_radio_button_get_value:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer none) (nullable): the value for the radio button @so.
+ **/
 GnmValue const *
 sheet_widget_radio_button_get_value (SheetObject *so)
 {
@@ -2889,6 +3075,13 @@ sheet_widget_radio_button_get_value (SheetObject *so)
 	return swrb->value;
 }
 
+/**
+ * sheet_widget_radio_button_set_value:
+ * @so: #SheetObject
+ * @val: (nullable): new value
+ *
+ * Sets the value for the radio button @so to @val.
+ **/
 void
 sheet_widget_radio_button_set_value (SheetObject *so, GnmValue const *val)
 {
@@ -2932,10 +3125,16 @@ sheet_widget_radio_button_init_full (SheetWidgetRadioButton *swrb,
 	g_return_if_fail (swrb != NULL);
 
 	swrb->being_updated = FALSE;
+
+	g_free (swrb->label);
 	swrb->label = g_strdup (label ? label : _("RadioButton"));
+
+	value_release (swrb->value);
 	swrb->value = value ? value_dup (value) : value_new_empty ();
+
 	swrb->active = active;
 
+	gnm_expr_top_unref (swrb->dep.texpr);
 	swrb->dep.sheet = NULL;
 	swrb->dep.flags = radio_button_get_dep_type ();
 	swrb->dep.texpr = (ref != NULL)
@@ -3087,6 +3286,13 @@ sheet_widget_radio_button_prep_sax_parser (SheetObject *so, GsfXMLIn *xin,
 		swrb->value = value_new_empty ();
 }
 
+/**
+ * sheet_widget_radio_button_set_link:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new link expression
+ *
+ * Sets the link for the radio button @so to @texpr.
+ **/
 void
 sheet_widget_radio_button_set_link (SheetObject *so, GnmExprTop const *texpr)
 {
@@ -3096,18 +3302,30 @@ sheet_widget_radio_button_set_link (SheetObject *so, GnmExprTop const *texpr)
 		dependent_link (&swrb->dep);
 }
 
+/**
+ * sheet_widget_radio_button_get_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the link for the radio button @so.
+ **/
 GnmExprTop const *
 sheet_widget_radio_button_get_link (SheetObject *so)
 {
 	SheetWidgetRadioButton *swrb = GNM_SOW_RADIO_BUTTON (so);
 	GnmExprTop const *texpr = swrb->dep.texpr;
 
-	if (texpr)
-		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
 	return texpr;
 }
 
+/**
+ * sheet_widget_radio_button_set_label:
+ * @so: #SheetObject
+ * @str: (nullable): new label
+ *
+ * Sets the label for the radio button @so to @str.
+ **/
 void
 sheet_widget_radio_button_set_label (SheetObject *so, char const *str)
 {
@@ -3131,60 +3349,59 @@ sheet_widget_radio_button_set_label (SheetObject *so, char const *str)
 
 
 typedef struct {
- 	GtkWidget *dialog;
- 	GnmExprEntry *expression;
- 	GtkWidget *label, *value;
+	GtkWidget *dialog;
+	GnmExprEntry *expression;
+	GtkWidget *label, *value;
 
- 	char *old_label;
+	char *old_label;
 	GnmValue *old_value;
- 	GtkWidget *old_focus;
+	GtkWidget *old_focus;
 
- 	WBCGtk  *wbcg;
- 	SheetWidgetRadioButton *swrb;
- 	Sheet		    *sheet;
+	WBCGtk  *wbcg;
+	SheetWidgetRadioButton *swrb;
+	Sheet		    *sheet;
 } RadioButtonConfigState;
 
 static void
 cb_radio_button_set_focus (G_GNUC_UNUSED GtkWidget *window, GtkWidget *focus_widget,
- 			   RadioButtonConfigState *state)
+			   RadioButtonConfigState *state)
 {
 	GtkWidget *ofp;
 
- 	/* Note:  half of the set-focus action is handle by the default
- 	 *        callback installed by wbc_gtk_attach_guru */
+	/* Note:  half of the set-focus action is handle by the default
+	 *        callback installed by wbcg_attach_guru */
 
 	ofp = state->old_focus
 		? gtk_widget_get_parent (state->old_focus)
 		: NULL;
 
- 	/* Force an update of the content in case it needs tweaking (eg make it
- 	 * absolute) */
- 	if (ofp && GNM_EXPR_ENTRY_IS (ofp)) {
- 		GnmParsePos  pp;
- 		GnmExprTop const *texpr = gnm_expr_entry_parse (
- 			GNM_EXPR_ENTRY (ofp),
- 			parse_pos_init_sheet (&pp, state->sheet),
- 			NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
- 		if (texpr != NULL)
- 			gnm_expr_top_unref (texpr);
-  	}
- 	state->old_focus = focus_widget;
+	/* Force an update of the content in case it needs tweaking (eg make it
+	 * absolute) */
+	if (ofp && GNM_EXPR_ENTRY_IS (ofp)) {
+		GnmParsePos  pp;
+		GnmExprTop const *texpr = gnm_expr_entry_parse (
+			GNM_EXPR_ENTRY (ofp),
+			parse_pos_init_sheet (&pp, state->sheet),
+			NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
+		gnm_expr_top_unref (texpr);
+	}
+	state->old_focus = focus_widget;
 }
 
 static void
 cb_radio_button_config_destroy (RadioButtonConfigState *state)
 {
- 	g_return_if_fail (state != NULL);
+	g_return_if_fail (state != NULL);
 
- 	g_free (state->old_label);
- 	state->old_label = NULL;
+	g_free (state->old_label);
+	state->old_label = NULL;
 
- 	value_release (state->old_value);
- 	state->old_value = NULL;
+	value_release (state->old_value);
+	state->old_value = NULL;
 
- 	state->dialog = NULL;
+	state->dialog = NULL;
 
- 	g_free (state);
+	g_free (state);
 }
 
 static GnmValue *
@@ -3199,37 +3416,37 @@ cb_radio_button_config_ok_clicked (G_GNUC_UNUSED GtkWidget *button, RadioButtonC
 {
 	SheetObject *so = GNM_SO (state->swrb);
 	GnmParsePos  pp;
- 	GnmExprTop const *texpr = gnm_expr_entry_parse
+	GnmExprTop const *texpr = gnm_expr_entry_parse
 		(state->expression,
 		 parse_pos_init_sheet (&pp, so->sheet),
 		 NULL, FALSE, GNM_EXPR_PARSE_DEFAULT);
- 	gchar const *text = gtk_entry_get_text (GTK_ENTRY (state->label));
- 	gchar const *val = gtk_entry_get_text (GTK_ENTRY (state->value));
+	gchar const *text = gtk_entry_get_text (GTK_ENTRY (state->label));
+	gchar const *val = gtk_entry_get_text (GTK_ENTRY (state->value));
 	GnmValue *new_val = so_parse_value (so, val);
 
- 	cmd_so_set_radio_button (GNM_WBC (state->wbcg), so,
- 				 texpr,
+	cmd_so_set_radio_button (GNM_WBC (state->wbcg), so,
+				 texpr,
 				 g_strdup (state->old_label), g_strdup (text),
 				 value_dup (state->old_value), new_val);
 
- 	gtk_widget_destroy (state->dialog);
+	gtk_widget_destroy (state->dialog);
 }
 
 static void
 cb_radio_button_config_cancel_clicked (G_GNUC_UNUSED GtkWidget *button, RadioButtonConfigState *state)
 {
- 	sheet_widget_radio_button_set_label (GNM_SO (state->swrb),
- 					     state->old_label);
- 	sheet_widget_radio_button_set_value (GNM_SO (state->swrb),
- 					     state->old_value);
- 	gtk_widget_destroy (state->dialog);
+	sheet_widget_radio_button_set_label (GNM_SO (state->swrb),
+					     state->old_label);
+	sheet_widget_radio_button_set_value (GNM_SO (state->swrb),
+					     state->old_value);
+	gtk_widget_destroy (state->dialog);
 }
 
 static void
 cb_radio_button_label_changed (GtkEntry *entry, RadioButtonConfigState *state)
 {
- 	sheet_widget_radio_button_set_label (GNM_SO (state->swrb),
- 					     gtk_entry_get_text (entry));
+	sheet_widget_radio_button_set_label (GNM_SO (state->swrb),
+					     gtk_entry_get_text (entry));
 }
 
 static void
@@ -3239,99 +3456,99 @@ cb_radio_button_value_changed (GtkEntry *entry, RadioButtonConfigState *state)
 	SheetObject *so = GNM_SO (state->swrb);
 	GnmValue *val = so_parse_value (so, text);
 
- 	sheet_widget_radio_button_set_value (so, val);
+	sheet_widget_radio_button_set_value (so, val);
 	value_release (val);
 }
 
 static void
 sheet_widget_radio_button_user_config (SheetObject *so, SheetControl *sc)
 {
- 	SheetWidgetRadioButton *swrb = GNM_SOW_RADIO_BUTTON (so);
- 	WBCGtk  *wbcg = scg_wbcg (GNM_SCG (sc));
- 	RadioButtonConfigState *state;
- 	GtkWidget *grid;
+	SheetWidgetRadioButton *swrb = GNM_SOW_RADIO_BUTTON (so);
+	WBCGtk  *wbcg = scg_wbcg (GNM_SCG (sc));
+	RadioButtonConfigState *state;
+	GtkWidget *grid;
 	GString *valstr;
 	GtkBuilder *gui;
 
- 	g_return_if_fail (swrb != NULL);
+	g_return_if_fail (swrb != NULL);
 
 	/* Only pop up one copy per workbook */
- 	if (gnm_dialog_raise_if_exists (wbcg, SHEET_OBJECT_CONFIG_KEY))
- 		return;
+	if (gnm_dialog_raise_if_exists (wbcg, SHEET_OBJECT_CONFIG_KEY))
+		return;
 
 	gui = gnm_gtk_builder_load ("res:ui/so-radiobutton.ui", NULL, GO_CMD_CONTEXT (wbcg));
 	if (!gui)
 		return;
- 	state = g_new (RadioButtonConfigState, 1);
- 	state->swrb = swrb;
- 	state->wbcg = wbcg;
- 	state->sheet = sc_sheet	(sc);
- 	state->old_focus = NULL;
+	state = g_new (RadioButtonConfigState, 1);
+	state->swrb = swrb;
+	state->wbcg = wbcg;
+	state->sheet = sc_sheet	(sc);
+	state->old_focus = NULL;
 	state->old_label = g_strdup (swrb->label);
- 	state->old_value = value_dup (swrb->value);
- 	state->dialog = go_gtk_builder_get_widget (gui, "SO-Radiobutton");
+	state->old_value = value_dup (swrb->value);
+	state->dialog = go_gtk_builder_get_widget (gui, "SO-Radiobutton");
 
- 	grid = go_gtk_builder_get_widget (gui, "main-grid");
+	grid = go_gtk_builder_get_widget (gui, "main-grid");
 
- 	state->expression = gnm_expr_entry_new (wbcg, TRUE);
- 	gnm_expr_entry_set_flags (state->expression,
+	state->expression = gnm_expr_entry_new (wbcg, TRUE);
+	gnm_expr_entry_set_flags (state->expression,
 				  GNM_EE_FORCE_ABS_REF | GNM_EE_SHEET_OPTIONAL | GNM_EE_SINGLE_RANGE,
 				  GNM_EE_MASK);
- 	gnm_expr_entry_load_from_dep (state->expression, &swrb->dep);
- 	go_atk_setup_label (go_gtk_builder_get_widget (gui, "label_linkto"),
+	gnm_expr_entry_load_from_dep (state->expression, &swrb->dep);
+	go_atk_setup_label (go_gtk_builder_get_widget (gui, "label_linkto"),
 			    GTK_WIDGET (state->expression));
- 	gtk_grid_attach (GTK_GRID (grid),
+	gtk_grid_attach (GTK_GRID (grid),
 	                  GTK_WIDGET (state->expression), 1, 0, 1, 1);
- 	gtk_widget_show (GTK_WIDGET (state->expression));
+	gtk_widget_show (GTK_WIDGET (state->expression));
 
- 	state->label = go_gtk_builder_get_widget (gui, "label_entry");
- 	gtk_entry_set_text (GTK_ENTRY (state->label), swrb->label);
- 	gtk_editable_select_region (GTK_EDITABLE(state->label), 0, -1);
- 	state->value = go_gtk_builder_get_widget (gui, "value_entry");
+	state->label = go_gtk_builder_get_widget (gui, "label_entry");
+	gtk_entry_set_text (GTK_ENTRY (state->label), swrb->label);
+	gtk_editable_select_region (GTK_EDITABLE(state->label), 0, -1);
+	state->value = go_gtk_builder_get_widget (gui, "value_entry");
 
 	valstr = g_string_new (NULL);
 	value_get_as_gstring (swrb->value, valstr, so->sheet->convs);
- 	gtk_entry_set_text (GTK_ENTRY (state->value), valstr->str);
+	gtk_entry_set_text (GTK_ENTRY (state->value), valstr->str);
 	g_string_free (valstr, TRUE);
 
-  	gnm_editable_enters (GTK_WINDOW (state->dialog),
- 				  GTK_WIDGET (state->expression));
- 	gnm_editable_enters (GTK_WINDOW (state->dialog),
- 				  GTK_WIDGET (state->label));
- 	gnm_editable_enters (GTK_WINDOW (state->dialog),
- 				  GTK_WIDGET (state->value));
+	gnm_editable_enters (GTK_WINDOW (state->dialog),
+				  GTK_WIDGET (state->expression));
+	gnm_editable_enters (GTK_WINDOW (state->dialog),
+				  GTK_WIDGET (state->label));
+	gnm_editable_enters (GTK_WINDOW (state->dialog),
+				  GTK_WIDGET (state->value));
 
- 	g_signal_connect (G_OBJECT (state->label),
+	g_signal_connect (G_OBJECT (state->label),
 			  "changed",
 			  G_CALLBACK (cb_radio_button_label_changed), state);
- 	g_signal_connect (G_OBJECT (state->value),
+	g_signal_connect (G_OBJECT (state->value),
 			  "changed",
 			  G_CALLBACK (cb_radio_button_value_changed), state);
- 	g_signal_connect (G_OBJECT (go_gtk_builder_get_widget (gui, "ok_button")),
+	g_signal_connect (G_OBJECT (go_gtk_builder_get_widget (gui, "ok_button")),
 			  "clicked",
 			  G_CALLBACK (cb_radio_button_config_ok_clicked), state);
- 	g_signal_connect (G_OBJECT (go_gtk_builder_get_widget (gui, "cancel_button")),
+	g_signal_connect (G_OBJECT (go_gtk_builder_get_widget (gui, "cancel_button")),
 			  "clicked",
 			  G_CALLBACK (cb_radio_button_config_cancel_clicked), state);
 
- 	gnm_init_help_button (
- 		go_gtk_builder_get_widget (gui, "help_button"),
- 		GNUMERIC_HELP_LINK_SO_RADIO_BUTTON);
+	gnm_init_help_button (
+		go_gtk_builder_get_widget (gui, "help_button"),
+		GNUMERIC_HELP_LINK_SO_RADIO_BUTTON);
 
- 	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
- 			       SHEET_OBJECT_CONFIG_KEY);
+	gnm_keyed_dialog (state->wbcg, GTK_WINDOW (state->dialog),
+			       SHEET_OBJECT_CONFIG_KEY);
 
- 	wbc_gtk_attach_guru (state->wbcg, state->dialog);
- 	g_object_set_data_full (G_OBJECT (state->dialog),
+	wbcg_attach_guru (state->wbcg, state->dialog);
+	g_object_set_data_full (G_OBJECT (state->dialog),
 				"state", state, (GDestroyNotify) cb_radio_button_config_destroy);
 	g_object_unref (gui);
 
 	/* Note:  half of the set-focus action is handle by the default */
- 	/*        callback installed by wbc_gtk_attach_guru */
- 	g_signal_connect (G_OBJECT (state->dialog), "set-focus",
+	/*        callback installed by wbcg_attach_guru */
+	g_signal_connect (G_OBJECT (state->dialog), "set-focus",
 			  G_CALLBACK (cb_radio_button_set_focus), state);
 
- 	gtk_widget_show (state->dialog);
+	gtk_widget_show (state->dialog);
 }
 
 static void
@@ -3350,14 +3567,14 @@ sheet_widget_radio_button_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 0.5);
-	cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+	cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, dxh + dx, halfheight);
 	cairo_arc (cr, dx, halfheight, dxh, 0., 2*M_PI);
 	cairo_close_path (cr);
 	cairo_fill_preserve (cr);
-	cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+	cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
 	cairo_stroke (cr);
 
 	if (swr->active) {
@@ -3380,15 +3597,15 @@ sheet_widget_radio_button_draw_cairo (SheetObject const *so, cairo_t *cr,
 }
 
 SOW_MAKE_TYPE (radio_button, RadioButton,
- 	       sheet_widget_radio_button_user_config,
-  	       sheet_widget_radio_button_set_sheet,
-  	       so_clear_sheet,
-  	       sheet_widget_radio_button_foreach_dep,
- 	       sheet_widget_radio_button_copy,
- 	       sheet_widget_radio_button_write_xml_sax,
- 	       sheet_widget_radio_button_prep_sax_parser,
-  	       sheet_widget_radio_button_get_property,
-  	       sheet_widget_radio_button_set_property,
+	       sheet_widget_radio_button_user_config,
+	       sheet_widget_radio_button_set_sheet,
+	       so_clear_sheet,
+	       sheet_widget_radio_button_foreach_dep,
+	       sheet_widget_radio_button_copy,
+	       sheet_widget_radio_button_write_xml_sax,
+	       sheet_widget_radio_button_prep_sax_parser,
+	       sheet_widget_radio_button_get_property,
+	       sheet_widget_radio_button_set_property,
 	       sheet_widget_radio_button_draw_cairo,
 	       {
 		       g_object_class_install_property
@@ -3441,7 +3658,7 @@ enum {
 	LIST_BASE_LAST_SIGNAL
 };
 
-static guint list_base_signals [LIST_BASE_LAST_SIGNAL] = { 0 };
+static guint list_base_signals[LIST_BASE_LAST_SIGNAL] = { 0 };
 static GType sheet_widget_list_base_get_type (void);
 
 static void
@@ -3478,7 +3695,7 @@ sheet_widget_list_base_set_selection (SheetWidgetListBase *swl, int selection,
 					  sheet_object_get_sheet (GNM_SO (swl)));
 		}
 		g_signal_emit (G_OBJECT (swl),
-			list_base_signals [LIST_BASE_SELECTION_CHANGED], 0);
+			list_base_signals[LIST_BASE_SELECTION_CHANGED], 0);
 	}
 }
 
@@ -3509,7 +3726,7 @@ sheet_widget_list_base_set_selection_value (SheetWidgetListBase *swl, GnmValue *
 	if (swl->selection != selection) {
 		swl->selection = selection;
 		g_signal_emit (G_OBJECT (swl),
-			list_base_signals [LIST_BASE_SELECTION_CHANGED], 0);
+			list_base_signals[LIST_BASE_SELECTION_CHANGED], 0);
 	}
 }
 
@@ -3580,7 +3797,7 @@ list_content_eval (GnmDependent *dep)
 	if (NULL != swl->model)
 		g_object_unref (swl->model);
 	swl->model = GTK_TREE_MODEL (model);
-	g_signal_emit (G_OBJECT (swl), list_base_signals [LIST_BASE_MODEL_CHANGED], 0);
+	g_signal_emit (G_OBJECT (swl), list_base_signals[LIST_BASE_MODEL_CHANGED], 0);
 }
 
 static void
@@ -3688,7 +3905,7 @@ sheet_widget_list_base_prep_sax_parser (SheetObject *so, GsfXMLIn *xin,
 static GtkWidget *
 sheet_widget_list_base_create_widget (G_GNUC_UNUSED SheetObjectWidget *sow)
 {
-	g_warning("ERROR: sheet_widget_list_base_create_widget SHOULD NEVER BE CALLED (but it has been)!\n");
+	g_warning ("ERROR: sheet_widget_list_base_create_widget SHOULD NEVER BE CALLED (but it has been)!\n");
 	return gtk_frame_new ("invisiwidget(WARNING: I AM A BUG!)");
 }
 
@@ -3720,6 +3937,14 @@ SOW_MAKE_TYPE (list_base, ListBase,
 			G_TYPE_NONE, 0);
 	       })
 
+/**
+ * sheet_widget_list_base_set_links:
+ * @so: #SheetObject
+ * @result_link: (nullable) (transfer none): new output expression
+ * @content: (nullable) (transfer none): new content expression
+ *
+ * Sets the links for the list/combo @so.
+ **/
 void
 sheet_widget_list_base_set_links (SheetObject *so,
 				  GnmExprTop const *output,
@@ -3736,30 +3961,46 @@ sheet_widget_list_base_set_links (SheetObject *so,
 	}
 }
 
+/**
+ * sheet_widget_list_base_get_result_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the result link for @so.
+ **/
 GnmExprTop const *
 sheet_widget_list_base_get_result_link  (SheetObject const *so)
 {
 	SheetWidgetListBase *swl = GNM_SOW_LIST_BASE (so);
 	GnmExprTop const *texpr = swl->output_dep.texpr;
 
- 	if (texpr)
-		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
- 	return texpr;
+	return texpr;
 }
 
+/**
+ * sheet_widget_list_base_get_content_link:
+ * @so: #SheetObject
+ *
+ * Returns: (transfer full) (nullable): the content link for @so.
+ **/
 GnmExprTop const *
 sheet_widget_list_base_get_content_link (SheetObject const *so)
 {
 	SheetWidgetListBase *swl = GNM_SOW_LIST_BASE (so);
 	GnmExprTop const *texpr = swl->content_dep.texpr;
 
- 	if (texpr)
-		gnm_expr_top_ref (texpr);
+	gnm_expr_top_ref (texpr);
 
- 	return texpr;
+	return texpr;
 }
 
+/**
+ * sheet_widget_list_base_result_type_is_index:
+ * @so: #SheetObject
+ *
+ * Returns: %TRUE if the result is an index, %FALSE if it's the value.
+ **/
 gboolean
 sheet_widget_list_base_result_type_is_index (SheetObject const *so)
 {
@@ -3768,6 +4009,13 @@ sheet_widget_list_base_result_type_is_index (SheetObject const *so)
 	return swl->result_as_index;
 }
 
+/**
+ * sheet_widget_list_base_set_result_type:
+ * @so: #SheetObject
+ * @as_index: boolean
+ *
+ * Sets whether the result of the list/combo @so should be an index or the value.
+ **/
 void
 sheet_widget_list_base_set_result_type (SheetObject *so, gboolean as_index)
 {
@@ -3899,7 +4147,7 @@ sheet_widget_list_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 0.5);
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, 0, 0);
@@ -3914,7 +4162,7 @@ sheet_widget_list_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_rel_line_to (cr, 0, height);
 	cairo_stroke (cr);
 
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, width - 5 -3, height - 12);
@@ -4053,7 +4301,7 @@ sheet_widget_combo_draw_cairo (SheetObject const *so, cairo_t *cr,
 
 	cairo_save (cr);
 	cairo_set_line_width (cr, 0.5);
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, 0, 0);
@@ -4068,7 +4316,7 @@ sheet_widget_combo_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_rel_line_to (cr, 0, height);
 	cairo_stroke (cr);
 
-	cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+	cairo_set_source_rgb (cr, 0.5, 0.5, 0.5);
 
 	cairo_new_path (cr);
 	cairo_move_to (cr, width - 5 -3, halfheight - 4);
@@ -4077,7 +4325,7 @@ sheet_widget_combo_draw_cairo (SheetObject const *so, cairo_t *cr,
 	cairo_close_path (cr);
 	cairo_fill (cr);
 
-	cairo_set_source_rgb(cr, 0, 0, 0);
+	cairo_set_source_rgb (cr, 0, 0, 0);
 	cairo_move_to (cr, 4., halfheight);
 
 	if (swl->model != NULL) {
@@ -4118,7 +4366,7 @@ GSF_CLASS (SheetWidgetCombo, sheet_widget_combo,
  * sheet_object_widget_register:
  *
  * Initialize the classes for the sheet-object-widgets. We need to initialize
- * them before we try loading a sheet that might contain sheet-object-widgets
+ * them before we try loading a sheet that might contain sheet-object-widgets.
  **/
 void
 sheet_object_widget_register (void)

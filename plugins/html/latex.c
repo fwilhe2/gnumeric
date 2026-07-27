@@ -30,8 +30,8 @@
  *
  *
  * The LaTeX2e functions are named:
- *		latex_file_save()
- *              latex_table_visible_file_save()
+ *		latex_file_save
+ *              latex_table_visible_file_save
  *              latex_table_file_save
  *
  */
@@ -148,24 +148,24 @@ static latex_border_connectors_t const conn_styles[LATEX_MAX_BORDER]
  *
  */
 static char const *
-latex_raw_str(char const *p, GsfOutput *output, gboolean utf8)
+latex_raw_str (char const *p, GsfOutput *output, gboolean utf8)
 {
 	char const *p_begin, *p_orig = p;
 	int depth = 1;
-	if(strncasecmp(p, "\\L{", 3) == 0){
+	if (strncasecmp (p, "\\L{", 3) == 0){
 		p += 3;
 		p_begin = p;
 		/* find the matching close bracket */
-		for(; *p; p = utf8 ? g_utf8_next_char(p) : p + 1){
+		for (; *p; p = utf8 ? g_utf8_next_char (p) : p + 1){
 			switch(*p){ /* FIXME: how to put in unmatched brackets? */
 				case '{':
 					depth ++;
 					break;
 				case '}':
 					depth--;
-					if(depth == 0){
+					if (depth == 0){
 						/* put the string beginning from p_begin to p to output */
-						gsf_output_write(output, p - p_begin, p_begin);
+						gsf_output_write (output, p - p_begin, p_begin);
 						return p;
 					}
 			}
@@ -202,8 +202,8 @@ latex_fputs_utf (char const *p, GsfOutput *output)
 			gsf_output_printf (output, "\\%c{ }", *p);
 			break;
 		case '\\':
-			rlt = latex_raw_str(p, output, TRUE);
-			if(rlt == p)
+			rlt = latex_raw_str (p, output, TRUE);
+			if (rlt == p)
 			    gsf_output_puts (output, "$\\backslash$");
 			else
 			    p = rlt;
@@ -248,8 +248,8 @@ latex_math_fputs_utf (char const *p, GsfOutput *output)
 				gsf_output_printf (output, "\\%c{ }", *p);
 				break;
 			case '\\':
-				rlt = latex_raw_str(p, output, TRUE);
-				if(rlt == p)
+				rlt = latex_raw_str (p, output, TRUE);
+				if (rlt == p)
 				    gsf_output_puts (output, "$\\backslash$");
 				else
 				    p = rlt;
@@ -341,14 +341,15 @@ latex_fputs_latin (char const *text, GsfOutput *output)
 			gsf_output_printf (output, "\\%c{ }", *p);
 			break;
 		case '\\':
-			rlt = latex_raw_str(p, output, FALSE);
-			if(rlt == p)
+			rlt = latex_raw_str (p, output, FALSE);
+			if (rlt == p)
 			    gsf_output_puts (output, "$\\backslash$");
 			else
 			    p = rlt;
 			break;
 			/* Are these available only in LaTeX through mathmode? */
-		case '>': case '<': case 'µ':
+		case '>': case '<':
+			// case 'Âµ': // cannot be correct for utf8
 			gsf_output_printf (output, "$%c$", *p);
 			break;
 
@@ -369,7 +370,7 @@ latex_fputs_latin (char const *text, GsfOutput *output)
  * This escapes any special LaTeX characters from the LaTeX engine,
  * except the ones enclosed in "\L{" and "}".
  *
- * We assume that htis will be set in Mathematics mode.
+ * We assume that this will be set in Mathematics mode.
  */
 static void
 latex_math_fputs_latin (char const *text, GsfOutput *output)
@@ -392,8 +393,8 @@ latex_math_fputs_latin (char const *text, GsfOutput *output)
 				gsf_output_printf (output, "\\%c{ }", *p);
 				break;
 			case '\\':
-				rlt = latex_raw_str(p, output, FALSE);
-				if(rlt == p)
+				rlt = latex_raw_str (p, output, FALSE);
+				if (rlt == p)
 				    gsf_output_puts (output, "$\\backslash$");
 				else
 				    p = rlt;
@@ -467,14 +468,14 @@ latex2e_write_font_encodings (GsfOutput *output, Sheet *sheet, GnmRange const *r
 
 /**
  * latex2e_write_file_header:
- *
  * @output: Output stream where the cell contents will be written.
+ * @sheet: #Sheet
+ * @range: #GnmRange
  *
- * This ouputs the LaTeX header. Kept separate for esthetics.
- */
-
+ * This outputs the LaTeX header. Kept separate for esthetics.
+ **/
 static void
-latex2e_write_file_header(GsfOutput *output, Sheet *sheet, GnmRange const *range)
+latex2e_write_file_header (GsfOutput *output, Sheet *sheet, GnmRange const *range)
 {
 	gboolean is_landscape = FALSE, use_utf8;
 	GtkPageOrientation orient = print_info_get_paper_orientation (sheet->print_info);
@@ -659,7 +660,7 @@ latex2e_write_file_header(GsfOutput *output, Sheet *sheet, GnmRange const *range
  * A convenience function that also helps make nicer code.
  */
 static void
-latex2e_write_table_header(GsfOutput *output, int num_cols)
+latex2e_write_table_header (GsfOutput *output, int num_cols)
 {
 	int col;
 
@@ -789,20 +790,20 @@ latex2e_print_vert_border (GsfOutput *output, GnmStyleBorderType style)
 
 /**
  * latex2e_write_blank_multicolumn_cell:
- *
  * @output: output stream where the cell contents will be written.
- * @star_col:
- * @start_row:
+ * @start_col: column
+ * @start_row: row
  * @num_merged_cols: an integer value of the number of columns to merge.
  * @num_merged_rows: an integer value of the number of rows to merge.
+ * @index: index
+ * @borders: (array): borders
  * @sheet:  the current sheet.
  *
  * This function creates all the LaTeX code for the cell of a table (i.e. all
  * the code that might fall between two ampersands (&)), assuming that
  * the cell is in fact NULL. We therefore have only to worry about a few
  * formatting issues.
- *
- */
+ **/
 static void
 latex2e_write_blank_multicolumn_cell (GsfOutput *output, int start_col,
 				      G_GNUC_UNUSED int start_row,
@@ -810,19 +811,8 @@ latex2e_write_blank_multicolumn_cell (GsfOutput *output, int start_col,
 				      gint index,
 				      GnmStyleBorderType *borders, Sheet *sheet)
 {
-	int merge_width = 0;
 	GnmStyleBorderType left_border = GNM_STYLE_BORDER_NONE;
 	GnmStyleBorderType right_border = GNM_STYLE_BORDER_NONE;
-
-	if (num_merged_cols > 1 || num_merged_rows > 1) {
-		ColRowInfo const * ci;
-		int i;
-
-		for (i = 0; i < num_merged_cols; i++) {
-			ci = sheet_col_get_info (sheet, start_col + i);
-			merge_width += ci->size_pixels;
-		}
-	}
 
 	if (index == 0) {
 		left_border = *borders;
@@ -864,7 +854,7 @@ latex2e_write_blank_multicolumn_cell (GsfOutput *output, int start_col,
 			latex2e_print_vert_border (output, left_border);
 
 		/* Drop in the left hand format delimiter. */
-		gsf_output_printf (output, "p{\\gnumericCol%s}", col_name(start_col));
+		gsf_output_printf (output, "p{\\gnumericCol%s}", col_name (start_col));
 
 		if (right_border != GNM_STYLE_BORDER_NONE)
 			latex2e_print_vert_border (output, right_border);
@@ -902,12 +892,13 @@ latex2e_write_blank_multicolumn_cell (GsfOutput *output, int start_col,
 
 /**
  * latex2e_write_multicolumn_cell:
- *
  * @output: output stream where the cell contents will be written.
  * @cell:   the cell whose contents are to be written.
- * @star_col:
+ * @start_col: column
  * @num_merged_cols: an integer value of the number of columns to merge.
  * @num_merged_rows: an integer value of the number of rows to merge.
+ * @index: index
+ * @borders: (array): borders
  * @sheet:  the current sheet.
  *
  * This function creates all the LaTeX code for the cell of a table (i.e. all
@@ -915,7 +906,7 @@ latex2e_write_blank_multicolumn_cell (GsfOutput *output, int start_col,
  *
  * Note: we are _not_ putting single cell into \multicolumns since this
  * makes it much more difficult to change column widths later on.
- */
+ **/
 static void
 latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 				int num_merged_cols, int num_merged_rows,
@@ -926,7 +917,6 @@ latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 	gushort r,g,b;
 	gboolean wrap = FALSE;
 	GOFormatFamily cell_format_family;
-	int merge_width = 0;
 	GnmStyleBorderType left_border = GNM_STYLE_BORDER_NONE;
 	GnmStyleBorderType right_border = GNM_STYLE_BORDER_NONE;
 
@@ -935,16 +925,6 @@ latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 	gboolean hidden = gnm_style_get_contents_hidden (style);
 
 	g_return_if_fail (style != NULL);
-
-	if (num_merged_cols > 1 || num_merged_rows > 1) {
-		ColRowInfo const * ci;
-		int i;
-
-		for (i = 0; i < num_merged_cols; i++) {
-			ci = sheet_col_get_info (sheet, start_col + i);
-			merge_width += ci->size_pixels;
-		}
-	}
 
 	if (index == 0) {
 		left_border = *borders;
@@ -986,7 +966,7 @@ latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 			latex2e_print_vert_border (output, left_border);
 
 		/* Drop in the left hand format delimiter. */
-		gsf_output_printf (output, "p{\\gnumericCol%s}", col_name(start_col));
+		gsf_output_printf (output, "p{\\gnumericCol%s}", col_name (start_col));
 
 		if (right_border != GNM_STYLE_BORDER_NONE)
 			latex2e_print_vert_border (output, right_border);
@@ -1104,7 +1084,7 @@ latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 		    cell_format_family == GO_FORMAT_FRACTION ||
 		    cell_format_family == GO_FORMAT_SCIENTIFIC){
 			gsf_output_printf (output, "$");
-			if (gnm_style_get_font_italic(style))
+			if (gnm_style_get_font_italic (style))
 			    gsf_output_printf (output, "\\gnumericmathit{");
 
 			/* Print the cell contents. */
@@ -1112,7 +1092,7 @@ latex2e_write_multicolumn_cell (GsfOutput *output, GnmCell *cell, int start_col,
 			latex_math_fputs (rendered_string, output);
 			g_free (rendered_string);
 
-			if (gnm_style_get_font_italic(style))
+			if (gnm_style_get_font_italic (style))
 			    gsf_output_printf (output, "}");
 			gsf_output_printf (output, "$");
 		} else {
@@ -1256,22 +1236,12 @@ latex2e_print_hhline (GsfOutput *output, GnmStyleBorderType *clines, int n, GnmS
 static GnmRange
 file_saver_sheet_get_extent (Sheet *sheet)
 {
-  	GnmRangeRef *range
-		= g_object_get_data (G_OBJECT (sheet->workbook),
-				     "ssconvert-range");
-	if (range) {
-		Sheet *start_sheet, *end_sheet;
-		GnmEvalPos ep;
-		GnmRange r;
+	GnmRange r;
 
-		gnm_rangeref_normalize (range,
-					eval_pos_init_sheet (&ep, sheet),
-					&start_sheet, &end_sheet,
-					&r);
-		if (start_sheet == sheet)
-			return r;
-	}
-	return sheet_get_extent (sheet, TRUE, TRUE);
+	if (gnm_export_range_for_sheet (sheet, &r) >= 0)
+		return r;
+	else
+		return sheet_get_extent (sheet, TRUE, TRUE);
 }
 
 /**
@@ -1283,7 +1253,7 @@ file_saver_sheet_get_extent (Sheet *sheet)
  * @filename:         where we'll write.
  *
  * This writes the top sheet of a Gnumeric workbook to a LaTeX2e longtable. We
- * check for merges here, then call the function latex2e_write_multicolumn_cell()
+ * check for merges here, then call the function latex2e_write_multicolumn_cell
  * to render the format and contents of the cell.
  */
 void
@@ -1305,7 +1275,7 @@ latex_file_save (GOFileSaver const *fs, G_GNUC_UNUSED GOIOContext *io_context,
 	total_range = file_saver_sheet_get_extent (current_sheet);
 
 	/* This is the preamble of the LaTeX2e file. */
-	latex2e_write_file_header(output, current_sheet, &total_range);
+	latex2e_write_file_header (output, current_sheet, &total_range);
 
 	num_cols = total_range.end.col - total_range.start.col + 1;
 
@@ -1313,7 +1283,7 @@ latex_file_save (GOFileSaver const *fs, G_GNUC_UNUSED GOIOContext *io_context,
 	for (col = total_range.start.col; col <=  total_range.end.col; col++) {
 		ColRowInfo const * ci;
 		ci = sheet_col_get_info (current_sheet, col);
-		gsf_output_printf (output, "\t%ipt+%%\n", ci->size_pixels * 10 / 12);
+		gsf_output_printf (output, "\t%.1fpt+%%\n", ci->size_pts);
 	}
 	gsf_output_printf (output, "0pt}\n\\def\\gumericNumCols{%i}\n", num_cols);
 
@@ -1344,8 +1314,8 @@ latex_file_save (GOFileSaver const *fs, G_GNUC_UNUSED GOIOContext *io_context,
 		ci = sheet_col_get_info (current_sheet, col);
 		gsf_output_printf (output, "\\ifthenelse{\\isundefined{\\gnumericCol%s}}"
 				   "{\\newlength{\\gnumericCol%s}}{}\\settowidth{\\gnumericCol%s}"
-				   "{\\begin{tabular}{@{}p{%ipt*\\gnumericScale}@{}}x\\end{tabular}}\n",
-				   colname, colname, colname, ci->size_pixels * 10 / 12);
+				   "{\\begin{tabular}{@{}p{%.1fpt*\\gnumericScale}@{}}x\\end{tabular}}\n",
+				   colname, colname, colname, ci->size_pts);
 	}
 
 	/* Start outputting the table. */
@@ -1428,14 +1398,14 @@ latex_file_save (GOFileSaver const *fs, G_GNUC_UNUSED GOIOContext *io_context,
 			/* Check a merge. */
 			merge_range = gnm_sheet_merge_is_corner (current_sheet, &pos);
 			if (merge_range == NULL) {
-				if (gnm_cell_is_empty(cell))
-					latex2e_write_blank_multicolumn_cell(output, col, row,
-									     1, 1,
+				if (gnm_cell_is_empty (cell))
+					latex2e_write_blank_multicolumn_cell (output, col, row,
+									      1, 1,
 							       col - total_range.start.col,
 							       next_vert, current_sheet);
 				else
-					latex2e_write_multicolumn_cell(output, cell, col,
-								       1, 1,
+					latex2e_write_multicolumn_cell (output, cell, col,
+									1, 1,
 							       col - total_range.start.col,
 							       next_vert, current_sheet);
 				continue;
@@ -1445,17 +1415,17 @@ latex_file_save (GOFileSaver const *fs, G_GNUC_UNUSED GOIOContext *io_context,
 			num_merged_cols = merge_range->end.col - merge_range->start.col + 1;
 			num_merged_rows = merge_range->end.row - merge_range->start.row + 1;
 
-			if (gnm_cell_is_empty(cell))
-				latex2e_write_blank_multicolumn_cell(output, col, row,
-								     num_merged_cols,
-								     num_merged_rows,
-								     col - total_range.start.col,
-								     next_vert, current_sheet);
+			if (gnm_cell_is_empty (cell))
+				latex2e_write_blank_multicolumn_cell (output, col, row,
+								      num_merged_cols,
+								      num_merged_rows,
+								      col - total_range.start.col,
+								      next_vert, current_sheet);
 			else
-				latex2e_write_multicolumn_cell(output, cell, col, num_merged_cols,
-							       num_merged_rows,
-							       col - total_range.start.col,
-							       next_vert, current_sheet);
+				latex2e_write_multicolumn_cell (output, cell, col, num_merged_cols,
+								num_merged_rows,
+								col - total_range.start.col,
+								next_vert, current_sheet);
 			col += (num_merged_cols - 1);
 			continue;
 		}
@@ -1539,7 +1509,7 @@ latex2e_table_write_cell (GsfOutput *output, GnmCell *cell)
  */
 
 static void
-latex2e_table_write_file_header(GsfOutput *output)
+latex2e_table_write_file_header (GsfOutput *output)
 {
 	gsf_output_puts (output,
 "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n"
@@ -1570,7 +1540,7 @@ latex_table_file_save_impl (GOFileSaver const *fs, WorkbookView const *wb_view,
 	int row, col;
 
 	/* This is the preamble of the LaTeX2e file. */
-	latex2e_table_write_file_header(output);
+	latex2e_table_write_file_header (output);
 
 	/* Get the sheet and its range from the plugin function argument. */
 	current_sheet = gnm_file_saver_get_sheet (fs, wb_view);
@@ -1595,7 +1565,7 @@ latex_table_file_save_impl (GOFileSaver const *fs, WorkbookView const *wb_view,
 				if (gnm_cell_is_empty (cell))
 					continue;
 
-				latex2e_table_write_cell(output, cell);
+				latex2e_table_write_cell (output, cell);
 			}
 			gsf_output_printf (output, "\\\\\n");
 		}

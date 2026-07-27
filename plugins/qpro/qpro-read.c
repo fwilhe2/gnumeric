@@ -1,4 +1,3 @@
-
 /*
  * qpro-read.c: Read Quatro Pro files
  *
@@ -137,10 +136,11 @@ q_condition_barf (QProReadState *state, const char *cond)
 
 
 static GnmValue *
-qpro_new_string (QProReadState *state, gchar const *data)
+qpro_new_string (QProReadState *state, gchar const *data, gssize maxlen)
 {
+	gsize len = (maxlen < 0) ? strlen (data) : strnlen (data, maxlen);
 	return value_new_string_nocopy (
-		g_convert_with_iconv (data, -1, state->converter,
+		g_convert_with_iconv (data, len, state->converter,
 				      NULL, NULL, NULL));
 }
 
@@ -186,11 +186,20 @@ error:
 static gboolean
 qpro_validate_len (QProReadState *state, char const *id, guint16 len, int expected_len)
 {
-	if (expected_len >= 0 && len != expected_len) {
-		corrupted (state);
-		g_printerr ("Invalid '%s' record of length %hd instead of %d\n",
-			    id, len, expected_len);
-		return FALSE;
+	if (expected_len >= 0) {
+		if (len != (guint16)expected_len) {
+			corrupted (state);
+			g_printerr ("Invalid '%s' record of length %hd instead of %d\n",
+				    id, len, expected_len);
+			return FALSE;
+		}
+	} else if (expected_len < -1) {
+		if (len < (guint16)(-expected_len)) {
+			corrupted (state);
+			g_printerr ("Invalid '%s' record of length %hd, expected at least %d\n",
+				    id, len, -expected_len);
+			return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -494,10 +503,12 @@ qpro_parse_formula (QProReadState *state, int col, int row,
 			fmla += 2;
 			break;
 
-		case QPRO_OP_CONST_STR:
-			expr = gnm_expr_new_constant (qpro_new_string (state, fmla));
-			fmla += strlen (fmla) + 1;
+		case QPRO_OP_CONST_STR: {
+			gsize l = strnlen (fmla, refs - fmla);
+			expr = gnm_expr_new_constant (qpro_new_string (state, fmla, l));
+			fmla += l + 1;
 			break;
+		}
 
 		case QPRO_OP_DEFAULT_ARG:
 			expr = gnm_expr_new_constant (value_new_empty ());
@@ -652,7 +663,7 @@ qpro_parse_formula (QProReadState *state, int col, int row,
 		/* Be anal */
 		Q_CHECK_CONDITION (col == new_col && row == new_row);
 
-		val = qpro_new_string (state, data + 7);
+		val = qpro_new_string (state, data + 7, len - 7);
 		break;
 	}
 	default:
@@ -690,8 +701,7 @@ error:
 		g_slist_free (stack);
 	}
 
-	if (texpr)
-		gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 static GnmStyle *
@@ -752,7 +762,7 @@ qpro_read_sheet (QProReadState *state)
 			break;
 
 		case QPRO_LABEL_CELL:
-			if (validate (QPRO_LABEL_CELL, -1)) {
+			if (validate (QPRO_LABEL_CELL, -7)) {
 				int col = data[0];
 				int row = GSF_LE_GET_GUINT16 (data + 2);
 				GnmHAlign align = GNM_HALIGN_GENERAL;
@@ -782,12 +792,12 @@ qpro_read_sheet (QProReadState *state)
 				}
 
 				gnm_cell_assign_value (sheet_cell_fetch (sheet, col, row),
-						   qpro_new_string (state, data + 7));
+						   qpro_new_string (state, data + 7, len - 7));
 			}
 			break;
 
 		case QPRO_FORMULA_CELL:
-			if (validate (QPRO_FORMULA_CELL, -1)) {
+			if (validate (QPRO_FORMULA_CELL, -20)) {
 				int col = data[0];
 				int row = GSF_LE_GET_GUINT16 (data + 2);
 				sheet_style_set_pos (sheet, col, row,
@@ -814,10 +824,9 @@ qpro_read_sheet (QProReadState *state)
 
 		case QPRO_PAGE_NAME:
 			if (validate (QPRO_PAGE_NAME, -1)) {
-				char *utf8name =
-					g_convert_with_iconv (data, -1,
-							      state->converter,
-							      NULL, NULL, NULL);
+				GnmValue *v = qpro_new_string (state, data, len);
+				char *utf8name = g_strdup (value_peek_string (v));
+				value_release (v);
 #warning "This is wrong, but the workbook interface is confused and needs a control."
 				g_object_set (sheet, "name", utf8name, NULL);
 				g_free (utf8name);
@@ -844,11 +853,11 @@ qpro_read_sheet (QProReadState *state)
 			break;
 
 		case QPRO_MAX_FONT_PANE1:
-		case QPRO_MAX_FONT_PANE2 :
+		case QPRO_MAX_FONT_PANE2:
 			/* just ignore for now */
 			break;
 
-		case QPRO_PAGE_TAB_COLOR :
+		case QPRO_PAGE_TAB_COLOR:
 			if (validate (QPRO_PAGE_TAB_COLOR, 4)) {
 				GnmColor *bc = gnm_color_new_rgb8 (
 					data[0], data[1], data[2]);
@@ -859,7 +868,7 @@ qpro_read_sheet (QProReadState *state)
 			}
 			break;
 
-		case QPRO_PAGE_ZOOM_FACTOR :
+		case QPRO_PAGE_ZOOM_FACTOR:
 			if (validate (QPRO_PAGE_ZOOM_FACTOR, 4)) {
 				guint16 low  = GSF_LE_GET_GUINT16 (data);
 				guint16 high = GSF_LE_GET_GUINT16 (data + 2);
@@ -906,7 +915,7 @@ qpro_read_workbook (QProReadState *state, GsfInput *input)
 			qpro_read_sheet (state);
 			break;
 
-		default :
+		default:
 			if (id > QPRO_LAST_SANE_ID)
 				go_io_warning (state->io_context,
 					_("Invalid record %d of length %hd"),

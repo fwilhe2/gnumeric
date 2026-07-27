@@ -1,4 +1,3 @@
-
 /*
  * applix-read.c : Routines to read applix version 4 & 5 spreadsheets.
  *
@@ -51,7 +50,6 @@
 #include <command-context.h>
 #include <workbook-view.h>
 #include <workbook.h>
-#include <parse-util.h>
 #include <gutils.h>
 
 #include <goffice/goffice.h>
@@ -90,8 +88,6 @@ static int debug_applix_read = 0;
 #define d(level, code)
 #endif
 
-#define a_strncmp(buf, str) strncmp ((buf), str, sizeof (str) - 1)
-
 static long
 au_strtol (const unsigned char *str, unsigned char **end)
 {
@@ -105,6 +101,12 @@ static long
 a_strtol (const char *str, char **end)
 {
 	return strtol (str, end, 10);
+}
+
+static gboolean
+length_at_least (const char *str, size_t n)
+{
+	return strnlen (str, n) >= n;
 }
 
 
@@ -355,9 +357,14 @@ applix_get_line (ApplixReadState *state)
 			gsize utf8_len;
 			char *utf8buf = g_convert_with_iconv (&uc, 1, state->converter, NULL,
 							      &utf8_len, NULL);
-			memcpy (buf, utf8buf, utf8_len);
-			buf += utf8_len;
-			g_free (utf8buf);
+			if (utf8buf) {
+				memcpy (buf, utf8buf, utf8_len);
+				buf += utf8_len;
+				g_free (utf8buf);
+			} else {
+				applix_parse_error (state, _("Character encoding error"));
+				*(buf++) = '?';
+			}
 			ptr += 3;
 		}
 	}
@@ -386,7 +393,7 @@ applix_read_colormap (ApplixReadState *state)
 
 	while (NULL != (buffer = applix_get_line (state))) {
 
-		if (!a_strncmp (buffer, "END COLORMAP"))
+		if (g_str_has_prefix (buffer, "END COLORMAP"))
 			return FALSE;
 
 		iter = pos = buffer + strlen (buffer) - 1;
@@ -438,7 +445,7 @@ applix_read_typefaces (ApplixReadState *state)
 	unsigned char *ptr;
 
 	while (NULL != (ptr = applix_get_line (state))) {
-		if (!a_strncmp (ptr, "END TYPEFACE TABLE"))
+		if (g_str_has_prefix (ptr, "END TYPEFACE TABLE"))
 			return FALSE;
 		g_ptr_array_add	(state->font_names, g_strdup (ptr));
 	}
@@ -459,7 +466,7 @@ applix_get_color (ApplixReadState *state, char **buf)
 	}
 
 	if (num >= 0 && num < (int)state->colors->len)
-		return style_color_ref (g_ptr_array_index(state->colors, num));
+		return style_color_ref (g_ptr_array_index (state->colors, num));
 
 	return style_color_black ();
 }
@@ -470,7 +477,7 @@ applix_get_precision (char const *val)
 	if ('0' <= *val && *val <= '9')
 		return *val - '0';
 	if (*val != 'f')
-		g_warning ("APPLIX : unknow number format %c", *val);
+		g_warning ("APPLIX: unknown number format %c", *val);
 	return 2;
 }
 
@@ -509,7 +516,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 		;
 
 	if (tmp[0] != ')' || tmp[1] != ' ') {
-		applix_parse_error (state, "Invalid format missing ')'");
+		applix_parse_error (state, "Invalid format, missing ')'");
 		return NULL;
 	}
 
@@ -546,7 +553,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 				case '2' : a = GNM_HALIGN_RIGHT; break;
 				case '3' : a = GNM_HALIGN_CENTER; break;
 				case '4' : a = GNM_HALIGN_FILL; break;
-				default :
+				default:
 					applix_parse_error (state, "Unknown horizontal alignment '%c'", *sep);
 					return NULL;
 				}
@@ -558,7 +565,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 				case 'T' : a = GNM_VALIGN_TOP; break;
 				case 'C' : a = GNM_VALIGN_CENTER; break;
 				case 'B' : a = GNM_VALIGN_BOTTOM; break;
-				default :
+				default:
 					applix_parse_error (state, "Unknown vertical alignment '%c'", *sep);
 					return NULL;
 				}
@@ -616,7 +623,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 					case '1' : format = "hh:mm AM/PM";	break;
 					case '2' : format = "hh:mm:ss";		break;
 					case '3' : format = "hh:mm";		break;
-					default :
+					default:
 						applix_parse_error (state, "Unknown time format '%c'", sep[1]);
 						return NULL;
 					}
@@ -672,7 +679,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 						   break;
 					   }
 					   /* Fall through */
-				default :
+				default:
 					applix_parse_error (state, "Unknown format '%c'", *sep);
 					return NULL;
 				}
@@ -758,7 +765,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 				if (sep[1] == 'T') {
 					/* FIXME : What is WTO ?? */
 					if (sep[2] == 'O') {
-						sep +=3;
+						sep += 3;
 						break;
 					}
 					gnm_style_set_wrap_text (style, TRUE);
@@ -782,7 +789,7 @@ applix_parse_style (ApplixReadState *state, unsigned char **buffer)
 				}
 
 
-			default :
+			default:
 				applix_parse_error (state, "Unknown font modifier");
 				return NULL;
 			}
@@ -908,7 +915,7 @@ applix_read_attributes (ApplixReadState *state)
 	GnmStyle *style;
 
 	while (NULL != (ptr = applix_get_line (state))) {
-		if (!a_strncmp (ptr, "Attr Table End"))
+		if (g_str_has_prefix (ptr, "Attr Table End"))
 			return FALSE;
 
 		if (ptr[0] != '<')
@@ -986,16 +993,29 @@ applix_parse_cellref (ApplixReadState *state, unsigned char *buffer,
 	return NULL;
 }
 
+// Nominal pixels.  Originally probably true pixels.
 static int
 applix_height_to_pixels (int height)
 {
 	return height+4;
 }
+
+// Nominal pixels.  Originally probably true pixels.
 static int
 applix_width_to_pixels (int width)
 {
 	return width*8 + 3;
 }
+
+static double
+applix_pixels_to_pts (Sheet *sheet, gboolean is_horiz, int pixels)
+{
+	double pts = pixels / colrow_compute_pixel_scale (sheet, is_horiz);
+	// Round up to nearest .5 pt
+	return gnm_ceil (2 * pts) / 2;
+}
+
+
 
 static int
 applix_read_current_view (ApplixReadState *state, unsigned char *buffer)
@@ -1003,7 +1023,7 @@ applix_read_current_view (ApplixReadState *state, unsigned char *buffer)
 	/* What is this ? */
 	unsigned char *ptr;
 	while (NULL != (ptr = applix_get_line (state)))
-	       if (!a_strncmp (ptr, "End View, Name: ~Current~"))
+	       if (g_str_has_prefix (ptr, "End View, Name: ~Current~"))
 		       return 0;
 	return -1;
 }
@@ -1027,41 +1047,41 @@ applix_read_view (ApplixReadState *state, unsigned char *buffer)
 			applix_fetch_sheet (state, name));
 
 	while (NULL != (buffer = applix_get_line (state))) {
-		if (!a_strncmp (buffer, "View End, Name: ~"))
+		if (g_str_has_prefix (buffer, "View End, Name: ~"))
 			break;
 		if (ignore)
 			continue;
 
-		if (!a_strncmp (buffer, "View Top Left: ")) {
+		if (g_str_has_prefix (buffer, "View Top Left: ")) {
 			GnmCellPos pos;
 			if (applix_parse_cellref (state, buffer+15, &sheet, &pos, ':') &&
 			    valid_cellpos (sheet, &pos))
 				gnm_sheet_view_set_initial_top_left (sheet_get_view (sheet, state->wb_view),
 							 pos.col, pos.row);
-		} else if (!a_strncmp (buffer, "View Open Cell: ")) {
+		} else if (g_str_has_prefix (buffer, "View Open Cell: ")) {
 			GnmCellPos pos;
 			if (applix_parse_cellref (state, buffer+16, &sheet, &pos, ':') &&
 			    valid_cellpos (sheet, &pos))
 				sv_selection_set (sheet_get_view (sheet, state->wb_view),
 						  &pos, pos.col, pos.row, pos.col, pos.row);
-		} else if (!a_strncmp (buffer, "View Default Column Width ")) {
+		} else if (g_str_has_prefix (buffer, "View Default Column Width ")) {
 			char *ptr, *tmp = buffer + 26;
 			int width = a_strtol (tmp, &ptr);
 			if (tmp == ptr || width <= 0)
 				return applix_parse_error (state, "Invalid default column width");
 
-			sheet_col_set_default_size_pixels (sheet,
-				applix_width_to_pixels (width));
-		} else if (!a_strncmp (buffer, "View Default Row Height: ")) {
+			double pts = applix_pixels_to_pts (sheet, TRUE, applix_width_to_pixels (width));
+			sheet_col_set_default_size_pts (sheet, pts);
+		} else if (g_str_has_prefix (buffer, "View Default Row Height: ")) {
 			char *ptr, *tmp = buffer + 25;
 			int height = a_strtol (tmp, &ptr);
 			if (tmp == ptr || height <= 0)
 				return applix_parse_error (state, "Invalid default row height");
 
 			/* height + one for the grid line */
-			sheet_row_set_default_size_pixels (sheet,
-				applix_height_to_pixels (height));
-		} else if (!a_strncmp (buffer, "View Row Heights: ")) {
+			double pts = applix_pixels_to_pts (sheet, FALSE, applix_height_to_pixels (height));
+			sheet_row_set_default_size_pts (sheet, pts);
+		} else if (g_str_has_prefix (buffer, "View Row Heights: ")) {
 			char *ptr = buffer + 17;
 			do {
 				int row, height;
@@ -1082,11 +1102,10 @@ applix_read_view (ApplixReadState *state, unsigned char *buffer)
 				 * bottom margin 1
 				 * size in pixels = val -32768 (sometimes ??)
 				 */
-				sheet_row_set_size_pixels (sheet, row,
-							  applix_height_to_pixels (height),
-							  TRUE);
+				double pts = applix_pixels_to_pts (sheet, FALSE, applix_height_to_pixels (height));
+				sheet_row_set_size_pts (sheet, row, pts, TRUE);
 			} while (ptr[0] == ' ' && g_ascii_isdigit (ptr[1]));
-		} else if (!a_strncmp (buffer, "View Column Widths: ")) {
+		} else if (g_str_has_prefix (buffer, "View Column Widths: ")) {
 			char const *ptr = buffer + 19;
 			char const *tmp;
 			int col, width;
@@ -1103,9 +1122,8 @@ applix_read_view (ApplixReadState *state, unsigned char *buffer)
 				/* These seem to assume
 				 * pixels = 8*width + 3 for the grid lines and margins
 				 */
-				sheet_col_set_size_pixels (sheet, col,
-							   applix_width_to_pixels (width),
-							   TRUE);
+				double pts = applix_pixels_to_pts (sheet, TRUE, applix_width_to_pixels (width));
+				sheet_col_set_size_pts (sheet, col, pts, TRUE);
 			} while (ptr[0] == ' ' && g_ascii_isalpha (ptr[1]));
 		}
 	}
@@ -1126,7 +1144,7 @@ applix_read_cells (ApplixReadState *state)
 	while (NULL != (ptr = applix_get_line (state))) {
 		gboolean const val_is_string = (ptr[0] != '\0' && ptr[1] == '\'');
 
-	       if (!a_strncmp (ptr, "*END SPREADSHEETS"))
+	       if (g_str_has_prefix (ptr, "*END SPREADSHEETS"))
 		       break;
 
 		/* Parse formatting */
@@ -1221,7 +1239,7 @@ applix_read_cells (ApplixReadState *state)
 				 * rest of the sheet can be parsed. If we quit, then trailing
 				 * 'Formula ' lines confuse the parser
 				 */
-				(void) parse_error_init(&perr);
+				(void) parse_error_init (&perr);
 				if (*expr_string != '=' && *expr_string != '+') {
 					applix_parse_error (state, _("Expression did not start with '=' ? '%s'"),
 								   expr_string);
@@ -1250,7 +1268,7 @@ applix_read_cells (ApplixReadState *state)
 				}
 
 				if (!applix_get_line (state) ||
-				    a_strncmp (state->buffer, "Formula: ")) {
+				    !g_str_has_prefix (state->buffer, "Formula: ")) {
 					applix_parse_error (state, "Missing formula ID");
 					continue;
 				}
@@ -1297,7 +1315,7 @@ applix_read_cells (ApplixReadState *state)
 			break;
 		}
 
-		default :
+		default:
 			g_warning ("Unknown cell type '%c'", content_type);
 		}
 	}
@@ -1333,7 +1351,7 @@ applix_read_row_list (ApplixReadState *state, unsigned char *ptr)
 			return applix_parse_error (state, "Invalid row format end col");
 		attr_index = au_strtol (ptr = tmp+1, &tmp);
 		if (tmp != ptr && attr_index >= 2 && attr_index < state->attrs->len+2) {
-			GnmStyle *style = g_ptr_array_index(state->attrs, attr_index-2);
+			GnmStyle *style = g_ptr_array_index (state->attrs, attr_index-2);
 			gnm_style_ref (style);
 			sheet_style_set_range (sheet, &r, style);
 		} else if (attr_index != 1) /* TODO : What the hell is attr 1 ?? */
@@ -1351,13 +1369,15 @@ applix_read_sheet_table (ApplixReadState *state)
 	unsigned char *ptr;
 	unsigned char *std_name, *real_name;
 	while (NULL != (ptr = applix_get_line (state))) {
-	       if (!a_strncmp (ptr, "END SHEETS TABLE"))
+	       if (g_str_has_prefix (ptr, "END SHEETS TABLE"))
 		       return FALSE;
 
 	       /* Sheet A: ~Foo~ */
+	       if (!length_at_least (ptr, 6))
+		       continue;
 	       std_name = ptr + 6;
 	       ptr = strchr (std_name, ':');
-	       if (ptr == NULL)
+	       if (ptr == NULL || !length_at_least (ptr, 3))
 		       continue;
 	       *ptr = '\0';
 
@@ -1380,7 +1400,7 @@ applix_read_header_footer (ApplixReadState *state)
 {
 	unsigned char *ptr;
 	while (NULL != (ptr = applix_get_line (state)))
-	       if (!a_strncmp (ptr, "Headers And Footers End"))
+	       if (g_str_has_prefix (ptr, "Headers And Footers End"))
 		       return FALSE;
 	return TRUE;
 }
@@ -1403,7 +1423,7 @@ applix_read_absolute_name (ApplixReadState *state, char *buffer)
 		return TRUE;
 	*end = '\0';
 	end = strchr (end + 1, ':');
-	if (end == NULL)
+	if (end == NULL || !length_at_least (end, 2))
 		return TRUE;
 	applix_rangeref_parse (&ref, end+2,
 		parse_pos_init (&pp, state->wb, NULL, 0, 0),
@@ -1413,7 +1433,7 @@ applix_read_absolute_name (ApplixReadState *state, char *buffer)
 
 	texpr = gnm_expr_top_new_constant
 		(value_new_cellrange_unsafe (&ref.a, &ref.b));
-	expr_name_add (&pp, buffer, texpr, NULL, TRUE, NULL);
+	expr_name_add (&pp, buffer, texpr, NULL, NULL);
 
 	return FALSE;
 }
@@ -1433,7 +1453,7 @@ applix_read_relative_name (ApplixReadState *state, char *buffer)
 	if (buffer == NULL)
 		return TRUE;
 	end = strchr (++buffer, '.');
-	if (end == NULL)
+	if (end == NULL || !length_at_least (end, 2))
 		return TRUE;
 	*end = '\0';
 	if (12 != sscanf (end + 2,
@@ -1452,7 +1472,7 @@ applix_read_relative_name (ApplixReadState *state, char *buffer)
 		(value_new_cellrange_unsafe (&ref.a, &ref.b));
 	parse_pos_init (&pp, state->wb, NULL,
 		MAX (-ref.a.col, 0), MAX (-ref.a.row, 0));
-	expr_name_add (&pp, buffer, texpr, NULL, TRUE, NULL);
+	expr_name_add (&pp, buffer, texpr, NULL, NULL);
 
 	return FALSE;
 }
@@ -1477,7 +1497,7 @@ applix_read_impl (ApplixReadState *state)
 	int win_height = -1;
 
 	while (NULL != (buffer = applix_get_line (state))) {
-		if (!a_strncmp (buffer, "*BEGIN SPREADSHEETS VERSION=")) {
+		if (g_str_has_prefix (buffer, "*BEGIN SPREADSHEETS VERSION=")) {
 			char encoding_buffer[32];
 			int v0, v1;
 			if (3 != sscanf (buffer, "*BEGIN SPREADSHEETS VERSION=%d/%d ENCODING=%31s",
@@ -1492,11 +1512,11 @@ applix_read_impl (ApplixReadState *state)
 			if (strcmp (encoding_buffer, "7BIT"))
 				return applix_parse_error (state, "We only have samples of '7BIT' encoding, please send us this sample.");
 
-		} else if (!a_strncmp (buffer, "Num ExtLinks:")) {
+		} else if (g_str_has_prefix (buffer, "Num ExtLinks:")) {
 			if (1 != sscanf (buffer, "Num ExtLinks: %d", &ext_links))
 				return applix_parse_error (state, "Missing number of external links");
 
-		} else if (!a_strncmp (buffer, "Spreadsheet Dump Rev")) {
+		} else if (g_str_has_prefix (buffer, "Spreadsheet Dump Rev")) {
 			int major_rev, minor_rev, len;
 			if (3 != sscanf (buffer, "Spreadsheet Dump Rev %d.%d Line Length %d",
 					 &major_rev, &minor_rev, &len))
@@ -1507,7 +1527,7 @@ applix_read_impl (ApplixReadState *state)
 
 			d (0, g_printerr ("Applix load : Saved with revision %d.%d",
 					  major_rev, minor_rev););
-		} else if (!a_strncmp (buffer, "Current Doc Real Name:")) {
+		} else if (g_str_has_prefix (buffer, "Current Doc Real Name:")) {
 			g_free (real_name);
 			real_name = NULL;  /* FIXME? g_strdup (buffer + 22); */
 
@@ -1523,55 +1543,57 @@ applix_read_impl (ApplixReadState *state)
 			if (applix_read_attributes (state))
 				return applix_parse_error (state, "Invalid attribute table");
 
-		} else if (!a_strncmp (buffer, "View, Name: ~Current~")) {
+		} else if (g_str_has_prefix (buffer, "View, Name: ~Current~")) {
 			if (0 != applix_read_current_view (state, buffer))
 				return applix_parse_error (state, "Invalid view");
 
-		} else if (!a_strncmp (buffer, "View Start, Name: ~")) {
+		} else if (g_str_has_prefix (buffer, "View Start, Name: ~")) {
 			if (0 != applix_read_view (state, buffer))
 				return applix_parse_error (state, "Invalid view");
 
-		} else if (!a_strncmp (buffer, "Default Label Style")) {
+		} else if (g_str_has_prefix (buffer, "Default Label Style")) {
 			if (1 != sscanf (buffer, "Default Label Style %127s", default_text_format))
 				return applix_parse_error (state, "invalid default label style");
 
-		} else if (!a_strncmp (buffer, "Default Number Style")) {
+		} else if (g_str_has_prefix (buffer, "Default Number Style")) {
 			if (1 != sscanf (buffer, "Default Number Style %127s", default_number_format))
 				return applix_parse_error (state, "invalid default number style");
 
-		} else if (!a_strncmp (buffer, "Document Column Width:")) {
+		} else if (g_str_has_prefix (buffer, "Document Column Width:")) {
 			if (1 != sscanf (buffer, "Document Column Width: %d", &def_col_width))
 				return applix_parse_error (state, "invalid col width");
 
-		} else if (!a_strncmp (buffer, "Percent Zoom Factor:")) {
+		} else if (g_str_has_prefix (buffer, "Percent Zoom Factor:")) {
 			if (1 != sscanf (buffer, "Percent Zoom Factor: %d", &state->zoom) ||
 			    state->zoom <= 10 || 500 <= state->zoom)
 				return applix_parse_error (state, "invalid zoom");
-		} else if (!a_strncmp (buffer, "Window Width:")) {
+		} else if (g_str_has_prefix (buffer, "Window Width:")) {
 			if (1 != sscanf (buffer, "Window Width: %d", &win_width))
 				return applix_parse_error (state, "invalid win width");
-		} else if (!a_strncmp (buffer, "Window Height:")) {
+		} else if (g_str_has_prefix (buffer, "Window Height:")) {
 			if (1 != sscanf (buffer, "Window Height: %d", &win_height))
 				return applix_parse_error (state, "invalid win height");
-		} else if (!a_strncmp (buffer, "Top Left:")) {
+		} else if (g_str_has_prefix (buffer, "Top Left:")) {
 			if (1 != sscanf (buffer, "Top Left: %25s", top_cell_addr))
 				return applix_parse_error (state, "invalid top left");
-		} else if (!a_strncmp (buffer, "Open Cell:")) {
+		} else if (g_str_has_prefix (buffer, "Open Cell:")) {
 			if (1 != sscanf (buffer, "Open Cell: %25s", cur_cell_addr))
 				return applix_parse_error (state, "invalid cur cell");
-		} else if (!a_strncmp (buffer, "SHEETS TABLE")) {
+		} else if (g_str_has_prefix (buffer, "SHEETS TABLE")) {
 			if (applix_read_sheet_table (state))
 				return applix_parse_error (state, "sheet table");
-		} else if (!a_strncmp (buffer, ABS_NAMED_RANGE)) {
-			if (applix_read_absolute_name (state, buffer + sizeof (ABS_NAMED_RANGE)))
+		} else if (g_str_has_prefix (buffer, ABS_NAMED_RANGE)) {
+			if (!length_at_least (buffer, sizeof (ABS_NAMED_RANGE)) ||
+			    applix_read_absolute_name (state, buffer + sizeof (ABS_NAMED_RANGE)))
 				return applix_parse_error (state, "Absolute named range");
-		} else if (!a_strncmp (buffer, REL_NAMED_RANGE)) {
-			if (applix_read_relative_name (state, buffer + sizeof (REL_NAMED_RANGE)))
+		} else if (g_str_has_prefix (buffer, REL_NAMED_RANGE)) {
+			if (!length_at_least (buffer, sizeof (REL_NAMED_RANGE)) ||
+			    applix_read_relative_name (state, buffer + sizeof (REL_NAMED_RANGE)))
 				return applix_parse_error (state, "Relative named range");
-		} else if (!a_strncmp (buffer, "Row List")) {
+		} else if (g_str_has_prefix (buffer, "Row List")) {
 			if (applix_read_row_list (state, buffer + sizeof ("Row List")))
 				return applix_parse_error (state, "row list");
-		} else if (!a_strncmp (buffer, "Headers And Footers")) {
+		} else if (g_str_has_prefix (buffer, "Headers And Footers")) {
 			if (applix_read_header_footer (state))
 				return applix_parse_error (state, "headers and footers");
 
@@ -1588,21 +1610,6 @@ applix_read_impl (ApplixReadState *state)
 		wb_view_sheet_focus (state->wb_view, sheet);
 
 	return 0;
-}
-
-static gboolean
-cb_remove_texpr (gpointer key, gpointer value, gpointer user_data)
-{
-	g_free (key);
-	gnm_expr_top_unref (value);
-	return TRUE;
-}
-static gboolean
-cb_remove_style (gpointer key, gpointer value, gpointer user_data)
-{
-	g_free (key);
-	gnm_style_unref (value);
-	return TRUE;
 }
 
 static GnmExpr const *
@@ -1663,8 +1670,6 @@ applix_conventions_new (void)
 void
 applix_read (GOIOContext *io_context, WorkbookView *wb_view, GsfInput *src)
 {
-	int i;
-	int res;
 	ApplixReadState	state;
 	GSList *ptr, *renamed_sheets;
 	GnmLocale	*locale;
@@ -1676,11 +1681,13 @@ applix_read (GOIOContext *io_context, WorkbookView *wb_view, GsfInput *src)
 	state.parse_error = NULL;
 	state.wb_view     = wb_view;
 	state.wb          = wb_view_get_workbook (wb_view);
-	state.exprs       = g_hash_table_new (&g_str_hash, &g_str_equal);
-	state.styles      = g_hash_table_new (&g_str_hash, &g_str_equal);
-	state.colors      = g_ptr_array_new ();
-	state.attrs       = g_ptr_array_new ();
-	state.font_names  = g_ptr_array_new ();
+	state.exprs       = g_hash_table_new_full (&g_str_hash, &g_str_equal,
+						   g_free, (GDestroyNotify)gnm_expr_top_unref);
+	state.styles      = g_hash_table_new_full (&g_str_hash, &g_str_equal,
+						   g_free, (GDestroyNotify)gnm_style_unref);
+	state.colors      = g_ptr_array_new_with_free_func ((GDestroyNotify)style_color_unref);
+	state.attrs       = g_ptr_array_new_with_free_func ((GDestroyNotify)gnm_style_unref);
+	state.font_names  = g_ptr_array_new_with_free_func (g_free);
 	state.buffer      = NULL;
 	state.buffer_size = 0;
 	state.line_len    = 80;
@@ -1691,7 +1698,7 @@ applix_read (GOIOContext *io_context, WorkbookView *wb_view, GsfInput *src)
 	state.converter   = g_iconv_open ("UTF-8", "ISO-8859-1");
 
 	/* Actually read the workbook */
-	res = applix_read_impl (&state);
+	(void)applix_read_impl (&state);
 
 	g_object_unref (state.input);
 	g_free (state.buffer);
@@ -1716,28 +1723,16 @@ applix_read (GOIOContext *io_context, WorkbookView *wb_view, GsfInput *src)
 	g_slist_free_full (state.std_names, g_free);
 	g_slist_free_full (state.real_names, g_free);
 
-	/* Release the shared expressions and styles */
-	g_hash_table_foreach_remove (state.exprs, &cb_remove_texpr, NULL);
 	g_hash_table_destroy (state.exprs);
-	g_hash_table_foreach_remove (state.styles, &cb_remove_style, NULL);
 	g_hash_table_destroy (state.styles);
-
-	for (i = state.colors->len; --i >= 0 ; )
-		style_color_unref (g_ptr_array_index (state.colors, i));
 	g_ptr_array_free (state.colors, TRUE);
-
-	for (i = state.attrs->len; --i >= 0 ; )
-		gnm_style_unref (g_ptr_array_index(state.attrs, i));
 	g_ptr_array_free (state.attrs, TRUE);
-
-	for (i = state.font_names->len; --i >= 0 ; )
-		g_free (g_ptr_array_index(state.font_names, i));
 	g_ptr_array_free (state.font_names, TRUE);
 
 	if (state.parse_error != NULL)
 		go_io_error_info_set (io_context, state.parse_error);
 
-	gnm_conventions_unref (state.convs);
+	g_clear_object (&state.convs);
 	gsf_iconv_close (state.converter);
 	gnm_pop_C_locale (locale);
 }

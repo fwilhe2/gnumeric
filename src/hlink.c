@@ -177,6 +177,13 @@ gnm_hlink_get_target (GnmHLink const *lnk)
 	return GET_CLASS (lnk)->get_target (lnk);
 }
 
+/**
+ * gnm_hlink_set_target:
+ * @lnk: #GnmHLink
+ * @target: new target url
+ *
+ * Sets @lnk's target url to @target.
+ */
 void
 gnm_hlink_set_target (GnmHLink *lnk, gchar const *target)
 {
@@ -198,6 +205,13 @@ gnm_hlink_get_tip (GnmHLink const *lnk)
 	return lnk->tip;
 }
 
+/**
+ * gnm_hlink_set_tip:
+ * @lnk: #GnmHLink
+ * @tip: new tooltip
+ *
+ * Sets @lnk's tooltip to @tip.
+ */
 void
 gnm_hlink_set_tip (GnmHLink *lnk, gchar const *tip)
 {
@@ -348,8 +362,7 @@ gnm_hlink_cur_wb_set_target (GnmHLink *lnk, const char *target)
 
 	dependent_managed_set_sheet (&hlcwb->dep, lnk->sheet);
 	dependent_managed_set_expr (&hlcwb->dep, texpr);
-	if (texpr)
-		gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 static const char *
@@ -549,7 +562,6 @@ static gboolean
 gnm_hlink_external_activate (GnmHLink *lnk, WBCGtk *wbcg)
 {
 	GError *err = NULL;
-	gboolean res = FALSE;
 	char *cmd;
 	GdkScreen *screen;
 
@@ -562,14 +574,14 @@ gnm_hlink_external_activate (GnmHLink *lnk, WBCGtk *wbcg)
 	g_free (cmd);
 
 	if (err != NULL) {
-		char *msg = g_strdup_printf(_("Unable to open '%s'"), lnk->target);
+		char *msg = g_strdup_printf (_("Unable to open '%s'"), lnk->target);
 		go_cmd_context_error_invalid (GO_CMD_CONTEXT (wbcg),
 					      msg, err->message);
 		g_free (msg);
 		g_error_free (err);
 	}
 
-	return res;
+	return err == NULL;
 }
 
 static void

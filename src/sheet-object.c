@@ -50,13 +50,16 @@ static gboolean debug_sheet_objects;
 static guint so_create_view_src;
 static GPtrArray *so_create_view_sos;
 
-/* GType code for SheetObjectAnchor */
-static SheetObjectAnchor *
-sheet_object_anchor_copy (SheetObjectAnchor * soa)
+/**
+ * sheet_object_anchor_dup:
+ * @src: #SheetObjectAnchor
+ *
+ * Returns: (transfer full): a copy of @src.
+ **/
+SheetObjectAnchor *
+sheet_object_anchor_dup	(SheetObjectAnchor const *src)
 {
-	SheetObjectAnchor *res = g_new (SheetObjectAnchor, 1);
-	*res = *soa;
-	return res;
+	return go_memdup (src, sizeof (SheetObjectAnchor));
 }
 
 GType
@@ -66,7 +69,7 @@ sheet_object_anchor_get_type (void)
 
 	if (t == 0) {
 		t = g_boxed_type_register_static ("SheetObjectAnchor",
-			 (GBoxedCopyFunc)sheet_object_anchor_copy,
+			 (GBoxedCopyFunc)sheet_object_anchor_dup,
 			 (GBoxedFreeFunc)g_free);
 	}
 	return t;
@@ -102,11 +105,18 @@ enum {
 	UNREALIZED,
 	LAST_SIGNAL
 };
-static guint	     signals [LAST_SIGNAL] = { 0 };
+static guint	     signals[LAST_SIGNAL] = { 0 };
 static GObjectClass *parent_klass;
 static GQuark	sov_so_quark;
 static GQuark	sov_container_quark;
 
+/**
+ * sheet_object_set_print_flag:
+ * @so: #SheetObject
+ * @print: (in): boolean
+ *
+ * Sets the printing flag for @so.
+ **/
 void
 sheet_object_set_print_flag (SheetObject *so, gboolean *print)
 {
@@ -118,6 +128,12 @@ sheet_object_set_print_flag (SheetObject *so, gboolean *print)
 		so->flags &= ~SHEET_OBJECT_PRINT;
 }
 
+/**
+ * sheet_object_get_print_flag:
+ * @so: #SheetObject
+ *
+ * Returns: the printing flag for @so.
+ **/
 gboolean
 sheet_object_get_print_flag (SheetObject *so)
 {
@@ -136,7 +152,7 @@ cb_so_size_position (SheetObject *so, SheetControl *sc)
 
 	if (wbcg->edit_line.guru != NULL) {
 		GtkWidget *w = wbcg->edit_line.guru;
-		wbc_gtk_detach_guru (wbcg);
+		wbcg_detach_guru (wbcg);
 		gtk_widget_destroy (w);
 	}
 
@@ -197,6 +213,13 @@ cb_so_print (SheetObject *so, SheetControl *sc)
 	gnm_print_so (sc_wbc (sc), a, NULL);
 	g_ptr_array_unref (a);
 }
+/**
+ * sheet_object_get_editor:
+ * @so: #SheetObject
+ * @sc: #SheetControl
+ *
+ * Request the creation of an editor for @so.
+ **/
 void
 sheet_object_get_editor (SheetObject *so, SheetControl *sc)
 {
@@ -210,7 +233,7 @@ sheet_object_get_editor (SheetObject *so, SheetControl *sc)
 
 	if (wbcg->edit_line.guru != NULL) {
 		GtkWidget *w = wbcg->edit_line.guru;
-		wbc_gtk_detach_guru (wbcg);
+		wbcg_detach_guru (wbcg);
 		gtk_widget_destroy (w);
 	}
 
@@ -265,20 +288,19 @@ sheet_object_populate_menu_real (SheetObject *so, GPtrArray *actions)
 {
 	unsigned i;
 	if (so->sheet->sheet_type == GNM_SHEET_OBJECT) {
-		static SheetObjectAction const so_actions [] = {
-			{ "gtk-properties",	NULL,		NULL,  0, sheet_object_get_editor, sheet_object_can_prop},
+		static SheetObjectAction const so_actions[] = {
+			{ "document-properties", N_("Properties"),		NULL,  0, sheet_object_get_editor, sheet_object_can_prop},
 			{ NULL,	NULL, NULL, 0, NULL, NULL },
 			{ "edit-copy",		N_("_Copy"),		NULL,  0, cb_so_copy, NULL },
 		};
 		for (i = 0 ; i < G_N_ELEMENTS (so_actions); i++)
 			g_ptr_array_add (actions, (gpointer) (so_actions + i));
 	} else {
-		static SheetObjectAction const so_actions [] = {
-			{ GTK_STOCK_PROPERTIES,	        NULL, NULL,  0, sheet_object_get_editor, sheet_object_can_prop},
+		static SheetObjectAction const so_actions[] = {
+			{ "document-properties", N_("Properties"), NULL,  0, sheet_object_get_editor, sheet_object_can_prop},
 			{ NULL,	NULL, NULL, 0, NULL, NULL },
-#warning "Two highly dubious icon names here"
-			{ GTK_STOCK_LEAVE_FULLSCREEN,   N_("Size _& Position"),	NULL,  0, cb_so_size_position, NULL },
-			{ GTK_STOCK_FULLSCREEN,	        N_("_Snap to Grid"),	NULL,  0, cb_so_snap_to_grid, NULL },
+			{ NULL,				N_("Size _& Position"),	NULL,  0, cb_so_size_position, NULL },
+			{ NULL,				N_("_Snap to Grid"),	NULL,  0, cb_so_snap_to_grid, NULL },
 			{ NULL,			        N_("_Order"),	        NULL,  1, NULL, NULL },
 				{ NULL,			N_("Pul_l to Front"),	NULL,  0, cb_so_pull_to_front, NULL },
 				{ NULL,			N_("Pull _Forward"),	NULL,  0, cb_so_pull_forward, NULL },
@@ -312,6 +334,13 @@ sheet_object_populate_menu (SheetObject *so, GPtrArray *actions)
 	GNM_SO_CLASS (G_OBJECT_GET_CLASS(so))->populate_menu (so, actions);
 }
 
+/**
+ * sheet_object_set_name:
+ * @so: #SheetObject
+ * @name: (nullable): new name
+ *
+ * Sets the name of @so to @name.
+ **/
 void
 sheet_object_set_name (SheetObject *so, const char *name)
 {
@@ -358,11 +387,18 @@ sheet_object_set_property (GObject *obj, guint param_id,
 
 
 static void
+sheet_object_dispose (GObject *obj)
+{
+	SheetObject *so = GNM_SO (obj);
+	if (so->sheet != NULL)
+		sheet_object_clear_sheet (so);
+	parent_klass->dispose (obj);
+}
+
+static void
 sheet_object_finalize (GObject *object)
 {
 	SheetObject *so = GNM_SO (object);
-	if (so->sheet != NULL)
-		sheet_object_clear_sheet (so);
 	g_free (so->name);
 	parent_klass->finalize (object);
 }
@@ -384,7 +420,7 @@ sheet_object_init (GObject *object)
 	so->anchor.base.direction = GOD_ANCHOR_DIR_UNKNOWN;
 
 	for (i = 4; i-- > 0 ;)
-		so->anchor.offset [i] = 0.;
+		so->anchor.offset[i] = 0.;
 }
 
 static void
@@ -402,6 +438,7 @@ sheet_object_class_init (GObjectClass *klass)
 
 	parent_klass = g_type_class_peek_parent (klass);
 
+	klass->dispose = sheet_object_dispose;
 	klass->finalize = sheet_object_finalize;
 	klass->get_property = sheet_object_get_property;
 	klass->set_property = sheet_object_set_property;
@@ -419,14 +456,14 @@ sheet_object_class_init (GObjectClass *klass)
 		 g_param_spec_string ("name", NULL, NULL, NULL,
 				      GSF_PARAM_STATIC | G_PARAM_READWRITE));
 
-	signals [BOUNDS_CHANGED] = g_signal_new ("bounds-changed",
+	signals[BOUNDS_CHANGED] = g_signal_new ("bounds-changed",
 		GNM_SO_TYPE,
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (SheetObjectClass, bounds_changed),
 		NULL, NULL,
 		g_cclosure_marshal_VOID__VOID,
 		G_TYPE_NONE, 0);
-	signals [UNREALIZED] = g_signal_new ("unrealized",
+	signals[UNREALIZED] = g_signal_new ("unrealized",
 		GNM_SO_TYPE,
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (SheetObjectClass, unrealized),
@@ -523,7 +560,7 @@ sheet_object_update_bounds (SheetObject *so, GnmCellPos const *pos)
 	else
 		so->flags |= SHEET_OBJECT_IS_VISIBLE;
 
-	g_signal_emit (so, signals [BOUNDS_CHANGED], 0);
+	g_signal_emit (so, signals[BOUNDS_CHANGED], 0);
 }
 
 /**
@@ -541,25 +578,41 @@ sheet_object_get_sheet (SheetObject const *so)
 	return so->sheet;
 }
 
+static void
+cb_create_views_helper (GPtrArray *sos, gboolean qfreeze)
+{
+	Sheet const *last_sheet = NULL;
+	unsigned ui, l = sos->len;
+	for (ui = 0; ui < l; ui++) {
+		SheetObject *so = g_ptr_array_index (sos, ui);
+		if (so->sheet == last_sheet) {
+			// Avoid excessive duplicate freezes.  This is
+			// not essential, but helps with debugging.
+			continue;
+		}
+		last_sheet = so->sheet;
+		sheet_freeze_object_views (so->sheet, qfreeze);
+	}
+}
+
 static gboolean
 cb_create_views (void)
 {
-	int pass;
+	unsigned ui, l = so_create_view_sos->len;
 
-	for (pass = 1; pass <= 3; pass++) {
-		unsigned ui, l = so_create_view_sos->len;
-		for (ui = 0; ui < l; ui++) {
-			SheetObject *so = g_ptr_array_index (so_create_view_sos, ui);
-			SHEET_FOREACH_CONTROL
-				(so->sheet, view, control,
-				 if (pass == 2)
-					 sc_object_create_view (control, so);
-				 else
-					 sc_freeze_object_view (control, pass == 1);
-					);
-		}
+	cb_create_views_helper (so_create_view_sos, TRUE);
+
+	for (ui = 0; ui < l; ui++) {
+		SheetObject *so = g_ptr_array_index (so_create_view_sos, ui);
+		SHEET_FOREACH_CONTROL
+			(so->sheet, view, control,
+			 sc_object_create_view (control, so););
 	}
+
+	cb_create_views_helper (so_create_view_sos, FALSE);
+
 	g_ptr_array_set_size (so_create_view_sos, 0);
+
 	so_create_view_src = 0;
 	return FALSE;
 }
@@ -625,7 +678,6 @@ void
 sheet_object_clear_sheet (SheetObject *so)
 {
 	GSList *ptr;
-	unsigned ui;
 
 	g_return_if_fail (GNM_IS_SO (so));
 
@@ -638,20 +690,16 @@ sheet_object_clear_sheet (SheetObject *so)
 	g_return_if_fail (ptr != NULL);
 
 	/* clear any pending attempts to create views */
-	for (ui = 0; ui < so_create_view_sos->len; ui++) {
-		if (so == g_ptr_array_index (so_create_view_sos, ui)) {
-			g_ptr_array_remove_index (so_create_view_sos, ui);
-			break;
-		}
-	}
+	g_ptr_array_remove (so_create_view_sos, so);
 
 	while (so->realized_list != NULL) {
-		g_object_set_qdata (G_OBJECT (so->realized_list->data), sov_so_quark, NULL);
-		g_object_unref (so->realized_list->data);
-		so->realized_list = g_list_remove (so->realized_list, so->realized_list->data);
+		SheetObjectView *v = so->realized_list->data;
+		g_object_set_qdata (G_OBJECT (v), sov_so_quark, NULL);
+		g_object_unref (v);
+		so->realized_list = g_list_remove (so->realized_list, v);
 
 	}
-	g_signal_emit (so, signals [UNREALIZED], 0);
+	g_signal_emit (so, signals[UNREALIZED], 0);
 
 	if (SO_CLASS (so)->remove_from_sheet &&
 	    SO_CLASS (so)->remove_from_sheet (so))
@@ -837,14 +885,24 @@ sheet_object_draw_cairo (SheetObject const *so, cairo_t *cr, gboolean rtl)
 
 		/* we don't need to save/restore cairo, the caller must do it */
 		cairo_translate (cr, x, y);
-		SO_CLASS (so)->draw_cairo (so, cr, width, height);
+		sheet_object_draw_cairo_sized (so, cr, width, height);
 	}
 }
 
+/**
+ * sheet_object_draw_cairo_sized:
+ * @so: #SheetObject
+ * @cr: #cairo_t
+ * @width: width
+ * @height: height
+ *
+ * Draw a sheet object using cairo into a box of size @width by @height.
+ **/
 void
 sheet_object_draw_cairo_sized (SheetObject const *so, cairo_t *cr, double width, double height)
 {
-	SO_CLASS (so)->draw_cairo (so, cr, width, height);
+	if (width > 0 && height > 0)
+		SO_CLASS (so)->draw_cairo (so, cr, width, height);
 }
 
 /**
@@ -875,6 +933,13 @@ sheet_object_get_anchor (SheetObject const *so)
 	return &so->anchor;
 }
 
+/**
+ * sheet_object_set_anchor:
+ * @so: #SheetObject
+ * @anchor: #SheetObjectAnchor
+ *
+ * Sets the anchor for @so.
+ **/
 void
 sheet_object_set_anchor (SheetObject *so, SheetObjectAnchor const *anchor)
 {
@@ -885,13 +950,6 @@ sheet_object_set_anchor (SheetObject *so, SheetObjectAnchor const *anchor)
 		so->sheet->priv->objects_changed = TRUE;
 		sheet_object_update_bounds (so, NULL);
 	}
-}
-
-SheetObjectAnchor *
-sheet_object_anchor_dup	(SheetObjectAnchor const *src)
-{
-	SheetObjectAnchor *res = go_memdup (src, sizeof (SheetObjectAnchor));
-	return res;
 }
 
 static double
@@ -934,6 +992,14 @@ sheet_object_position_pts_get (SheetObject const *so, double *coords)
 	sheet_object_anchor_to_pts (&so->anchor, so->sheet, coords);
 }
 
+/**
+ * sheet_object_anchor_to_pts:
+ * @anchor: #SheetObjectAnchor
+ * @sheet: #Sheet
+ * @res_pts: (out) (array fixed-size=4): result coordinates
+ *
+ * Converts an anchor to points.
+ **/
 void
 sheet_object_anchor_to_pts (SheetObjectAnchor const *anchor,
 			    Sheet const *sheet, double *res_pts)
@@ -945,37 +1011,37 @@ sheet_object_anchor_to_pts (SheetObjectAnchor const *anchor,
 	r = &anchor->cell_bound;
 
 	if (anchor->mode != GNM_SO_ANCHOR_ABSOLUTE) {
-		res_pts [0] = sheet_col_get_distance_pts (sheet, 0,
+		res_pts[0] = sheet_col_get_distance_pts (sheet, 0,
 			r->start.col);
-		res_pts [1] = sheet_row_get_distance_pts (sheet, 0,
+		res_pts[1] = sheet_row_get_distance_pts (sheet, 0,
 			r->start.row);
 		if (anchor->mode == GNM_SO_ANCHOR_TWO_CELLS) {
-			res_pts [2] = res_pts [0] + sheet_col_get_distance_pts (sheet,
+			res_pts[2] = res_pts[0] + sheet_col_get_distance_pts (sheet,
 				r->start.col, r->end.col);
-			res_pts [3] = res_pts [1] + sheet_row_get_distance_pts (sheet,
+			res_pts[3] = res_pts[1] + sheet_row_get_distance_pts (sheet,
 				r->start.row, r->end.row);
 
-			res_pts [0] += cell_offset_calc_pt (sheet, r->start.col,
-				TRUE, anchor->offset [0]);
-			res_pts [1] += cell_offset_calc_pt (sheet, r->start.row,
-				FALSE, anchor->offset [1]);
-			res_pts [2] += cell_offset_calc_pt (sheet, r->end.col,
-				TRUE, anchor->offset [2]);
-			res_pts [3] += cell_offset_calc_pt (sheet, r->end.row,
-				FALSE, anchor->offset [3]);
+			res_pts[0] += cell_offset_calc_pt (sheet, r->start.col,
+				TRUE, anchor->offset[0]);
+			res_pts[1] += cell_offset_calc_pt (sheet, r->start.row,
+				FALSE, anchor->offset[1]);
+			res_pts[2] += cell_offset_calc_pt (sheet, r->end.col,
+				TRUE, anchor->offset[2]);
+			res_pts[3] += cell_offset_calc_pt (sheet, r->end.row,
+				FALSE, anchor->offset[3]);
 		} else {
-			res_pts [0] += cell_offset_calc_pt (sheet, r->start.col,
-				TRUE, anchor->offset [0]);
-			res_pts [1] += cell_offset_calc_pt (sheet, r->start.row,
-				FALSE, anchor->offset [1]);
-			res_pts[2] = res_pts [0] + anchor->offset [2];
-			res_pts[3] = res_pts [1] + anchor->offset [3];
+			res_pts[0] += cell_offset_calc_pt (sheet, r->start.col,
+				TRUE, anchor->offset[0]);
+			res_pts[1] += cell_offset_calc_pt (sheet, r->start.row,
+				FALSE, anchor->offset[1]);
+			res_pts[2] = res_pts[0] + anchor->offset[2];
+			res_pts[3] = res_pts[1] + anchor->offset[3];
 		}
 	} else {
-		res_pts [0] = anchor->offset [0];
-		res_pts [1] = anchor->offset [1];
-		res_pts[2] = res_pts [0] + anchor->offset [2];
-		res_pts[3] = res_pts [1] + anchor->offset [3];
+		res_pts[0] = anchor->offset[0];
+		res_pts[1] = anchor->offset[1];
+		res_pts[2] = res_pts[0] + anchor->offset[2];
+		res_pts[3] = res_pts[1] + anchor->offset[3];
 	}
 }
 
@@ -1074,15 +1140,15 @@ sheet_object_anchor_to_offset_pts (SheetObjectAnchor const *anchor,
 	r = &anchor->cell_bound;
 
 	if (anchor->mode != GNM_SO_ANCHOR_ABSOLUTE) {
-		res_pts [0] = cell_offset_calc_pt (sheet, r->start.col,
-						   TRUE, anchor->offset [0]);
-		res_pts [1] = cell_offset_calc_pt (sheet, r->start.row,
-						   FALSE, anchor->offset [1]);
+		res_pts[0] = cell_offset_calc_pt (sheet, r->start.col,
+						   TRUE, anchor->offset[0]);
+		res_pts[1] = cell_offset_calc_pt (sheet, r->start.row,
+						   FALSE, anchor->offset[1]);
 		if (anchor->mode == GNM_SO_ANCHOR_TWO_CELLS) {
-			res_pts [2] = cell_offset_calc_pt (sheet, r->end.col,
-							   TRUE, anchor->offset [2]);
-			res_pts [3] = cell_offset_calc_pt (sheet, r->end.row,
-							   FALSE, anchor->offset [3]);
+			res_pts[2] = cell_offset_calc_pt (sheet, r->end.col,
+							   TRUE, anchor->offset[2]);
+			res_pts[3] = cell_offset_calc_pt (sheet, r->end.row,
+							   FALSE, anchor->offset[3]);
 		}
 	}
 }
@@ -1108,7 +1174,7 @@ clear_sheet (SheetObject *so, GOUndo **pundo)
  * sheet_objects_relocate:
  * @rinfo: details on what should be moved.
  * @update: Should we do the bound_update now, or leave it for later.
- *		if FALSE honour the move_with_cells flag.
+ *		if %FALSE, honour the move_with_cells flag.
  * @pundo: (optional) (out): add dropped objects to ::objects
  *
  * Uses the relocation info and the anchors to decide whether or not, and how
@@ -1185,7 +1251,7 @@ sheet_objects_relocate (GnmExprRelocateInfo const *rinfo, gboolean update,
 /**
  * sheet_objects_get:
  * @sheet: the sheet.
- * @r: (nullable): #GnmRange to look in
+ * @r: (nullable): #GnmRange to look in, %NULL for full sheet
  * @t: The type of object to lookup, %G_TYPE_NONE for any.
  *
  * Returns: (element-type SheetObject) (transfer container): a list
@@ -1216,8 +1282,8 @@ sheet_objects_get (Sheet const *sheet, GnmRange const *r, GType t)
  * sheet_objects_clear:
  * @sheet: the sheet.
  * @r: (nullable): #GnmRange to look in
- * @t #GType
- * @pundo: (out) (nullable):
+ * @t: #GType
+ * @pundo: (out) (nullable): #GOUndo
  *
  * Removes the objects in the region.
  **/
@@ -1226,6 +1292,7 @@ sheet_objects_clear (Sheet const *sheet, GnmRange const *r, GType t,
 		     GOUndo **pundo)
 {
 	GSList *ptr, *next;
+	gboolean any = FALSE;
 
 	g_return_if_fail (IS_SHEET (sheet));
 
@@ -1235,10 +1302,18 @@ sheet_objects_clear (Sheet const *sheet, GnmRange const *r, GType t,
 		if ((t == G_TYPE_NONE && G_OBJECT_TYPE (obj) != GNM_FILTER_COMBO_TYPE)
 		    || t == G_OBJECT_TYPE (obj)) {
 			SheetObject *so = GNM_SO (obj);
-			if (r == NULL || range_contained (&so->anchor.cell_bound, r))
+			if (r == NULL || range_contained (&so->anchor.cell_bound, r)) {
+				if (!any) {
+					sheet_freeze_object_views (sheet, TRUE);
+					any = TRUE;
+				}
 				clear_sheet (so, pundo);
+			}
 		}
 	}
+
+	if (any)
+		sheet_freeze_object_views (sheet, FALSE);
 }
 
 /**
@@ -1294,10 +1369,10 @@ cb_sheet_objects_dup (GnmDependent *dep, SheetObject *so, gpointer user)
  * @dst: The destination sheet to attach the objects to
  * @range: (nullable): #GnmRange to look in
  *
- * Clones the objects of the src sheet and attaches them into the dst sheet
+ * Clones the objects of the src sheet and attaches them to the dst sheet
  **/
 void
-sheet_objects_dup (Sheet const *src, Sheet *dst, GnmRange *range)
+sheet_objects_dup (Sheet const *src, Sheet *dst, GnmRange const *range)
 {
 	GSList *list;
 
@@ -1338,9 +1413,9 @@ sheet_object_direction_set (SheetObject *so, gdouble const *coords)
 
 	so->anchor.base.direction = GOD_ANCHOR_DIR_NONE_MASK;
 
-	if (coords [1] < coords [3])
+	if (coords[1] < coords[3])
 		so->anchor.base.direction |= GOD_ANCHOR_DIR_DOWN;
-	if (coords [0] < coords [2])
+	if (coords[0] < coords[2])
 		so->anchor.base.direction |= GOD_ANCHOR_DIR_RIGHT;
 }
 
@@ -1383,11 +1458,11 @@ sheet_object_anchor_init (SheetObjectAnchor *anchor,
 	anchor->cell_bound = *r;
 
 	if (offsets == NULL) {
-		static double const defaultVal [4] = { 0., 0., 0., 0. };
+		static double const defaultVal[4] = { 0., 0., 0., 0. };
 		offsets = defaultVal;
 	}
 	for (i = 4; i-- > 0 ; )
-		anchor->offset[i] = offsets [i];
+		anchor->offset[i] = offsets[i];
 
 	anchor->base.direction = direction;
 	anchor->mode = mode;
@@ -1430,7 +1505,7 @@ sheet_object_adjust_stacking (SheetObject *so, gint offset)
 
 	g_return_val_if_fail (node != NULL, 0);
 
-	/* Start at the begining when moving things towards the front */
+	/* Start at the beginning when moving things towards the front */
 	if (offset > 0) {
 		ptr = &so->sheet->sheet_objects;
 		i = 0;
@@ -1542,10 +1617,14 @@ cb_so_menu_activate (GObject *menu, GocItem *view)
 	}
 }
 
-static void
-cb_ptr_array_free (GPtrArray *actions)
+static GtkWidget *
+gnm_menu_item_new_with_icon (char const *label, char const *icon)
 {
-	g_ptr_array_free (actions, TRUE);
+	GtkWidget *item = gtk_image_menu_item_new_with_mnemonic (label ? _(label) : "");
+	GtkWidget *image = gtk_image_new_from_icon_name (icon, GTK_ICON_SIZE_MENU);
+	gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item), image);
+	gtk_image_menu_item_set_always_show_image (GTK_IMAGE_MENU_ITEM (item), TRUE);
+	return item;
 }
 
 /**
@@ -1570,12 +1649,7 @@ sheet_object_build_menu (SheetObjectView *view,
 		if (a->submenu < 0)
 			break;
 		if (a->icon != NULL) {
-			if (a->label != NULL) {
-				item = gtk_image_menu_item_new_with_mnemonic (_(a->label));
-				gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item),
-					gtk_image_new_from_icon_name (a->icon, GTK_ICON_SIZE_MENU));
-			} else
-				item = gtk_image_menu_item_new_from_stock (a->icon, NULL);
+			item = gnm_menu_item_new_with_icon (a->label, a->icon);
 		} else if (a->label != NULL)
 			item = gtk_menu_item_new_with_mnemonic (_(a->label));
 		else
@@ -1652,7 +1726,7 @@ sheet_object_view_button_pressed (GocItem *item, int button, double x, double y)
 				(sheet_object_get_view (so, (SheetObjectViewContainer *) item->canvas),
 				 actions, &i);
 			g_object_set_data_full (G_OBJECT (menu), "actions", actions,
-				(GDestroyNotify) cb_ptr_array_free);
+						(GDestroyNotify)g_ptr_array_unref);
 			gtk_widget_show_all (menu);
 			gnumeric_popup_menu (GTK_MENU (menu),
 					     goc_canvas_get_cur_event (item->canvas));
@@ -1738,7 +1812,7 @@ sheet_object_get_target_list (SheetObject const *so)
  * @so: #SheetObject
  * @format: (nullable): image format to use
  * @resolution: export resolution
- * @output: destination
+ * @output: A #GsfOutput object into which to write
  * @err: (out) (optional) (nullable): error indication
  *
  * Saves a sheet object as an image to @output.  If an error occurs, @err will
@@ -1752,7 +1826,7 @@ sheet_object_write_image (SheetObject const *so, char const *format, double reso
 	g_return_if_fail (GSF_IS_OUTPUT (output));
 
 	GNM_SO_IMAGEABLE_CLASS (so)->write_image (so, format, resolution,
-							output, err);
+						  output, err);
 }
 
 /**

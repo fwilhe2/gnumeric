@@ -113,7 +113,7 @@ ms_biff_password_hash  (guint8 const *password)
 static void
 ms_biff_crypt_seq (BiffQuery *q, guint16 key, guint8 const *password)
 {
-	static guint8 const preset [] = {
+	static guint8 const preset[] = {
 		0xbb, 0xff, 0xff, 0xba, 0xff, 0xff, 0xb9, 0x80,
 		0x00, 0xbe, 0x0f, 0x00, 0xbf, 0x0f, 0x00, 0x00
 	};
@@ -198,7 +198,7 @@ verify_password (guint8 const *password, guint8 const *docid,
 		 guint8 const *salt_data, guint8 const *hashedsalt_data,
 		 unsigned char *valDigest)
 {
-	guint8 pwarray [64], salt [64], hashedsalt [16];
+	guint8 pwarray[64], salt[64], hashedsalt[16];
 	struct md5_ctx mdContext;
 	unsigned char digest[16];
 	RC4_KEY key;
@@ -212,10 +212,9 @@ verify_password (guint8 const *password, guint8 const *docid,
 
 	/* Be careful about endianness */
 	memset (pwarray, 0, sizeof (pwarray));
-	for (i = 0 ; utf16[i] ; i++) {
-		pwarray[(2 * i) + 0] = ((utf16 [i] >> 0) & 0xff);
-		pwarray[(2 * i) + 1] = ((utf16 [i] >> 8) & 0xff);
-	}
+	// Unclear how to truncate the password
+	for (i = 0 ; utf16[i] && i < 31; i++)
+		GSF_LE_SET_GINT16(pwarray + 2 * i, utf16[i]);
 	g_free (utf16);
 
 	pwarray[2 * i] = 0x80;
@@ -290,10 +289,10 @@ verify_password (guint8 const *password, guint8 const *docid,
 
 #define REKEY_BLOCK 0x400
 static void
-skip_bytes (BiffQuery *q, int start, int count)
+skip_bytes (BiffQuery *q, guint32 start, guint32 count)
 {
 	static guint8 scratch[REKEY_BLOCK];
-	int block;
+	guint32 block;
 
 	block = (start + count) / REKEY_BLOCK;
 
@@ -323,7 +322,8 @@ ms_biff_query_set_decrypt (BiffQuery *q, MsBiffVersion version,
 	if (version < MS_BIFF_V8 || q->length == 0 || q->data[0] == 0)
 		return ms_biff_pre_biff8_query_set_decrypt (q, password);
 
-	XL_CHECK_CONDITION_VAL (q->length == sizeof_BIFF_8_FILEPASS, FALSE);
+	// Larger records observed.  No idea if they were sane.
+	XL_CHECK_CONDITION_VAL (q->length >= sizeof_BIFF_8_FILEPASS, FALSE);
 
 	if (!verify_password (password, q->data + 6,
 			      q->data + 22, q->data + 38, q->md5_digest))
@@ -332,7 +332,7 @@ ms_biff_query_set_decrypt (BiffQuery *q, MsBiffVersion version,
 	q->encryption = MS_BIFF_CRYPTO_RC4;
 	q->block = -1;
 
-	/* For some reaons the 1st record after FILEPASS seems to be unencrypted */
+	/* For some reasons the 1st record after FILEPASS seems to be unencrypted */
 	q->dont_decrypt_next_record = TRUE;
 
 	/* pretend to decrypt the entire stream up till this point, it was not
@@ -350,13 +350,13 @@ ms_biff_query_copy_decrypt (BiffQuery *dst, BiffQuery const *src)
 
 #warning FINISH this
 	switch (src->encryption) {
-	default :
+	default:
 	case MS_BIFF_CRYPTO_NONE:
 		XL_CHECK_CONDITION (dst->encryption == MS_BIFF_CRYPTO_NONE);
 		break;
-	case MS_BIFF_CRYPTO_XOR :
+	case MS_BIFF_CRYPTO_XOR:
 		break;
-	case MS_BIFF_CRYPTO_RC4 :
+	case MS_BIFF_CRYPTO_RC4:
 		break;
 	}
 }
@@ -452,14 +452,13 @@ ms_biff_query_next (BiffQuery *q)
 		q->non_decrypted_data = q->data;
 
 		q->data_malloced = TRUE;
-		q->data = g_new (guint8, q->length);
-		memcpy (q->data, q->non_decrypted_data, q->length);
+		q->data = go_memdup (q->non_decrypted_data, q->length);
 
 		if (q->dont_decrypt_next_record) {
 			skip_bytes (q, q->streamPos, 4 + q->length);
 			q->dont_decrypt_next_record = FALSE;
 		} else {
-			int pos = q->streamPos;
+			guint32 pos = q->streamPos;
 			guint8 *data = q->data;
 			int len = q->length;
 
@@ -484,8 +483,7 @@ ms_biff_query_next (BiffQuery *q)
 		q->non_decrypted_data_malloced = q->data_malloced;
 		q->non_decrypted_data = q->data;
 		q->data_malloced = TRUE;
-		q->data = g_new (guint8, q->length);
-		memcpy (q->data, q->non_decrypted_data, q->length);
+		q->data = go_memdup (q->non_decrypted_data, q->length);
 
 		offset = (q->streamPos + q->length + 4) % 16;
 		for (k= 0; k < q->length; ++k) {

@@ -1,5 +1,3 @@
-/* vm: set sw=8: -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
-
 /*
  * excel-xml-read.c : Read MS Excel 2003 SpreadsheetML
  *
@@ -329,13 +327,13 @@ xl_xml_read_keywords (GsfXMLIn *xin, G_GNUC_UNUSED GsfXMLBlob *blob)
 	GValue v = G_VALUE_INIT;
 	int count = 0;
 
-	if (strlen (xin->content->str) == 0)
+	if (*xin->content->str == 0)
 		return;
 
 	orig_strs = strs = g_strsplit (xin->content->str, " ", 0);
 	keywords = gsf_docprop_vector_new ();
 
-	while (strs != NULL && *strs != NULL && strlen (*strs) > 0) {
+	while (strs != NULL && *strs != NULL && **strs) {
 		g_value_init (&v, G_TYPE_STRING);
 		g_value_set_string (&v, *strs);
 		gsf_docprop_vector_append (keywords, &v);
@@ -343,7 +341,7 @@ xl_xml_read_keywords (GsfXMLIn *xin, G_GNUC_UNUSED GsfXMLBlob *blob)
 		count ++;
 		strs++;
 	}
-	g_strfreev(orig_strs);
+	g_strfreev (orig_strs);
 
 	if (count > 0) {
 		GValue *val = g_new0 (GValue, 1);
@@ -401,7 +399,7 @@ xl_xml_col_start (GsfXMLIn *xin, xmlChar const **attrs)
 		gnm_style_ref (style);
 		sheet_style_set_range (state->sheet, &r, style);
 	}
-	if (width > 0.)
+	if (width > 0)
 		for (tmp = 0 ; tmp < span ; tmp++)
 			sheet_col_set_size_pts (state->sheet,
 				state->pos.col + tmp, width, !auto_fit);
@@ -440,7 +438,7 @@ xl_xml_row_start (GsfXMLIn *xin, xmlChar const **attrs)
 		else
 			unknown_attr (xin, attrs, "Row");
 
-	if (height >= 0.)
+	if (height >= 0)
 		for (tmp = 0 ; tmp < span ; tmp++)
 			sheet_row_set_size_pts (state->sheet, state->pos.row+tmp, height, !auto_fit);
 	if (hidden)
@@ -481,8 +479,7 @@ xl_xml_cell_start (GsfXMLIn *xin, xmlChar const **attrs)
 		} else if (gsf_xml_in_namecmp (xin, attrs[0], XL_NS_SS, "Formula")) {
 			GnmExprTop const *texpr = xl_xml_parse_expr (xin, attrs[1], &pp);
 			if (NULL != texpr) {
-				if (NULL != state->texpr)
-					gnm_expr_top_unref (state->texpr);
+				gnm_expr_top_unref (state->texpr);
 				state->texpr = texpr;
 			}
 		} else if (gsf_xml_in_namecmp (xin, attrs[0], XL_NS_SS, "ArrayRange")) {
@@ -643,7 +640,7 @@ xl_xml_font (GsfXMLIn *xin, xmlChar const **attrs)
 static void
 xl_xml_alignment (GsfXMLIn *xin, xmlChar const **attrs)
 {
-	static EnumVal const valignments [] = {
+	static EnumVal const valignments[] = {
 		{ "Bottom", GNM_VALIGN_BOTTOM },
 		{ "Center", GNM_VALIGN_CENTER },
 		{ "Distributed", GNM_VALIGN_DISTRIBUTED },
@@ -651,7 +648,7 @@ xl_xml_alignment (GsfXMLIn *xin, xmlChar const **attrs)
 		{ "Top", GNM_VALIGN_TOP },
 		{ NULL, 0 }
 	};
-	static EnumVal const halignments [] = {
+	static EnumVal const halignments[] = {
 		{ "Center", GNM_HALIGN_CENTER },
 		{ "CenterAcrossSelection", GNM_HALIGN_CENTER_ACROSS_SELECTION },
 		{ "Distributed", GNM_HALIGN_DISTRIBUTED },
@@ -801,7 +798,7 @@ xl_xml_num_fmt (GsfXMLIn *xin, xmlChar const **attrs)
 	static struct {
 		char const *name;
 		GOFormatMagic id;
-	} named_magic_formats [] = {
+	} const named_magic_formats[] = {
 		{ "General Date",        GO_FORMAT_MAGIC_SHORT_DATETIME },
 		{ "Long Date",           GO_FORMAT_MAGIC_LONG_DATE },
 		{ "Medium Date",         GO_FORMAT_MAGIC_MEDIUM_DATE },
@@ -814,7 +811,7 @@ xl_xml_num_fmt (GsfXMLIn *xin, xmlChar const **attrs)
 	static struct {
 		char const *name;
 		char const *format;
-	} named_formats [] = {
+	} const named_formats[] = {
 		{ "General Number",     "General" },
 		{ "Currency",       	"$#,##0.00_);[Red](#,##0.00)" },
 		{ "Euro Currency",     	"[$EUR-2]#,##0.00_);[Red](#,##0.00)" },
@@ -901,7 +898,7 @@ xl_xml_named_range (GsfXMLIn *xin, xmlChar const **attrs)
 			parse_pos_init (&pp, state->wb, NULL, 0, 0));
 		g_warning ("%s = %s", name, expr_str);
 		if (NULL != texpr)
-			expr_name_add (&pp, name, texpr, NULL, TRUE, NULL);
+			expr_name_add (&pp, name, texpr, NULL, NULL);
 	}
 }
 
@@ -1035,7 +1032,7 @@ xl_xml_auto_filter_start (GsfXMLIn *xin, G_GNUC_UNUSED xmlChar const **attrs)
 
 /****************************************************************************/
 
-static GsfXMLInNS content_ns[] = {
+static GsfXMLInNS const content_ns[] = {
 	GSF_XML_IN_NS (XL_NS_SS,   "urn:schemas-microsoft-com:office:spreadsheet"),
 	GSF_XML_IN_NS (XL_NS_SS,   "http://schemas.microsoft.com/office/excel/2003/xml"),
 	GSF_XML_IN_NS (XL_NS_O,    "urn:schemas-microsoft-com:office:office"),

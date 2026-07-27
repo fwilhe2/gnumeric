@@ -92,25 +92,21 @@ GNM_PLUGIN_MODULE_HEADER;
 /* All bits that are mutually exclusive in the type field of an xloper. */
 #define xltypeType       0x0FFF
 
-struct _XLL {
+typedef struct {
 	gchar * name;
 	GModule * handle;
 	void (*xlAutoFree)(XLOPER*);
 	unsigned long number_of_functions;
-};
+} XLL;
 
-typedef struct _XLL XLL;
-
-struct _XLLFunctionInfo {
+typedef struct {
 	XLL* xll; /* Not owned. Included for availability of information during callbacks, and for access to xlAutoFree. */
 	XLOPER* (*xll_function)(void);
 	gchar* category;
 	GnmFuncDescriptor gnm_func_descriptor;
 	guint number_of_arguments;
 	GnmFunc* gnm_func;
-};
-
-typedef struct _XLLFunctionInfo XLLFunctionInfo;
+} XLLFunctionInfo;
 
 static GModule *xlcall32_handle = NULL;
 static void (*register_actual_excel4v)(void*p) = NULL;
@@ -703,7 +699,7 @@ actual_Excel4v (int xlfn, XLOPER* operRes, int count, XLOPER** opers)
 						  number of arguments." */
 		}
 		if ( xltypeStr != (opers[1]->xltype & xltypeType) ||  xltypeStr != (opers[2]->xltype & xltypeType)) {
-			g_warning (_("Excel plugin loader / xlfRegister: the second and third argument must be strings (DLL name[ignored],exported name[mandatory],types string[mandatory])."));
+			g_warning (_("Excel plugin loader / xlfRegister: the second and third arguments must be strings (DLL name[ignored],exported name[mandatory],types string[mandatory])."));
 			return xlretInvXloper; /* "An invalid XLOPER or XLOPER12 was passed to the function, or an argument of the wrong type was used." */
 		}
 		m=0;

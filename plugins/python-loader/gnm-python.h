@@ -1,5 +1,5 @@
-#ifndef PLUGIN_GNM_PYTHON_H
-#define PLUGIN_GNM_PYTHON_H
+#ifndef GNM_PLUGIN_GNM_PYTHON_H_
+#define GNM_PLUGIN_GNM_PYTHON_H_
 
 #include <glib.h>
 #include <gnumeric.h>
@@ -10,7 +10,7 @@
 #define GNM_IS_PYTHON(o)       (G_TYPE_CHECK_INSTANCE_TYPE ((o), GNM_PYTHON_TYPE))
 
 GType gnm_python_get_type (void);
-typedef struct _GnmPython GnmPython;
+typedef struct GnmPython_ GnmPython;
 
 GnmPython        *gnm_python_object_get (GOErrorInfo **err);
 GnmPyInterpreter *gnm_python_new_interpreter (GnmPython *gpy, GOPlugin *plugin);
@@ -26,4 +26,4 @@ void gnm_py_command_line_register_type		(GTypeModule *plugin);
 void gnm_py_interpreter_selector_register_type	(GTypeModule *plugin);
 void gnm_python_plugin_loader_register_type	(GTypeModule *plugin);
 
-#endif /* PLUGIN_GNM_PYTHON_H */
+#endif /* GNM_PLUGIN_GNM_PYTHON_H_ */

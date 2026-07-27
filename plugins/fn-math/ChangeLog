@@ -1,3 +1,51 @@
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.61
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.60
+
+2025-08-29  Morten Welinder  <terra@gnome.org>
+
+	* functions.c (gnumeric_log): Move guts to gnn_logbase and improve
+	there.
+	(gnumeric_log10): Use gnm_logbase instead of gnm_log10 directly.
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.59
+
+2024-08-13  Morten Welinder  <terra@gnome.org>
+
+	* functions.c (gnm_trunc_digits): Split out from gnumeric_trunc so
+	as not to mix the computation and the interface to Gnumeric's
+	values.  Avoid denormal powers of 10.  Ensure that truncating,
+	say, sqrt(2) to 53 decimals, doesn't actually change anything
+	due to internal rounding errors.
+	(gnm_pow10_dual): New function.
+
+2024-04-29  b.s. <newbie-02 (at) gmx (dot) de>
+
+	* functions.c (gnumeric_round, gnumeric_trunc, gnumeric_roundup)
+	(gnumeric_rounddown): cover denormals and excessive digits.
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.57
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.56
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.55
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.54
+
 2022-09-17  Morten Welinder <terra@gnome.org>
 
 	* Release 1.12.53

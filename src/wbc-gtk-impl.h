@@ -1,5 +1,5 @@
-#ifndef _GNM_WBC_GTK_IMPL_H_
-# define _GNM_WBC_GTK_IMPL_H_
+#ifndef GNM_WBC_GTK_IMPL_H_
+#define GNM_WBC_GTK_IMPL_H_
 
 #include <gnumeric.h>
 #include <wbc-gtk.h>
@@ -13,7 +13,7 @@
 
 G_BEGIN_DECLS
 
-struct _WBCGtk {
+struct WBCGtk_ {
 	WorkbookControl	base;
 
 	GtkWidget   *toplevel;
@@ -150,8 +150,8 @@ typedef struct {
 	void (*markup_changed)		(WBCGtk const *wbcg);
 } WBCGtkClass;
 
-#define GNM_RESPONSE_SAVE_ALL -1000
-#define GNM_RESPONSE_DISCARD_ALL -1001
+#define GNM_RESPONSE_SAVE_ALL (-1000)
+#define GNM_RESPONSE_DISCARD_ALL (-1001)
 
 /* Protected functions */
 gboolean wbc_gtk_close		(WBCGtk *wbcg);
@@ -159,7 +159,7 @@ void	 wbcg_insert_sheet	(GtkWidget *ignored, WBCGtk *wbcg);
 void	 wbcg_append_sheet	(GtkWidget *ignored, WBCGtk *wbcg);
 void	 wbcg_clone_sheet	(GtkWidget *ignored, WBCGtk *wbcg);
 
-void	 wbc_gtk_init_editline	(WBCGtk *wbcg);
+void	 wbcg_init_editline	(WBCGtk *wbcg);
 void	 wbc_gtk_init_actions	(WBCGtk *wbcg);
 void	 wbc_gtk_markup_changer	(WBCGtk *wbcg);
 
@@ -173,4 +173,4 @@ G_MODULE_EXPORT void set_uifilename (char const *name, GnmActionEntry const *act
 
 G_END_DECLS
 
-#endif /* _GNM_WBC_GTK_IMPL_H_ */
+#endif /* GNM_WBC_GTK_IMPL_H_ */

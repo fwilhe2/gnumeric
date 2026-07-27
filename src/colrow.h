@@ -1,11 +1,11 @@
-#ifndef _GNM_COLROW_H_
-# define _GNM_COLROW_H_
+#ifndef GNM_COLROW_H_
+#define GNM_COLROW_H_
 
 #include <gnumeric.h>
 
 G_BEGIN_DECLS
 
-struct _ColRowInfo {
+struct ColRowInfo_ {
 	/* Size including margins, and right grid line */
 	double	 size_pts;
 	int      size_pixels;
@@ -36,15 +36,20 @@ GType col_row_info_get_type (void);
 #define COLROW_SEGMENT_START(i)	((i) & ~(0x7f))
 #define COLROW_SEGMENT_END(i)	((i) | 0x7f)
 #define COLROW_SEGMENT_INDEX(i)	((i) >> 7)
+#define COLROW_GET_SEGMENT_INDEX(seg_array, ix) \
+	(g_ptr_array_index ((seg_array)->info, ix))
 #define COLROW_GET_SEGMENT(seg_array, i) \
-	(g_ptr_array_index ((seg_array)->info, COLROW_SEGMENT_INDEX(i)))
+	COLROW_GET_SEGMENT_INDEX(seg_array, COLROW_SEGMENT_INDEX(i))
 
-struct _ColRowSegment {
+struct ColRowSegment_ {
 	ColRowInfo *info [COLROW_SEGMENT_SIZE];
-	double	size_pts;
-	int	size_pixels;
+
+	// Pixel position of top left corner, i.e., sum of size_pixels for
+	// all visible columns/rows before.  This isn't always valid, see
+	// ColRowCollection.
+	gint64   pixel_start;
 };
-typedef struct _ColRowState {
+typedef struct ColRowState_ {
 	double    size_pts;
 	unsigned  is_default	: 1;
 	unsigned  outline_level : 4;
@@ -70,7 +75,6 @@ void	colrow_compute_pts_from_pixels (ColRowInfo *cri, Sheet const *sheet,
 gboolean col_row_info_is_default (ColRowInfo const *cri);
 gboolean col_row_info_is_empty   (ColRowInfo const *cri);
 gboolean col_row_info_equal	   (ColRowInfo const *a, ColRowInfo const *b);
-void     col_row_info_copy	   (ColRowInfo *dst, ColRowInfo const *src);
 ColRowInfo *col_row_info_new (void);
 void colrow_free (ColRowInfo *cri);
 
@@ -89,7 +93,7 @@ ColRowIndexList *colrow_get_index_list	     (int first, int last,
 					      ColRowIndexList *list);
 ColRowIndexList *colrow_index_list_copy	     (ColRowIndexList *list);
 
-ColRowStateList *colrow_state_list_destroy   (ColRowStateList *list);
+void             colrow_state_list_destroy   (ColRowStateList *list);
 
 ColRowStateList	*colrow_get_states	     (Sheet *sheet, gboolean is_cols,
 					      int first, int last);
@@ -113,7 +117,7 @@ void		   colrow_restore_state_group	(Sheet *sheet, gboolean is_cols,
 						 ColRowStateGroup *state_groups);
 
 /* Support for Col/Row visibility */
-void             col_row_info_set_outline             (ColRowInfo *cri, int outline_level,
+void             colrow_info_set_outline             (ColRowInfo *cri, int outline_level,
 						 gboolean is_collapsed);
 int		 colrow_find_outline_bound	(Sheet const *sheet, gboolean is_cols,
 						 int index, int depth, gboolean inc);
@@ -138,16 +142,17 @@ void             rows_height_update		(Sheet *sheet, GnmRange const *range,
 						 gboolean shrink);
 
 void             colrow_autofit                 (Sheet *sheet,
-						 GnmRange const *r,
+						 GnmRange const *range,
 						 gboolean is_cols,
 						 gboolean ignore_strings,
 						 gboolean min_current,
 						 gboolean min_default,
 						 ColRowIndexList **indices,
-						 ColRowStateList **sizes);
+						 ColRowStateList **sizes,
+						 gboolean reasonable_effort);
 void             colrow_autofit_col             (Sheet *sheet, GnmRange *r);
 void             colrow_autofit_row             (Sheet *sheet, GnmRange *r);
 
 G_END_DECLS
 
-#endif /* _GNM_COLROW_H_ */
+#endif /* GNM_COLROW_H_ */

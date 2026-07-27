@@ -37,16 +37,132 @@
 #include <goffice/goffice.h>
 #include <sheet.h>
 
+GType
+gnm_normality_test_type_get_type (void)
+{
+	static GType etype = 0;
+	if (etype == 0) {
+		static GEnumValue const values[] = {
+			{ GNM_NORMALITY_TEST_TYPE_ANDERSONDARLING,
+			  "GNM_NORMALITY_TEST_TYPE_ANDERSONDARLING",
+			  "andersondarling"
+			},
+			{ GNM_NORMALITY_TEST_TYPE_CRAMERVONMISES,
+			  "GNM_NORMALITY_TEST_TYPE_CRAMERVONMISES",
+			  "cramervonmises"
+			},
+			{ GNM_NORMALITY_TEST_TYPE_LILLIEFORS,
+			  "GNM_NORMALITY_TEST_TYPE_LILLIEFORS",
+			  "lilliefors"
+			},
+			{ GNM_NORMALITY_TEST_TYPE_SHAPIROFRANCIA,
+			  "GNM_NORMALITY_TEST_TYPE_SHAPIROFRANCIA",
+			  "shapirofrancia"
+			},
+			{ 0, NULL, NULL }
+		};
+		etype = g_enum_register_static ("gnm_normality_test_type_t", values);
+	}
+	return etype;
+}
+
+G_DEFINE_TYPE (GnmNormalityTool, gnm_normality_tool, GNM_TYPE_GENERIC_ANALYSIS_TOOL)
+
+enum {
+	NORMALITY_PROP_0,
+	NORMALITY_PROP_ALPHA,
+	NORMALITY_PROP_TYPE,
+	NORMALITY_PROP_GRAPH
+};
+
+static void
+gnm_normality_tool_set_property (GObject *object, guint property_id,
+				 GValue const *value, GParamSpec *pspec)
+{
+	GnmNormalityTool *tool = GNM_NORMALITY_TOOL (object);
+
+	switch (property_id) {
+	case NORMALITY_PROP_ALPHA:
+		tool->alpha = g_value_get_double (value);
+		break;
+	case NORMALITY_PROP_TYPE:
+		tool->type = g_value_get_enum (value);
+		break;
+	case NORMALITY_PROP_GRAPH:
+		tool->graph = g_value_get_boolean (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_normality_tool_get_property (GObject *object, guint property_id,
+				 GValue *value, GParamSpec *pspec)
+{
+	GnmNormalityTool *tool = GNM_NORMALITY_TOOL (object);
+
+	switch (property_id) {
+	case NORMALITY_PROP_ALPHA:
+		g_value_set_double (value, tool->alpha);
+		break;
+	case NORMALITY_PROP_TYPE:
+		g_value_set_enum (value, tool->type);
+		break;
+	case NORMALITY_PROP_GRAPH:
+		g_value_set_boolean (value, tool->graph);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_normality_tool_init (GnmNormalityTool *tool)
+{
+	tool->alpha = 0.05;
+	tool->type = GNM_NORMALITY_TEST_TYPE_ANDERSONDARLING;
+	tool->graph = FALSE;
+}
 
 static gboolean
-analysis_tool_normality_engine_run (data_analysis_output_t *dao,
-				      analysis_tools_data_normality_t *info)
+gnm_normality_tool_update_dao (GnmAnalysisTool *tool, data_analysis_output_t *dao)
 {
-	guint   col;
-	GSList *data = info->base.input;
-	GnmFunc *fd;
-	GnmFunc *fd_if;
+	GnmNormalityTool *ntool = GNM_NORMALITY_TOOL (tool);
+	GnmGenericAnalysisTool *gtool = &ntool->parent;
+	analysis_tool_prepare_input_range (gtool);
+	dao_adjust (dao, 1 + g_slist_length (gtool->base.input), 6);
+	return FALSE;
+}
 
+static char *
+gnm_normality_tool_update_descriptor (G_GNUC_UNUSED GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	return dao_command_descriptor (dao, _("Normality Test (%s)"));
+}
+
+static gboolean
+gnm_normality_tool_prepare_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	dao_prepare_output (wbc, dao, _("Normality Test"));
+	return FALSE;
+}
+
+static gboolean
+gnm_normality_tool_format_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	return dao_format_output (wbc, dao, _("Normality Test"));
+}
+
+static gboolean
+gnm_normality_tool_perform_calc (GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	GnmNormalityTool *ntool = GNM_NORMALITY_TOOL (tool);
+	GnmGenericAnalysisTool *gtool = &ntool->parent;
+	guint   col;
+	GSList *data = gtool->base.input;
 	char const *fdname;
 	char const *testname;
 	char const *n_comment;
@@ -55,28 +171,28 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 	GogPlot	     *plot = NULL;
 	SheetObject *so;
 
-	switch (info->type) {
-	case normality_test_type_andersondarling:
+	switch (ntool->type) {
+	case GNM_NORMALITY_TEST_TYPE_ANDERSONDARLING:
 		fdname = "ADTEST";
 		testname = N_("Anderson-Darling Test");
 		n_comment = N_("For the Anderson-Darling Test\n"
 			       "the sample size must be at\n"
 			       "least 8.");
 		break;
-	case normality_test_type_cramervonmises:
+	case GNM_NORMALITY_TEST_TYPE_CRAMERVONMISES:
 		fdname = "CVMTEST";
 		testname = N_("Cram\xc3\xa9r-von Mises Test");
 		n_comment = N_("For the Cram\xc3\xa9r-von Mises Test\n"
 			       "the sample size must be at\n"
 			       "least 8.");
 		break;
-	case normality_test_type_lilliefors:
+	case GNM_NORMALITY_TEST_TYPE_LILLIEFORS:
 		fdname = "LKSTEST";
 		testname = N_("Lilliefors (Kolmogorov-Smirnov) Test");
 		n_comment = N_("For the Lilliefors (Kolmogorov-Smirnov) Test\n"
 			       "the sample size must be at least 5.");
 		break;
-	case normality_test_type_shapirofrancia:
+	case GNM_NORMALITY_TEST_TYPE_SHAPIROFRANCIA:
 		fdname = "SFTEST";
 		testname = N_("Shapiro-Francia Test");
 		n_comment = N_("For the Shapiro-Francia Test\n"
@@ -84,19 +200,17 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 			       "least 5 and at most 5000.");
 		break;
 	default:
-		g_assert_not_reached();
+		g_assert_not_reached ();
 	}
 
-	fd = gnm_func_lookup_or_add_placeholder	(fdname);
-	gnm_func_inc_usage (fd);
-	fd_if = gnm_func_lookup_or_add_placeholder ("IF");
-	gnm_func_inc_usage (fd_if);
+	GnmFunc *fd = gnm_func_get_and_use (fdname);
+	GnmFunc *fd_if = gnm_func_get_and_use ("IF");
 
 	dao_set_italic (dao, 0, 0, 0, 5);
         dao_set_cell (dao, 0, 0, _(testname));
 
 
-	if (info->graph) {
+	if (ntool->graph) {
 		GogChart     *chart;
 
 		graph = g_object_new (GOG_TYPE_GRAPH, NULL);
@@ -133,9 +247,9 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 
 		/* Note that analysis_tools_write_label may modify val_org */
 		dao_set_italic (dao, col, 0, col, 0);
-		analysis_tools_write_label (val_org, dao, &info->base,
+		analysis_tools_write_label (gtool, val_org, dao,
 					    col, 0, col);
-		if (info->graph) {
+		if (ntool->graph) {
 			GogSeries    *series;
 
 			series = gog_plot_new_series (plot);
@@ -147,7 +261,7 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 		}
 
 		if (col == 1)
-			dao_set_cell_float (dao, col, 1, info->alpha);
+			dao_set_cell_float (dao, col, 1, ntool->alpha);
 		else
 			dao_set_cell_expr (dao, col, 1,
 					   make_cellref (1 - col, 0));
@@ -164,7 +278,7 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 				    gnm_expr_new_constant (value_new_string (_("Possibly normal")))));
 	}
 
-	if (info->graph) {
+	if (ntool->graph) {
 		so = sheet_object_graph_new (graph);
 		g_object_unref (graph);
 
@@ -179,33 +293,38 @@ analysis_tool_normality_engine_run (data_analysis_output_t *dao,
 	return 0;
 }
 
-gboolean
-analysis_tool_normality_engine (G_GNUC_UNUSED GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-				   analysis_tool_engine_t selector, gpointer result)
+static void
+gnm_normality_tool_class_init (GnmNormalityToolClass *klass)
 {
-	analysis_tools_data_normality_t *info = specs;
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	GnmAnalysisToolClass *at_class = GNM_ANALYSIS_TOOL_CLASS (klass);
 
-	switch (selector) {
-	case TOOL_ENGINE_UPDATE_DESCRIPTOR:
-		return (dao_command_descriptor (dao, _("Normality Test (%s)"), result)
-			== NULL);
-	case TOOL_ENGINE_UPDATE_DAO:
-		prepare_input_range (&info->base.input, info->base.group_by);
-		dao_adjust (dao, 1 + g_slist_length (info->base.input), 6);
-		return FALSE;
-	case TOOL_ENGINE_CLEAN_UP:
-		return analysis_tool_generic_clean (specs);
-	case TOOL_ENGINE_LAST_VALIDITY_CHECK:
-		return FALSE;
-	case TOOL_ENGINE_PREPARE_OUTPUT_RANGE:
-		dao_prepare_output (NULL, dao, _("Normality Test"));
-		return FALSE;
-	case TOOL_ENGINE_FORMAT_OUTPUT_RANGE:
-		return dao_format_output (dao, _("Normality Test"));
-	case TOOL_ENGINE_PERFORM_CALC:
-	default:
-		return analysis_tool_normality_engine_run (dao, specs);
-	}
-	return TRUE;  /* We shouldn't get here */
+	gobject_class->set_property = gnm_normality_tool_set_property;
+	gobject_class->get_property = gnm_normality_tool_get_property;
+
+	at_class->update_dao = gnm_normality_tool_update_dao;
+	at_class->update_descriptor = gnm_normality_tool_update_descriptor;
+	at_class->prepare_output_range = gnm_normality_tool_prepare_output_range;
+	at_class->format_output_range = gnm_normality_tool_format_output_range;
+	at_class->perform_calc = gnm_normality_tool_perform_calc;
+
+	g_object_class_install_property (gobject_class,
+		NORMALITY_PROP_ALPHA,
+		g_param_spec_double ("alpha", NULL, NULL,
+			0.0, 1.0, 0.05, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		NORMALITY_PROP_TYPE,
+		g_param_spec_enum ("type", NULL, NULL,
+			GNM_NORMALITY_TEST_TYPE, GNM_NORMALITY_TEST_TYPE_ANDERSONDARLING,
+			G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		NORMALITY_PROP_GRAPH,
+		g_param_spec_boolean ("graph", NULL, NULL,
+			FALSE, G_PARAM_READWRITE));
 }
 
+GnmAnalysisTool *
+gnm_normality_tool_new (void)
+{
+	return g_object_new (GNM_TYPE_NORMALITY_TOOL, NULL);
+}

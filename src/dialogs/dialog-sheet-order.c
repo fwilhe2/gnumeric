@@ -215,9 +215,11 @@ gtmff_asc (GtkTreeModel *model, GtkTreePath *path,
 			    SHEET_NAME, &name,
 			    -1);
 	ptr->i = this_sheet->index_in_wb;
-	ptr->key = g_utf8_collate_key_for_filename (name, -1);
+	ptr->key = g_utf8_collate_key (name, -1);
 
 	*l = g_slist_insert_sorted (*l, ptr, (GCompareFunc) gtmff_compare_func);
+
+	g_free (name);
 
 	return FALSE;
 }
@@ -435,7 +437,7 @@ cb_selection_changed (G_GNUC_UNUSED GtkTreeSelection *ignored,
 	GdkRGBA *fore, *back;
 	GtkTreeSelection *selection = gtk_tree_view_get_selection (state->sheet_list);
 	GList *selected_rows = gtk_tree_selection_get_selected_rows (selection, NULL);
-	gboolean multiple = gtk_tree_model_iter_n_children(GTK_TREE_MODEL (state->model), NULL) > 1;
+	gboolean multiple = gtk_tree_model_iter_n_children (GTK_TREE_MODEL (state->model), NULL) > 1;
 	int cnt_sel = g_list_length (selected_rows);
 	gboolean single_sel = (cnt_sel < 2);
 
@@ -650,11 +652,11 @@ cb_toggled_visible (G_GNUC_UNUSED GtkCellRendererToggle *cell,
 }
 
 static gboolean
-sheet_selection_can_toggle(GtkTreeSelection *selection,
-			   GtkTreeModel *model,
-			   GtkTreePath *path,
-			   gboolean path_currently_selected,
-			   G_GNUC_UNUSED gpointer data)
+sheet_selection_can_toggle (GtkTreeSelection *selection,
+			    GtkTreeModel *model,
+			    GtkTreePath *path,
+			    gboolean path_currently_selected,
+			    G_GNUC_UNUSED gpointer data)
 {
 	GtkTreeIter iter;
 	gboolean is_visible;
@@ -1515,7 +1517,7 @@ dialog_sheet_order (WBCGtk *wbcg)
 	create_sheet_list (state);
 	populate_sheet_list (state);
 
-#define CONNECT(o,s,c) g_signal_connect(G_OBJECT(o),s,G_CALLBACK(c),state)
+#define CONNECT(o,s,c) g_signal_connect (G_OBJECT(o),s,G_CALLBACK(c),state)
 	CONNECT (state->up_btn, "clicked", cb_up);
 	CONNECT (state->down_btn, "clicked", cb_down);
 	CONNECT (state->sort_asc_btn, "clicked", cb_asc);
@@ -1545,7 +1547,7 @@ dialog_sheet_order (WBCGtk *wbcg)
 	gtk_widget_set_sensitive (state->apply_names_btn, FALSE);
 
 	/* a candidate for merging into attach guru */
-	wbc_gtk_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
+	wbcg_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_sheet_order_destroy);
 	g_signal_connect (G_OBJECT (state->dialog), "destroy", G_CALLBACK (destroy_cb), NULL);

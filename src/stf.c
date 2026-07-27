@@ -76,17 +76,17 @@ stf_warning (GOIOContext *context, char const *msg)
 
 
 /*
- * stf_open_and_read:
- * @filename: name of the file to open&read
+ * stf_read_file:
+ * @context: #GOIOContext
+ * @input: source to read
+ * @readsize: (out): number of bytes read.
  *
- * Will open filename, read the file into a g_alloced memory buffer
+ * Read whole file.
  *
- * NOTE : The returned buffer has to be g_freed by the calling routine.
- *
- * returns : a buffer containing the file contents
+ * Returns : (transfer full): text read from file
  */
 static char *
-stf_open_and_read (G_GNUC_UNUSED GOIOContext *context, GsfInput *input, size_t *readsize)
+stf_read_file (G_GNUC_UNUSED GOIOContext *context, GsfInput *input, size_t *readsize)
 {
 	gpointer result;
 	gulong    allocsize;
@@ -121,7 +121,7 @@ stf_preparse (GOIOContext *context, GsfInput *input, size_t *data_len)
 {
 	char *data;
 
-	data = stf_open_and_read (context, input, data_len);
+	data = stf_read_file (context, input, data_len);
 
 	if (!data) {
 		if (context)
@@ -160,7 +160,7 @@ resize_columns (Sheet *sheet)
 			TRUE, /* Ignore strings */
 			TRUE, /* Don't shrink */
 			TRUE, /* Don't shrink */
-			NULL, NULL);
+			NULL, NULL, TRUE);
 	if (gnm_debug_flag ("stf"))
 		g_printerr ("Auto-fitting columns...  done\n");
 
@@ -377,7 +377,7 @@ clear_stray_NULs (GOIOContext *context, GString *utf8data)
 /*
  * stf_read_workbook_auto_csvtab:
  * @fo: file opener
- * @enc: optional encoding
+ * @enc: (nullable): encoding
  * @context: command context
  * @book: workbook
  * @input: file to read from+convert
@@ -395,11 +395,9 @@ stf_read_workbook_auto_csvtab (G_GNUC_UNUSED GOFileOpener const *fo, gchar const
 	char *data;
 	GString *utf8data;
 	size_t data_len;
-	StfParseOptions_t *po;
+	GnmStfParseOptions *po;
 	const char *gsfname;
 	int cols, rows, i;
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
 	WorkbookView *wbv = GNM_WORKBOOK_VIEW (view);
 
 	g_return_if_fail (context != NULL);
@@ -437,18 +435,16 @@ stf_read_workbook_auto_csvtab (G_GNUC_UNUSED GOFileOpener const *fo, gchar const
 			po = stf_parse_options_guess (utf8data->str);
 	}
 
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_general (po, lines_chunk,
-				   utf8data->str, utf8data->str + utf8data->len);
-	rows = lines->len;
+	GnmStfParsedLines *pl = stf_parse_general (po,
+						   utf8data->str, utf8data->str + utf8data->len);
+	rows = pl->lines->len;
 	cols = 0;
 	for (i = 0; i < rows; i++) {
-		GPtrArray *line = g_ptr_array_index (lines, i);
+		GPtrArray *line = g_ptr_array_index (pl->lines, i);
 		cols = MAX (cols, (int)line->len);
 	}
 	gnm_sheet_suggest_size (&cols, &rows);
-	stf_parse_general_free (lines);
-	g_string_chunk_free (lines_chunk);
+	g_object_unref (pl);
 
 	name = g_path_get_basename (gsfname);
 	sheet = sheet_new (book, name, cols, rows);
@@ -477,7 +473,7 @@ stf_read_workbook_auto_csvtab (G_GNUC_UNUSED GOFileOpener const *fo, gchar const
 	}
 
 
-	stf_parse_options_free (po);
+	g_object_unref (po);
 	g_string_free (utf8data, TRUE);
 }
 
@@ -489,27 +485,24 @@ stf_write_csv (GOFileSaver const *fs, GOIOContext *context,
 {
 	GPtrArray *sheets;
 	WorkbookView *wbv = GNM_WORKBOOK_VIEW (view);
+	Workbook *wb = wb_view_get_workbook (wbv);
+	GnmStfExport *stfe = gnm_stf_get_stfe (G_OBJECT (wb));
 
-	GnmStfExport *config = g_object_new
-		(GNM_STF_EXPORT_TYPE,
-		 "sink", output,
-		 "quoting-triggers", ", \t\n\"",
-		 NULL);
-
+	gnm_stf_export_options_sheet_list_clear (stfe);
+	g_object_set (G_OBJECT (stfe), "sink", output, NULL);
 	sheets = gnm_file_saver_get_sheets (fs, wbv, FALSE);
 	if (sheets) {
 		unsigned ui;
 		for (ui = 0; ui < sheets->len; ui++) {
 			Sheet *sheet = g_ptr_array_index (sheets, ui);
-			gnm_stf_export_options_sheet_list_add (config, sheet);
+			gnm_stf_export_options_sheet_list_add (stfe, sheet);
 		}
+		g_ptr_array_unref (sheets);
 	}
 
-	if (gnm_stf_export (config) == FALSE)
+	if (gnm_stf_export (stfe) == FALSE)
 		go_cmd_context_error_import (GO_CMD_CONTEXT (context),
 			_("Error while trying to write CSV file"));
-
-	g_object_unref (config);
 }
 
 static gboolean
@@ -577,6 +570,17 @@ csv_tsv_probe (GOFileOpener const *fo, GsfInput *input, GOFileProbeLevel pl)
 	}
 }
 
+static gboolean
+gnm_csv_fs_set_export_options (GOFileSaver *fs,
+			       GODoc *doc,
+			       const char *options,
+			       GError **err,
+			       gpointer user)
+{
+	// For now just common options
+	return gnm_csvtxt_fs_set_export_options (fs, doc, options, err, user);
+}
+
 /**
  * stf_init: (skip)
  */
@@ -634,6 +638,9 @@ stf_init (void)
 		GO_FILE_FL_MANUAL_REMEMBER, stf_write_csv);
 	go_file_saver_set_save_scope (saver, GO_FILE_SAVE_SHEET);
 	g_object_set (G_OBJECT (saver), "sheet-selection", TRUE, NULL);
+	g_signal_connect (G_OBJECT (saver), "set-export-options",
+			  G_CALLBACK (gnm_csv_fs_set_export_options),
+			  NULL);
 	go_file_saver_register (saver);
 	g_object_unref (saver);
 }

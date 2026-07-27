@@ -139,6 +139,11 @@ gnm_validation_combo_new (GnmValidation const *val, SheetView *sv)
 
 /***************************************************************************/
 
+/**
+ * gnm_validation_style_get_type:
+ *
+ * Returns: the GType for #GnmValidationStyle.
+ **/
 GType
 gnm_validation_style_get_type (void)
 {
@@ -163,6 +168,11 @@ gnm_validation_style_get_type (void)
 	return etype;
 }
 
+/**
+ * gnm_validation_type_get_type:
+ *
+ * Returns: the GType for #GnmValidationType.
+ **/
 GType
 gnm_validation_type_get_type (void)
 {
@@ -193,6 +203,11 @@ gnm_validation_type_get_type (void)
 	return etype;
 }
 
+/**
+ * gnm_validation_op_get_type:
+ *
+ * Returns: the GType for #GnmValidationOp.
+ **/
 GType
 gnm_validation_op_get_type (void)
 {
@@ -231,14 +246,15 @@ gnm_validation_op_get_type (void)
 /**
  * gnm_validation_new:
  * @style: #ValidationStyle
+ * @type: #ValidationType
  * @op: #ValidationOp
  * @sheet: #Sheet
  * @title: will be copied.
  * @msg: will be copied.
  * @texpr0: (transfer full) (nullable): first expression
  * @texpr1: (transfer full) (nullable): second expression
- * @allow_blank:
- * @use_dropdown:
+ * @allow_blank: if %TRUE, allow blank cells
+ * @use_dropdown: if %TRUE, show a dropdown list
  *
  * Does _NOT_ require all necessary information to be set here.
  * gnm_validation_set_expr can be used to change the expressions after creation,
@@ -311,6 +327,13 @@ gnm_validation_new (ValidationStyle style,
 	return v;
 }
 
+/**
+ * gnm_validation_dup_to:
+ * @v: #GnmValidation
+ * @sheet: #Sheet
+ *
+ * Returns: (transfer full): a copy of @v associated with @sheet.
+ **/
 GnmValidation *
 gnm_validation_dup_to (GnmValidation *v, Sheet *sheet)
 {
@@ -330,6 +353,14 @@ gnm_validation_dup_to (GnmValidation *v, Sheet *sheet)
 	return dst;
 }
 
+/**
+ * gnm_validation_equal:
+ * @a: first #GnmValidation
+ * @b: second #GnmValidation
+ * @relax_sheet: whether to ignore the sheet
+ *
+ * Returns: TRUE if @a and @b are equal.
+ **/
 gboolean
 gnm_validation_equal (GnmValidation const *a, GnmValidation const *b,
 		      gboolean relax_sheet)
@@ -365,6 +396,12 @@ gnm_validation_equal (GnmValidation const *a, GnmValidation const *b,
 }
 
 
+/**
+ * gnm_validation_ref:
+ * @v: #GnmValidation
+ *
+ * Returns: (transfer full): the validation itself with an increased reference count.
+ **/
 GnmValidation *
 gnm_validation_ref (GnmValidation const *v)
 {
@@ -373,10 +410,17 @@ gnm_validation_ref (GnmValidation const *v)
 	return ((GnmValidation *)v);
 }
 
+/**
+ * gnm_validation_unref:
+ * @v: (nullable) (transfer full): #GnmValidation
+ *
+ * Decreases the reference count of @v. If it reaches 0, the
+ * validation is destroyed.
+ **/
 void
-gnm_validation_unref (GnmValidation const *val)
+gnm_validation_unref (GnmValidation const *v_)
 {
-	GnmValidation *v = (GnmValidation *)val;
+	GnmValidation *v = (GnmValidation *)v_;
 
 	g_return_if_fail (v != NULL);
 
@@ -397,6 +441,11 @@ gnm_validation_unref (GnmValidation const *val)
 	}
 }
 
+/**
+ * gnm_validation_get_type:
+ *
+ * Returns: the GType for #GnmValidation.
+ **/
 GType
 gnm_validation_get_type (void)
 {
@@ -441,6 +490,12 @@ gnm_validation_set_expr (GnmValidation *v,
 	dependent_managed_set_expr (&v->deps[indx], texpr);
 }
 
+/**
+ * gnm_validation_is_ok:
+ * @v: #GnmValidation
+ *
+ * Returns: (transfer full) (nullable): a #GError if @v is invalid, or %NULL if it is OK.
+ **/
 GError *
 gnm_validation_is_ok (GnmValidation const *v)
 {
@@ -511,7 +566,7 @@ cb_validate_custom (GnmValueIter const *v_iter, GnmValue const *target)
  * @showed_dialog: (out) (optional):
  *
  * Checks the validation in @mstyle, if any.  Set @showed_dialog to %TRUE
- * if a dialog was showed as a result.
+ * if a dialog was shown as a result.
  **/
 ValidationStatus
 gnm_validation_eval (WorkbookControl *wbc, GnmStyle const *mstyle,
@@ -725,6 +780,16 @@ validation_eval_range_cb (GnmCellIter const *iter, validation_eval_t *closure)
 	return NULL;
 }
 
+/**
+ * gnm_validation_eval_range:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @pos: current cell position
+ * @r: #GnmRange
+ * @showed_dialog: (out): whether a dialog was shown
+ *
+ * Returns: #ValidationStatus for the range.
+ **/
 ValidationStatus
 gnm_validation_eval_range (WorkbookControl *wbc,
 			   Sheet *sheet, GnmCellPos const *pos,

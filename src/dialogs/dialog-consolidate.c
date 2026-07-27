@@ -99,7 +99,7 @@ adjust_source_areas (ConsolidateState *state)
 					    &iter,
 					    SOURCE_COLUMN, &source,
 					    -1);
-			if (strlen(source) == 0)
+			if (*source == 0)
 				cnt_empty--;
 			g_free (source);
 		} while (gtk_tree_model_iter_next
@@ -137,17 +137,17 @@ construct_consolidate (ConsolidateState *state, data_analysis_output_t  *dao)
 	gboolean         has_iter;
 
 	switch (gtk_combo_box_get_active (state->function)) {
-	case 0 : func = "SUM"; break;
-	case 1 : func = "MIN"; break;
-	case 2 : func = "MAX"; break;
-	case 3 : func = "AVERAGE"; break;
-	case 4 : func = "COUNT"; break;
-	case 5 : func = "PRODUCT"; break;
-	case 6 : func = "STDEV"; break;
-	case 7 : func = "STDEVP"; break;
-	case 8 : func = "VAR"; break;
-	case 9 : func = "VARP"; break;
-	default :
+	case 0: func = "SUM"; break;
+	case 1: func = "MIN"; break;
+	case 2: func = "MAX"; break;
+	case 3: func = "AVERAGE"; break;
+	case 4: func = "COUNT"; break;
+	case 5: func = "PRODUCT"; break;
+	case 6: func = "STDEV"; break;
+	case 7: func = "STDEVP"; break;
+	case 8: func = "VAR"; break;
+	case 9: func = "VARP"; break;
+	default:
 		func = NULL;
 		g_warning ("Unknown function index!");
 	}
@@ -180,7 +180,7 @@ construct_consolidate (ConsolidateState *state, data_analysis_output_t  *dao)
 				    &iter,
 				    SOURCE_COLUMN, &source,
 				    -1);
-		if (strlen(source) != 0) {
+		if (*source) {
 			range_value = value_new_cellrange_str (state->base.sheet, source);
 
 			if (range_value == NULL) {
@@ -288,12 +288,12 @@ cb_consolidate_ok_clicked (GtkWidget *button, ConsolidateState *state)
 	if (state->base.warning_dialog != NULL)
 		gtk_widget_destroy (state->base.warning_dialog);
 
-	dao  = parse_output ((GnmGenericToolState *)state, NULL);
+	dao  = dao_parse_output ((GnmGenericToolState *)state);
 	cs = construct_consolidate (state, dao);
 
 	/*
 	 * If something went wrong consolidate_construct
-	 * return NULL and sets the state->construct_error to
+	 * return %NULL and sets the state->construct_error to
 	 * a suitable error message
 	 */
 	if (cs == NULL) {
@@ -302,26 +302,26 @@ cb_consolidate_ok_clicked (GtkWidget *button, ConsolidateState *state)
 					       GTK_MESSAGE_ERROR,
 					       "%s", state->construct_error);
 		g_free (state->construct_error);
-		g_free (dao);
+		dao_free (dao);
 		state->construct_error = NULL;
 
 		return;
 	}
 
 	if (gnm_consolidate_check_destination (cs, dao)) {
-		if (!cmd_analysis_tool (GNM_WBC (state->base.wbcg),
-					state->base.sheet,
-					dao, cs, gnm_tool_consolidate_engine,
-					FALSE) &&
-		    (button == state->base.ok_button))
+		GnmAnalysisTool *tool = gnm_consolidate_tool_new (cs);
+		if (cmd_analysis_tool (GNM_WBC (state->base.wbcg), state->base.sheet, dao, tool)) {
+			dao_free (dao);
+		} else if (button == state->base.ok_button)
 			gtk_widget_destroy (state->base.dialog);
+		g_object_unref (tool);
 	} else {
 		go_gtk_notice_nonmodal_dialog (GTK_WINDOW (state->base.dialog),
 					  &state->base.warning_dialog,
 					  GTK_MESSAGE_ERROR,
 					  _("The output range overlaps "
 					    "with the input ranges."));
-		g_free (dao);
+		dao_free (dao);
 		gnm_consolidate_free (cs, FALSE);
 	}
 }

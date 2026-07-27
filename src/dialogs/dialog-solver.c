@@ -681,7 +681,7 @@ create_report (GnmSolver *sol, SolverState *state)
 {
 	Sheet *sheet = state->sheet;
 	char *base = g_strdup_printf (_("%s %%s Report"), sheet->name_unquoted);
-	gnm_solver_create_report (sol, base);
+	gnm_solver_create_report (sol, GNM_WBC (state->wbcg), base);
 	g_free (base);
 }
 
@@ -895,8 +895,7 @@ cb_dialog_solve_clicked (G_GNUC_UNUSED GtkWidget *button,
 	}
 
  out:
-	if (err)
-		g_error_free (err);
+	g_clear_error (&err);
 }
 
 #define INIT_BOOL_ENTRY(name_, field_)					\
@@ -1007,7 +1006,7 @@ dialog_solver_init (SolverState *state)
 	/* Algorithm */
 	state->algorithm_combo = GTK_COMBO_BOX
 		(go_gtk_builder_get_widget (state->gui, "algorithm_combo"));
-	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new();
+	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new ();
 	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->algorithm_combo), renderer, TRUE);
 	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (state->algorithm_combo), renderer,
 					"text", 0,
@@ -1016,7 +1015,7 @@ dialog_solver_init (SolverState *state)
 
 	for (i = 0; model_type_group[i]; i++) {
 		const char *bname = model_type_group[i];
-		GtkWidget *w = go_gtk_builder_get_widget(state->gui, bname);
+		GtkWidget *w = go_gtk_builder_get_widget (state->gui, bname);
 		gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (w),
 					      param->options.model_type ==
 					      (GnmSolverModelType)i);
@@ -1163,16 +1162,16 @@ dialog_solver_init (SolverState *state)
 	}
 
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (
-		go_gtk_builder_get_widget(state->gui, "max_button")),
+		go_gtk_builder_get_widget (state->gui, "max_button")),
 			param->problem_type == GNM_SOLVER_MAXIMIZE);
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (
-		go_gtk_builder_get_widget(state->gui, "min_button")),
+		go_gtk_builder_get_widget (state->gui, "min_button")),
 			param->problem_type == GNM_SOLVER_MINIMIZE);
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (
-		go_gtk_builder_get_widget(state->gui, "no_scenario")),
+		go_gtk_builder_get_widget (state->gui, "no_scenario")),
 			! param->options.add_scenario);
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (
-		go_gtk_builder_get_widget(state->gui, "optimal_scenario")),
+		go_gtk_builder_get_widget (state->gui, "optimal_scenario")),
 			param->options.add_scenario);
 
 	state->scenario_name_entry = go_gtk_builder_get_widget
@@ -1195,7 +1194,7 @@ dialog_solver_init (SolverState *state)
 	dialog_set_sec_button_sensitivity (NULL, state);
 
 /* dialog */
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 
 	g_signal_connect_swapped (G_OBJECT (state->dialog),
 				  "destroy",

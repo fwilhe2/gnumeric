@@ -16,6 +16,11 @@ INTROSPECTION_COMPILER_ARGS = \
 	--includedir=. \
 	--includedir="${INTROSPECTION_GIRDIR}"
 
+if WITH_DECIMAL64
+  # Very wrong and any actual use will likely crash
+  INTROSPECTION_SCANNER_ARGS += -D_Decimal64=double
+endif
+
 libspreadsheet_includedir = $(includedir)/libspreadsheet-@GNUMERIC_API_VER@/spreadsheet
 
 EXTRA_DIST =
@@ -262,15 +267,19 @@ tools_SOURCES =	\
 	tools/analysis-chi-squared.c		\
 	tools/analysis-exp-smoothing.c		\
 	tools/analysis-frequency.c		\
+	tools/analysis-ftest.c			\
 	tools/analysis-histogram.c		\
 	tools/analysis-kaplan-meier.c		\
 	tools/analysis-normality.c		\
 	tools/analysis-one-mean-test.c		\
 	tools/analysis-principal-components.c	\
+	tools/analysis-regression.c		\
 	tools/analysis-sign-test.c		\
 	tools/analysis-signed-rank-test.c	\
 	tools/analysis-tools.c			\
+	tools/analysis-ttest.c			\
 	tools/analysis-wilcoxon-mann-whitney.c	\
+	tools/analysis-ztest.c			\
 	tools/auto-correct.c			\
 	tools/dao.c				\
 	tools/data-shuffling.c			\
@@ -291,15 +300,19 @@ tools_HEADERS = \
 	tools/analysis-chi-squared.h		\
 	tools/analysis-exp-smoothing.h		\
 	tools/analysis-frequency.h		\
+	tools/analysis-ftest.h			\
 	tools/analysis-histogram.h		\
 	tools/analysis-kaplan-meier.h		\
 	tools/analysis-normality.h		\
 	tools/analysis-one-mean-test.h		\
 	tools/analysis-principal-components.h	\
+	tools/analysis-regression.h		\
 	tools/analysis-sign-test.h		\
 	tools/analysis-signed-rank-test.h	\
 	tools/analysis-tools.h			\
+	tools/analysis-ttest.h			\
 	tools/analysis-wilcoxon-mann-whitney.h	\
+	tools/analysis-ztest.h			\
 	tools/auto-correct.h			\
 	tools/dao.h				\
 	tools/data-shuffling.h			\
@@ -311,8 +324,7 @@ tools_HEADERS = \
 	tools/random-generator.h		\
 	tools/scenarios.h			\
 	tools/simulation.h			\
-	tools/tabulate.h			\
-	tools/tools.h
+	tools/tabulate.h
 
 noinst_HEADERS = dead-kittens.h compilation.h gnm-i18n.h \
 	$(dialogs_headers)
@@ -730,8 +742,8 @@ gnumeric-paths.h: Makefile
 	@( \
 	echo '/* This file has been automatically generated.  Do not edit. */'; \
 	echo ''; \
-	echo '#ifndef GNUMERIC_PATHS_H'; \
-	echo '#define GNUMERIC_PATHS_H'; \
+	echo '#ifndef GNUMERIC_PATHS_H_'; \
+	echo '#define GNUMERIC_PATHS_H_'; \
 	echo ''; \
 	echo '#define GNUMERIC_PREFIX		"$(prefix)"'; \
 	echo '#define GNUMERIC_SYSCONFDIR	"$(sysconfdir)"'; \
@@ -740,7 +752,7 @@ gnumeric-paths.h: Makefile
 	echo '#define GNUMERIC_LOCALEDIR	"$(gnumeric_localedir)"'; \
 	echo '#define GNUMERIC_EXTERNPLUGINDIR		"$(gnumeric_externplugindir)"'; \
 	echo ''; \
-	echo '#endif /* GNUMERIC_PATHS_H */'; \
+	echo '#endif /* GNUMERIC_PATHS_H_ */'; \
 	) >$@
 
 update-gnumeric-conf:

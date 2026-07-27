@@ -45,7 +45,6 @@
 
 #include <gsf/gsf-input.h>
 #include <gsf/gsf-input-textline.h>
-#include <string.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -338,7 +337,7 @@ sc_parse_set (ScParseState *state, char const *cmd, char const *str,
 	if (options != NULL)
 		for (tmp = options; *tmp != NULL; tmp++)
 			sc_parse_set_handle_option (state, *tmp);
-	g_strfreev(options);
+	g_strfreev (options);
 
 	/* Most of these settings are not applicable to Gnumeric */
 	return TRUE;
@@ -369,6 +368,12 @@ sc_parse_format_definition (ScParseState *state, char const *cmd, char const *st
 	return TRUE;
 }
 
+static double
+sc_pixels_to_pts (Sheet *sheet, gboolean is_horiz, int pixels)
+{
+	return pixels / colrow_compute_pixel_scale (sheet, is_horiz);
+}
+
 static void
 sc_parse_format_set_width (ScParseState *state, int len, int col_from, int col_to)
 {
@@ -394,8 +399,9 @@ sc_parse_format_set_width (ScParseState *state, int len, int col_from, int col_t
 	width = PANGO_PIXELS (len * style_font->go.metrics->avg_digit_width) + 4;
 	gnm_style_unref (mstyle);
 
+	double pts = sc_pixels_to_pts (state->sheet, TRUE, width);
 	for (col = col_from; col <= col_to; col++)
-		sheet_col_set_size_pixels (state->sheet, col, width, TRUE);
+		sheet_col_set_size_pts (state->sheet, col, pts, TRUE);
 }
 
 static void
@@ -410,7 +416,7 @@ sc_parse_format_get_precision (ScParseState *state, int col)
 {
 	if (state->precision != NULL &&
 	    col < (int)state->precision->len) {
-		return (g_array_index(state->precision, int, col) - 1 );
+		return (g_array_index (state->precision, int, col) - 1 );
 	} else return -1;
 }
 
@@ -427,7 +433,7 @@ sc_parse_format_save_precision (ScParseState *state, int precision,
 		state->precision = g_array_set_size (state->precision, col_to + 1);
 
 	for (col = col_from; col <= col_to; col++)
-		g_array_index(state->precision, int, col) = precision + 1;
+		g_array_index (state->precision, int, col) = precision + 1;
 }
 
 static char *
@@ -446,7 +452,7 @@ sc_parse_format_apply_precision (ScParseState *state, char *format, int col)
 				int i;
 				if (p == -1) {
 					p = 0;
-					sc_warning (state, _("Encountered precision dependent format without set precision."));
+					sc_warning (state, _("Encountered precision-dependent format without set precision."));
 				}
 				off--;
 				g_string_erase (str, off, 1);
@@ -464,7 +470,7 @@ static void
 sc_parse_format_set_type (ScParseState *state, int type, int col_from, int col_to)
 {
 	char const *o_format = type >= 0 && (size_t)type < state->formats->len
-		? g_ptr_array_index(state->formats, type)
+		? g_ptr_array_index (state->formats, type)
 		: NULL;
 	int col;
 
@@ -518,7 +524,7 @@ sc_parse_format (ScParseState *state, char const *cmd, char const *str,
 	while (*s == ' ')
 		s++;
 
-	d = sscanf(s, "%i %i %i", &len, &precision, &format_type);
+	d = sscanf (s, "%i %i %i", &len, &precision, &format_type);
 
 	if (d != 3)
 		goto cannotparse;
@@ -546,9 +552,9 @@ sc_parse_fmt (ScParseState *state, char const *cmd, char const *str,
 	GnmCellPos pos = { -1, -1 };
 
 	space = strstr (s, "\"");
-	space--;
-	if (!space)
+	if (space == NULL || space == s)
 		return FALSE;
+	space--;
 
 	res = sc_parse_coord_real (state, s, &pos, space - s);
 	if (!res)
@@ -805,10 +811,10 @@ sc_parse_let (ScParseState *state, char const *cmd, char const *str,
 		gnm_cell_set_value (cell, value_dup (v));
 	} else {
 		gnm_cell_set_expr (cell, texpr);
-		cell_queue_recalc (cell);
+		gnm_cell_queue_recalc (cell);
 	}
 
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 	return TRUE;
 }
 
@@ -835,7 +841,7 @@ sc_parse_define (ScParseState *state, char const *cmd, char const *str,
 		goto out;
 	}
 
-	nexpr = expr_name_add (&pp, name->str, texpr, &errstr, TRUE, NULL);
+	nexpr = expr_name_add (&pp, name->str, texpr, &errstr, NULL);
 	if (!nexpr)
 		goto out;
 
@@ -865,7 +871,7 @@ static sc_cmd_t const sc_cmd_list[] = {
 	{ "format", 6,          sc_parse_format, FALSE },
 	{ "set", 3,             sc_parse_set,    FALSE },
 	{ "goto", 4,            sc_parse_goto,   FALSE },
-	{ NULL, 0, NULL, 0 },
+	{ NULL, 0, NULL, 0 }
 };
 
 
@@ -1041,7 +1047,7 @@ sc_file_open (GOFileOpener const *fo, GOIOContext *io_context,
 	}
 	g_object_unref (state.textline);
 	g_iconv_close (state.converter);
-	gnm_conventions_unref (state.convs);
+	g_object_unref (state.convs);
 	g_free (state.last_error);
 	sc_parse_format_free_precision (&state);
 

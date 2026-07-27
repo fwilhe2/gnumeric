@@ -20,7 +20,7 @@
 #include <cell.h>
 #include <value.h>
 #include <func.h>
-#include <parse-util.h>
+#include <ranges.h>
 #include <sheet-object-cell-comment.h>
 #include <mathfunc.h>
 #include <gnm-random.h>
@@ -28,6 +28,8 @@
 #include <sf-gamma.h>
 #include <rangefunc.h>
 #include <gnumeric-conf.h>
+#include <format-template.h>
+#include <file-autoft.h>
 
 #include <gsf/gsf-input-stdio.h>
 #include <gsf/gsf-input-textline.h>
@@ -43,7 +45,7 @@ static gchar *func_state_file = NULL;
 static gchar *ext_refs_file = NULL;
 static gchar *samples_file = NULL;
 
-static GOptionEntry const sstest_options [] = {
+static GOptionEntry const sstest_options[] = {
 	{
 		"fast", 'f',
 		0, G_OPTION_ARG_NONE, &sstest_fast,
@@ -138,10 +140,10 @@ dump_externals (GPtrArray *defs, FILE *out)
 					fprintf (out, "<!--#if expr=\"${QUERY_STRING} = %s\" -->", fd->name);
 				}
 
-				if (strncmp (s, "wolfram:", 8) == 0) {
+				if (g_str_has_prefix (s, "wolfram:")) {
 					fprintf (out, "<!--#set var=\"wolfram\" value=\"%s\" -->", s + 8);
 				}
-				if (strncmp (s, "wiki:", 5) == 0) {
+				if (g_str_has_prefix (s, "wiki:")) {
 					char *lang, *page;
 					lang = split_at_colon (s + 5, &page);
 					fprintf (out, "<!--#set var=\"wiki_lang\" value=\"%s\" -->", lang);
@@ -557,7 +559,7 @@ function_dump_defs (char const *filename, int dump_type)
 			static struct {
 				char const *name;
 				char const *klass;
-			} const testing [] = {
+			} const testing[] = {
 				{ "Unknown",		"testing-unknown" },
 				{ "No Testsuite",	"testing-nosuite" },
 				{ "Basic",		"testing-basic" },
@@ -567,7 +569,7 @@ function_dump_defs (char const *filename, int dump_type)
 			static struct {
 				char const *name;
 				char const *klass;
-			} const implementation [] = {
+			} const implementation[] = {
 				{ "Exists",			"imp-exists" },
 				{ "Unimplemented",		"imp-no" },
 				{ "Subset",			"imp-subset" },
@@ -599,19 +601,17 @@ function_dump_defs (char const *filename, int dump_type)
 				*strchr (catname, ' ') = '_';
 			fprintf (output_file, "<tr class=\"function\">\n");
 			fprintf (output_file,
-				 "<td><a href =\"https://help.gnome.org/users/gnumeric/stable/gnumeric.html#gnumeric-function-%s\">%s</a></td>\n",
-				 up, fd->name);
+				 "<td><a href =\"https://gnome.pages.gitlab.gnome.org/gnumeric/manual/CATEGORY_%s.html#gnumeric-function-%s\">%s</a></td>\n",
+				 catname, up, fd->name);
 			g_free (up);
 			g_free (catname);
 			fprintf (output_file,
-				 "<td class=\"%s\"><a href=\"mailto:gnumeric-list@gnome.org?subject=Re: %s implementation\">%s</a></td>\n",
+				 "<td class=\"%s\">%s</td>\n",
 				 implementation[imst].klass,
-				 fd->name,
 				 implementation[imst].name);
 			fprintf (output_file,
-				 "<td class=\"%s\"><a href=\"mailto:gnumeric-list@gnome.org?subject=Re: %s testing\">%s</a></td>\n",
+				 "<td class=\"%s\">%s</td>\n",
 				 testing[test].klass,
-				 fd->name,
 				 testing[test].name);
 			fprintf (output_file,"</tr>\n");
 		}
@@ -754,7 +754,7 @@ define_name (const char *name, const char *expr_txt, gpointer scope)
 		return;
 	}
 
-	nexpr = expr_name_add (&pos, name, texpr, NULL, TRUE, NULL);
+	nexpr = expr_name_add (&pos, name, texpr, NULL, NULL);
 	if (!nexpr)
 		g_printerr ("Failed to add name %s\n", name);
 }
@@ -900,13 +900,14 @@ test_insert_delete (void)
 /* ------------------------------------------------------------------------- */
 
 static gboolean
-check_help_expression (const char *text, GnmFunc const *fd)
+check_help_expression (const char *text, GnmFunc const *fd, gboolean localized)
 {
 	GnmConventions const *convs = gnm_conventions_default;
 	GnmParsePos pp;
 	GnmExprTop const *texpr;
 	Workbook *wb;
 	GnmParseError perr;
+	GnmLocale *oldlocale = NULL;
 
 	/* Create a dummy workbook with no sheets for interesting effects.  */
 	wb = workbook_new ();
@@ -914,10 +915,15 @@ check_help_expression (const char *text, GnmFunc const *fd)
 
 	parse_error_init (&perr);
 
+	if (!localized)
+		oldlocale = gnm_push_C_locale ();
 	texpr = gnm_expr_parse_str (text, &pp,
 				    GNM_EXPR_PARSE_DEFAULT,
 				    convs,
 				    &perr);
+	if (!localized)
+		gnm_pop_C_locale (oldlocale);
+
 	if (perr.err) {
 		g_printerr ("Error parsing %s: %s\n",
 			    text, perr.err->message);
@@ -953,14 +959,13 @@ check_argument_refs (const char *text, GnmFunc *fd)
 		argname = g_strndup (at + 2, text - at - 2);
 
 		for (i = 0; TRUE; i++) {
-			char *thisarg = gnm_func_get_arg_name (fd, i);
+			char const *thisarg = gnm_func_get_arg_name (fd, i);
 			gboolean found;
 			if (!thisarg) {
 				g_free (argname);
 				return TRUE;
 			}
 			found = strcmp (argname, thisarg) == 0;
-			g_free (thisarg);
 			if (found)
 				break;
 		}
@@ -979,48 +984,86 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 	GHashTable *allargs;
 	int n;
 	GnmFuncHelp const *help = gnm_func_get_help (fd, &n);
+	gboolean all_args_translated = TRUE;
+	gboolean no_args_translated = TRUE;
+	gboolean excel_compatible = FALSE;
+
+	for (int i = 0; i < n; i++) {
+		GnmFuncHelp const *h = help + i;
+
+		switch (h->type) {
+		case GNM_FUNC_HELP_ARG: {
+			const char *text = gnm_func_gettext (fd, h->text);
+			gboolean was_translated = (text != h->text);
+			if (was_translated)
+				no_args_translated = FALSE;
+			else
+				all_args_translated = FALSE;
+			break;
+		}
+		case GNM_FUNC_HELP_EXCEL:
+			excel_compatible = TRUE;
+			break;
+		default:
+			; // Nothing
+		}
+	}
 
 	allargs = g_hash_table_new_full
 		(g_str_hash, g_str_equal, (GDestroyNotify)g_free, NULL);
 
 	memset (counts, 0, sizeof (counts));
 	for (h = help; n-- > 0; h++) {
-		unsigned len;
+		const char *text0 = h->text;
+		const char *text = gnm_func_gettext (fd, text0);
+		gboolean was_translated = (text != text0);
+		unsigned len = strlen (text);
+		gboolean check_xrefs = was_translated ? all_args_translated : no_args_translated;
 
 		g_assert (h->type <= GNM_FUNC_HELP_ODF);
 		counts[h->type]++;
 
-		if (!g_utf8_validate (h->text, -1, NULL)) {
+		if (!g_utf8_validate (text, -1, NULL)) {
 			g_printerr ("%s: Invalid UTF-8 in type %i\n",
 				    fd->name, h->type);
 				res = 1;
 				continue;
 		}
 
-		len = h->text ? strlen (h->text) : 0;
 		switch (h->type) {
 		case GNM_FUNC_HELP_NAME:
-			if (g_ascii_strncasecmp (fd->name, h->text, nlen) ||
-			    h->text[nlen] != ':') {
+			if (!was_translated &&
+			    (g_ascii_strncasecmp (fd->name, text, nlen) ||
+			     text[nlen] != ':')) {
 				g_printerr ("%s: Invalid NAME record\n",
 					    fd->name);
+				if (was_translated) {
+					g_printerr ("Original: %s\n", text0);
+					g_printerr ("Translated: %s\n", text);
+				}
 				res = 1;
-			} else if (h->text[nlen + 1] == ' ' ||
-				   h->text[len - 1] == ' ') {
+			} else if (text[nlen + 1] == ' ' ||
+				   text[len - 1] == ' ') {
 				g_printerr ("%s: Unwanted space in NAME record\n",
 					    fd->name);
 				res = 1;
-			} else if (h->text[len - 1] == '.') {
+			} else if (text[len - 1] == '.' && text[len - 2] != '.') {
+				// Ie., "..." permitted
 				g_printerr ("%s: Unwanted period in NAME record\n",
 					    fd->name);
 				res = 1;
+			} else if (check_xrefs && check_argument_refs (text + nlen + 1, fd)) {
+				g_printerr ("%s: Invalid argument reference in description\n",
+					    fd->name);
+				res = 1;
 			}
+
 			break;
 		case GNM_FUNC_HELP_ARG: {
-			const char *aend = strchr (h->text, ':');
+			const char *aend = strchr (text, ':');
 			char *argname;
 
-			if (aend == NULL || aend == h->text) {
+			if (aend == NULL || aend == text) {
 				g_printerr ("%s: Invalid ARG record\n",
 					    fd->name);
 				res = 1;
@@ -1037,23 +1080,23 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 					    fd->name);
 				res = 1;
 			}
-			if (h->text[strlen (h->text) - 1] == '.') {
+			if (g_str_has_suffix(text, ".")) {
 				g_printerr ("%s: Unwanted period in ARG record\n",
 					    fd->name);
 				res = 1;
 			}
-			if (check_argument_refs (aend + 1, fd)) {
+			if (check_xrefs && check_argument_refs (aend + 1, fd)) {
 				g_printerr ("%s: Invalid argument reference, %s, in argument\n",
 					    aend + 1, fd->name);
 				res = 1;
 			}
-			argname = g_strndup (h->text, aend - h->text);
+			argname = g_strndup (text, aend - text);
 			if (g_hash_table_lookup (allargs, argname)) {
 				g_printerr ("%s: Duplicate argument name %s\n",
 					    fd->name, argname);
 				res = 1;
 				g_free (argname);
-				g_printerr ("%s\n", h->text);
+				g_printerr ("%s\n", text);
 			} else
 				g_hash_table_insert (allargs, argname, argname);
 			break;
@@ -1061,22 +1104,22 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 		case GNM_FUNC_HELP_DESCRIPTION: {
 			const char *p;
 
-			if (check_argument_refs (h->text, fd)) {
+			if (check_xrefs && check_argument_refs (text, fd)) {
 				g_printerr ("%s: Invalid argument reference in description\n",
 					    fd->name);
 				res = 1;
 			}
 
-			p = h->text;
+			p = text;
 			while (g_ascii_isupper (*p) ||
-			       (p != h->text && (*p == '_' ||
+			       (p != text && (*p == '_' ||
 						 *p == '.' ||
 						 g_ascii_isdigit (*p))))
 				p++;
 			if (*p == ' ' &&
-			    p - h->text >= 2 &&
-			    strncmp (h->text, "CP1252", 6) != 0) {
-				if (g_ascii_strncasecmp (h->text, fd->name, nlen)) {
+			    p - text >= 2 &&
+			    !g_str_has_prefix (text, "CP1252")) {
+				if (g_ascii_strncasecmp (text, fd->name, nlen)) {
 					g_printerr ("%s: Wrong function name in description\n",
 						    fd->name);
 					res = 1;
@@ -1086,8 +1129,8 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 		}
 
 		case GNM_FUNC_HELP_EXAMPLES:
-			if (h->text[0] == '=') {
-				if (check_help_expression (h->text + 1, fd)) {
+			if (text[0] == '=') {
+				if (check_help_expression (text + 1, fd, was_translated)) {
 					g_printerr ("%s: Invalid EXAMPLES record\n",
 						    fd->name);
 					res = 1;
@@ -1096,7 +1139,7 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 			break;
 
 		case GNM_FUNC_HELP_SEEALSO: {
-			const char *p = h->text;
+			const char *p = text;
 			if (len == 0 || strchr (p, ' ')) {
 				g_printerr ("%s: Invalid SEEALSO record\n",
 					    fd->name);
@@ -1171,6 +1214,13 @@ gnm_func_sanity_check1 (GnmFunc *fd)
 	if (counts[GNM_FUNC_HELP_SEEALSO] > 1) {
 		g_printerr ("%s: Help has %d SEEALSO notes.\n",
 			    fd->name, counts[GNM_FUNC_HELP_SEEALSO]);
+		res = 1;
+	}
+
+	if (gnm_func_get_impl_status (fd) == GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC &&
+	    excel_compatible) {
+		g_printerr ("%s: Unique to Gnumeric, but also Excel compatible.\n",
+			    fd->name);
 		res = 1;
 	}
 
@@ -1314,7 +1364,7 @@ test_strtol_reverse (long l)
 }
 
 static int
-test_strtod_ok (const char *s, double d, size_t expected_len)
+test_strtod_ok (const char *s, gnm_float d, size_t expected_len)
 {
 	gnm_float d2;
 	char *end;
@@ -1501,7 +1551,7 @@ rand_fractile_test (gnm_float const *vals, int N, int nf,
 		g_printerr ("Expected counts:");
 		for (i = 1; i <= nf; i++) {
 			gnm_float p = GET_PROB (i) - GET_PROB (i-1);
-			expected[i] = gnm_floor (p * N + 0.5);
+			expected[i] = gnm_round (p * N);
 			g_printerr ("%s%d", (i == 1) ? " " : ", ", expected[i]);
 		}
 		g_printerr (".\n");
@@ -1689,17 +1739,17 @@ test_random_rand (int N)
 		ok = FALSE;
 	}
 	T = var_target;
-	if (gnm_abs (var - T) > 0.01) {
+	if (gnm_abs (var - T) > GNM_const(0.01)) {
 		g_printerr ("Var failure.\n");
 		ok = FALSE;
 	}
 	T = skew_target;
-	if (gnm_abs (skew - T) > 0.05) {
+	if (gnm_abs (skew - T) > GNM_const(0.05)) {
 		g_printerr ("Skew failure.\n");
 		ok = FALSE;
 	}
 	T = kurt_target;
-	if (gnm_abs (kurt - T) > 0.05) {
+	if (gnm_abs (kurt - T) > GNM_const(0.05)) {
 		g_printerr ("Kurt failure.\n");
 		ok = FALSE;
 	}
@@ -1725,9 +1775,9 @@ test_random_randuniform (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float lsign = (random_01 () > 0.75 ? 1 : -1);
-	gnm_float param_l = lsign * gnm_floor (1 / (0.0001 + gnm_pow (random_01 (), 4)));
-	gnm_float param_h = param_l + gnm_floor (1 / (0.0001 + gnm_pow (random_01 () / 2, 4)));
+	gnm_float lsign = (random_01 () > GNM_const(0.75) ? 1 : -1);
+	gnm_float param_l = lsign * gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 4)));
+	gnm_float param_h = param_l + gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 4)));
 	gnm_float n = param_h - param_l;
 	gnm_float mean_target = (param_l + param_h) / 2;
 	gnm_float var_target = (n * n) / 12;
@@ -1786,7 +1836,7 @@ test_random_randuniform (int N)
 
 	/* Fractile test */
 	for (i = 1; i < nf; i++)
-		fractiles[i] = param_l + n * i / (double)nf;
+		fractiles[i] = param_l + n * i / (gnm_float)nf;
 	if (!rand_fractile_test (vals, N, nf, fractiles, NULL))
 		ok = FALSE;
 
@@ -1831,28 +1881,28 @@ test_random_randbernoulli (int N)
 
 	T = mean_target;
 	g_printerr ("Expected mean: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (mean - p) > 0.01) {
+	if (gnm_abs (mean - p) > GNM_const(0.01)) {
 		g_printerr ("Mean failure [%.1" GNM_FORMAT_f " stdev]\n", (mean - T) / gnm_sqrt (var_target / N));
 		ok = FALSE;
 	}
 
 	T = var_target;
 	g_printerr ("Expected var: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (var - T) > 0.01) {
+	if (gnm_abs (var - T) > GNM_const(0.01)) {
 		g_printerr ("Var failure.\n");
 		ok = FALSE;
 	}
 
 	T = skew_target;
 	g_printerr ("Expected skew: %.10" GNM_FORMAT_g "\n", T);
-	if (!(gnm_abs (skew - T) <= 0.10 * gnm_abs (T))) {
+	if (!(gnm_abs (skew - T) <= GNM_const(0.10) * gnm_abs (T))) {
 		g_printerr ("Skew failure.\n");
 		ok = FALSE;
 	}
 
 	T = kurt_target;
 	g_printerr ("Expected kurt: %.10" GNM_FORMAT_g "\n", T);
-	if (!(gnm_abs (kurt - T) <= 0.15 * gnm_abs (T))) {
+	if (!(gnm_abs (kurt - T) <= GNM_const(0.15) * gnm_abs (T))) {
 		g_printerr ("Kurt failure.\n");
 		ok = FALSE;
 	}
@@ -1962,12 +2012,12 @@ test_random_randnorm (int N)
 	}
 
 	T = mean_target;
-	if (gnm_abs (mean - T) > 0.02) {
+	if (gnm_abs (mean - T) > GNM_const(0.02)) {
 		g_printerr ("Mean failure [%.1" GNM_FORMAT_f " stdev]\n", (mean - T) / gnm_sqrt (var_target / N));
 		ok = FALSE;
 	}
 	T = var_target;
-	if (gnm_abs (var - T) > 0.02) {
+	if (gnm_abs (var - T) > GNM_const(0.02)) {
 		g_printerr ("Var failure.\n");
 		ok = FALSE;
 	}
@@ -1978,20 +2028,20 @@ test_random_randnorm (int N)
 	if (!rand_fractile_test (vals, N, nf, fractiles, NULL))
 		ok = FALSE;
 
-	if (adtest < 0.01) {
+	if (adtest < GNM_const(0.01)) {
 		g_printerr ("Anderson Darling Test rejected [%.10" GNM_FORMAT_g "]\n", adtest);
 		ok = FALSE;
 	}
-	if (cvmtest < 0.01) {
+	if (cvmtest < GNM_const(0.01)) {
 		g_printerr ("Cramér-von Mises Test rejected [%.10" GNM_FORMAT_g "]\n", cvmtest);
 		ok = FALSE;
 	}
-	if (lkstest < 0.01) {
+	if (lkstest < GNM_const(0.01)) {
 		g_printerr ("Lilliefors (Kolmogorov-Smirnov) Test rejected [%.10" GNM_FORMAT_g "]\n",
 			    lkstest);
 		ok = FALSE;
 	}
-	if (sftest < 0.01) {
+	if (sftest < GNM_const(0.01)) {
 		g_printerr ("Shapiro-Francia Test rejected [%.10" GNM_FORMAT_g "]\n", sftest);
 		ok = FALSE;
 	}
@@ -2012,7 +2062,7 @@ test_random_randsnorm (int N)
 	gnm_float *vals;
 	gboolean ok;
 	gnm_float alpha = 5;
-	gnm_float delta = alpha/gnm_sqrt(1+alpha*alpha);
+	gnm_float delta = alpha / gnm_sqrt (1+alpha*alpha);
 	gnm_float mean_target = delta * gnm_sqrt (2/M_PIgnum);
 	gnm_float var_target = 1-mean_target*mean_target;
 	char *expr;
@@ -2035,14 +2085,14 @@ test_random_randsnorm (int N)
 
 	T = mean_target;
 	g_printerr ("Expected mean: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (mean - T) > 0.01) {
+	if (gnm_abs (mean - T) > GNM_const(0.01)) {
 		g_printerr ("Mean failure [%.1" GNM_FORMAT_f " stdev]\n", (mean - T) / gnm_sqrt (var_target / N));
 		ok = FALSE;
 	}
 
 	T = var_target;
 	g_printerr ("Expected var: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (var - T) > 0.01) {
+	if (gnm_abs (var - T) > GNM_const(0.01)) {
 		g_printerr ("Var failure.\n");
 		ok = FALSE;
 	}
@@ -2050,14 +2100,14 @@ test_random_randsnorm (int N)
 	T = mean_target/gnm_sqrt(var_target);
 	T = T*T*T*(4-M_PIgnum)/2;
 	g_printerr ("Expected skew: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (skew - T) > 0.05) {
+	if (gnm_abs (skew - T) > GNM_const(0.05)) {
 		g_printerr ("Skew failure.\n");
 		ok = FALSE;
 	}
 
 	T = 2*(M_PIgnum - 3)*mean_target*mean_target*mean_target*mean_target/(var_target*var_target);
 	g_printerr ("Expected kurt: %.10" GNM_FORMAT_g "\n", T);
-	if (gnm_abs (kurt - T) > 0.15) {
+	if (gnm_abs (kurt - T) > GNM_const(0.15)) {
 		g_printerr ("Kurt failure.\n");
 		ok = FALSE;
 	}
@@ -2077,7 +2127,7 @@ test_random_randexp (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_l = 1 / (0.0001 + gnm_pow (random_01 () / 2, 4));
+	gnm_float param_l = 1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 4));
 	gnm_float mean_target = param_l;
 	gnm_float var_target = mean_target * mean_target;
 	gnm_float skew_target = 2;
@@ -2154,8 +2204,8 @@ test_random_randgamma (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_shape = gnm_floor (1 / (0.0001 + gnm_pow (random_01 (), 6)));
-	gnm_float param_scale = 0.001 + gnm_pow (random_01 (), 4) * 1000;
+	gnm_float param_shape = gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 6)));
+	gnm_float param_scale = GNM_const(0.001) + gnm_pow (random_01 (), 4) * 1000;
 	gnm_float mean_target = param_shape * param_scale;
 	gnm_float var_target = mean_target * param_scale;
 	gnm_float skew_target = 2 / gnm_sqrt (param_shape);
@@ -2232,8 +2282,8 @@ test_random_randbeta (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_a = 1 / (0.0001 + gnm_pow (random_01 (), 6));
-	gnm_float param_b = 1 / (0.0001 + gnm_pow (random_01 (), 6));
+	gnm_float param_a = 1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 6));
+	gnm_float param_b = 1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 6));
 	gnm_float s = param_a + param_b;
 	gnm_float mean_target = param_a / s;
 	gnm_float var_target = mean_target * param_b / (s * (s + 1));
@@ -2313,7 +2363,7 @@ test_random_randtdist (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_df = 1 + gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 6)));
+	gnm_float param_df = 1 + gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 6)));
 	gnm_float mean_target = 0;
 	gnm_float var_target = param_df > 2 ? param_df / (param_df - 2) : gnm_nan;
 	gnm_float skew_target = param_df > 3 ? 0 : gnm_nan;
@@ -2390,8 +2440,8 @@ test_random_randfdist (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_df1 = 1 + gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 6)));
-	gnm_float param_df2 = 1 + gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 6)));
+	gnm_float param_df1 = 1 + gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 6)));
+	gnm_float param_df2 = 1 + gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 6)));
 	gnm_float mean_target = param_df2 > 2 ? param_df2 / (param_df2 - 2) : gnm_nan;
 	gnm_float var_target = param_df2 > 4
 		? (2 * param_df2 * param_df2 * (param_df1 + param_df2 - 2) /
@@ -2471,7 +2521,7 @@ test_random_randchisq (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_df = 1 + gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 6)));
+	gnm_float param_df = 1 + gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 6)));
 	gnm_float mean_target = param_df;
 	gnm_float var_target = param_df * 2;
 	gnm_float skew_target = gnm_sqrt (8 / param_df);
@@ -2548,7 +2598,7 @@ test_random_randcauchy (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_scale = 0.001 + gnm_pow (random_01 (), 4) * 1000;
+	gnm_float param_scale = GNM_const(0.001) + gnm_pow (random_01 (), 4) * 1000;
 	gnm_float mean_target = gnm_nan;
 	gnm_float var_target = gnm_nan;
 	gnm_float skew_target = gnm_nan;
@@ -2631,7 +2681,7 @@ test_random_randbinom (int N)
 	gnm_float *vals;
 	gboolean ok;
 	gnm_float param_p = random_01 ();
-	gnm_float param_trials = gnm_floor (1 / (0.0001 + gnm_pow (random_01 (), 4)));
+	gnm_float param_trials = gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 4)));
 	gnm_float mean_target = param_trials * param_p;
 	gnm_float var_target = mean_target * (1 - param_p);
 	gnm_float skew_target = (1 - 2 * param_p) / gnm_sqrt (var_target);
@@ -2711,7 +2761,7 @@ test_random_randnegbinom (int N)
 	gnm_float *vals;
 	gboolean ok;
 	gnm_float param_p = random_01 ();
-	gnm_float param_fails = gnm_floor (1 / (0.0001 + gnm_pow (random_01 (), 4)));
+	gnm_float param_fails = gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 4)));
 	/* Warning: these differ from Wikipedia by swapping p and 1-p.  */
 	gnm_float mean_target = param_fails * (1 - param_p) / param_p;
 	gnm_float var_target = mean_target / param_p;
@@ -2791,8 +2841,8 @@ test_random_randhyperg (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_nr = gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 4)));
-	gnm_float param_nb = gnm_floor (1 / (0.01 + gnm_pow (random_01 (), 4)));
+	gnm_float param_nr = gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 4)));
+	gnm_float param_nb = gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 4)));
 	gnm_float s = param_nr + param_nb;
 	gnm_float param_n = gnm_floor (random_01 () * (s + 1));
 	gnm_float mean_target = param_n * param_nr / s;
@@ -2876,9 +2926,9 @@ test_random_randbetween (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float lsign = (random_01 () > 0.75 ? 1 : -1);
-	gnm_float param_l = lsign * gnm_floor (1 / (0.0001 + gnm_pow (random_01 (), 4)));
-	gnm_float param_h = param_l + gnm_floor (1 / (0.0001 + gnm_pow (random_01 () / 2, 4)));
+	gnm_float lsign = (random_01 () > GNM_const(0.75) ? 1 : -1);
+	gnm_float param_l = lsign * gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 4)));
+	gnm_float param_h = param_l + gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 4)));
 	gnm_float n = param_h - param_l + 1;
 	gnm_float mean_target = (param_l + param_h) / 2;
 	gnm_float var_target = (n * n - 1) / 12;
@@ -2948,7 +2998,7 @@ test_random_randpoisson (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float param_l = 1 / (0.0001 + gnm_pow (random_01 () / 2, 4));
+	gnm_float param_l = 1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 4));
 	gnm_float mean_target = param_l;
 	gnm_float var_target = param_l;
 	gnm_float skew_target = 1 / gnm_sqrt (param_l);
@@ -3189,7 +3239,7 @@ test_random_randweibull (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float shape = 1 / (0.0001 + gnm_pow (random_01 () / 2, 2));
+	gnm_float shape = 1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 2));
 	gnm_float scale = 2 * random_01 ();
 	gnm_float mean_target = scale * gnm_gamma (1 + 1 / shape);
 	gnm_float var_target = scale * scale  *
@@ -3274,7 +3324,7 @@ test_random_randlognorm (int N)
 	gnm_float mean, var, skew, kurt;
 	gnm_float *vals;
 	gboolean ok;
-	gnm_float lm = (random_01() - 0.5) / (0.1 + gnm_pow (random_01 () / 2, 2));
+	gnm_float lm = (random_01() - GNM_const(0.5)) / (GNM_const(0.1) + gnm_pow (random_01 () / 2, 2));
 	gnm_float ls = 1 / (1 + gnm_pow (random_01 () / 2, 2));
 	gnm_float mean_target = gnm_exp (lm + ls * ls / 2);
 	gnm_float var_target = gnm_expm1 (ls * ls) * (mean_target * mean_target);
@@ -3437,7 +3487,7 @@ test_random (void)
 	mark_test_start (test_name);
 
 #define CHECK1(NAME,C) \
-	do { if (!single || strcmp(single,#NAME) == 0) test_random_ ## NAME (C); } while (0)
+	do { if (!single || strcmp (single,#NAME) == 0) test_random_ ## NAME (C); } while (0)
 
 	/* Continuous */
 	CHECK1 (rand, N);
@@ -3492,6 +3542,195 @@ test_random (void)
 	mark_test_end (test_name);
 }
 
+static gboolean
+almost_eq (gnm_float a, gnm_float b, gnm_float tol)
+{
+	gnm_float ad = gnm_abs (a - b);
+	if (ad == 0)
+		return TRUE;
+	return ad < MAX (gnm_abs (a), gnm_abs (b)) * tol;
+}
+
+#define BARF(what) do { \
+	g_printerr ("Trouble in %s: %s\n", dist->str, what);	\
+	g_printerr ("  x=%.12" GNM_FORMAT_g "\n", x);\
+	g_printerr ("  prev_d=%.12" GNM_FORMAT_g ", prev_p=%.12" GNM_FORMAT_g "\n", prev_d, prev_p); \
+	g_printerr ("  d=%.12" GNM_FORMAT_g ", p=%.12" GNM_FORMAT_g "\n", d, p); \
+} while (0)
+
+#define CHECK_DPQ_DISCRETE() do {					\
+	if (i < LEFT || i > RIGHT ? !(d == 0) : !(d >= 0))		\
+		BARF("d not non-negative");				\
+	if (i < LEFT ? !(p == 0) : (i >= RIGHT ? !(p == 1) : !(p >= prev_p))) \
+		BARF("p not increasing from 0");			\
+	if (i >= RIGHT ? !(p == 1) : !(p <= 1))				\
+		BARF("p not increasing to 1");				\
+	if (!almost_eq (prev_p + d, p, tol))				\
+		BARF("p does not cummulate");				\
+} while (0)
+
+static void
+test_dpq_binom (void)
+{
+	gnm_float param_p = random_01 ();
+	gnm_float param_trials = gnm_floor (1 / (GNM_const(0.0001) + gnm_pow (random_01 (), 4)));
+	int i;
+	gnm_float prev_p = 0;
+	gnm_float prev_d = 0;
+	GString *dist;
+	gnm_float tol = GNM_EPSILON * 1000;
+	gnm_float LEFT, RIGHT;
+
+	dist = g_string_new ("binom(");
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_p);
+	g_string_append_c (dist, ',');
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_trials);
+	g_string_append_c (dist, ')');
+
+	LEFT = 0;
+	RIGHT = param_trials;
+
+	for (i = LEFT - 1; i <= RIGHT + 1; i++) {
+		gnm_float x = i;
+		gnm_float d = dbinom (x, param_trials, param_p, FALSE);
+		gnm_float p = pbinom (x, param_trials, param_p, TRUE, FALSE);
+
+		CHECK_DPQ_DISCRETE ();
+
+		prev_d = d;
+		prev_p = p;
+	}
+
+	g_string_free (dist, TRUE);
+}
+
+static void
+test_dpq_geom (void)
+{
+	gnm_float param_p = random_01 ();
+	int i;
+	gnm_float prev_p = 0;
+	gnm_float prev_d = 0;
+	GString *dist;
+	gnm_float tol = GNM_EPSILON * 10;
+	gnm_float LEFT, RIGHT;
+
+	dist = g_string_new ("geom(");
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_p);
+	g_string_append_c (dist, ')');
+
+	LEFT = 0;
+	RIGHT = gnm_pinf;
+
+	for (i = LEFT - 1; i <= 100 / param_p; i++) {
+		gnm_float x = i;
+		gnm_float d = dgeom (x, param_p, FALSE);
+		gnm_float p = pgeom (x, param_p, TRUE, FALSE);
+
+		CHECK_DPQ_DISCRETE ();
+
+		prev_d = d;
+		prev_p = p;
+	}
+
+	g_string_free (dist, TRUE);
+}
+
+static void
+test_dpq_hypergeom (void)
+{
+	gnm_float param_nr = gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 4)));
+	gnm_float param_nb = gnm_floor (1 / (GNM_const(0.01) + gnm_pow (random_01 (), 4)));
+	gnm_float param_n = gnm_random_uniform_int (param_nr + param_nb + 1);
+	int i;
+	gnm_float prev_p = 0;
+	gnm_float prev_d = 0;
+	GString *dist;
+	gnm_float tol = GNM_EPSILON * 1000;
+	gnm_float LEFT, RIGHT;
+
+	dist = g_string_new ("hyper(");
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_nr);
+	g_string_append_c (dist, ',');
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_nb);
+	g_string_append_c (dist, ',');
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_n);
+	g_string_append_c (dist, ')');
+
+	LEFT = 0;
+	RIGHT = param_n;
+
+	for (i = LEFT - 1; i <= RIGHT + 1; i++) {
+		gnm_float x = i;
+		gnm_float d = dhyper (x, param_nr, param_nb, param_n, FALSE);
+		gnm_float p = phyper (x, param_nr, param_nb, param_n, TRUE, FALSE);
+
+		CHECK_DPQ_DISCRETE ();
+
+		prev_d = d;
+		prev_p = p;
+	}
+
+	g_string_free (dist, TRUE);
+}
+
+
+static void
+test_dpq_poisson (void)
+{
+	gnm_float param_l = 1 / (GNM_const(0.0001) + gnm_pow (random_01 () / 2, 4));
+	int i;
+	gnm_float prev_p = 0;
+	gnm_float prev_d = 0;
+	GString *dist;
+	gnm_float tol = GNM_EPSILON * 1000;
+	gnm_float LEFT, RIGHT;
+
+	dist = g_string_new ("pois(");
+	go_dtoa (dist, "!^" GNM_FORMAT_g, param_l);
+	g_string_append_c (dist, ')');
+
+	LEFT = 0;
+	RIGHT = gnm_pinf;
+
+	for (i = LEFT - 1; i <= 5 * param_l; i++) {
+		gnm_float x = i;
+		gnm_float d = dpois (x, param_l, FALSE);
+		gnm_float p = ppois (x, param_l, TRUE, FALSE);
+
+		CHECK_DPQ_DISCRETE ();
+
+		prev_d = d;
+		prev_p = p;
+	}
+
+	g_string_free (dist, TRUE);
+}
+
+
+
+static void
+test_dpq (void)
+{
+	const char *test_name = "test_random";
+	//const int N = sstest_fast ? 2000 : 20000;
+	const char *single = g_getenv ("SSTEST_DPQ");
+
+	mark_test_start (test_name);
+
+#define CHECK1(NAME) \
+	do { if (!single || strcmp (single,#NAME) == 0) test_dpq_ ## NAME (); } while (0)
+
+	// Discrete
+	CHECK1 (binom);
+	CHECK1 (geom);
+	CHECK1 (hypergeom);
+	CHECK1 (poisson);
+
+	mark_test_end (test_name);
+}
+
+
 static GPtrArray *
 get_cell_values (GPtrArray *cells)
 {
@@ -3517,7 +3756,7 @@ test_recalc (GOCmdContext *cc, const char *url)
 
 	cells = g_ptr_array_new ();
 	WORKBOOK_FOREACH_SHEET (wb, sheet, {
-		GPtrArray *scells = sheet_cells (sheet, NULL);	
+		GPtrArray *scells = sheet_cells (sheet, NULL);
 		unsigned ui;
 		for (ui = 0; ui < scells->len; ui++) {
 			GnmCell *cell = g_ptr_array_index (scells, ui);
@@ -3585,6 +3824,85 @@ test_recalc (GOCmdContext *cc, const char *url)
 	g_ptr_array_free (base_values, TRUE);
 	g_object_unref (wb);
 	g_object_unref (io_context);
+}
+
+/* ------------------------------------------------------------------------- */
+
+static void
+fillin_range (Sheet *sheet, GnmRange const *r)
+{
+	for (int col = r->start.col; col <= r->end.col; col++) {
+		for (int row = r->start.row; row <= r->end.row; row++) {
+			GnmCell *cell = sheet_cell_fetch (sheet, col, row);
+			GOFormat const *fmt = gnm_cell_get_format (cell);
+			GOFormatFamily family = go_format_get_family (fmt);
+			const char *txt;
+			switch (family) {
+			case GO_FORMAT_NUMBER:
+				txt = "123";
+				break;
+			case GO_FORMAT_CURRENCY:
+			case GO_FORMAT_ACCOUNTING:
+				txt = "123.45";
+				break;
+			default:
+				txt = cell_name (cell);
+			}
+			sheet_cell_set_text (cell, txt, NULL);
+		}
+	}
+}
+
+
+static void
+test_auto_format (GOCmdContext *cc, const char *uri)
+{
+	Workbook *wb;
+	GList *groups;
+	GSList *regions;
+	GnmRange r0;
+
+	groups = gnm_ft_category_group_list_get ();
+	if (!groups) {
+		// We cannot do this in-tree.
+		g_printerr ("No templates installed\n");
+		return;
+	}
+
+	wb = workbook_new ();
+	regions = g_slist_prepend (NULL, range_init (&r0, 1, 1, 7, 20));
+
+	for (GList *l = groups; l; l = l->next) {
+		GnmFTCategoryGroup *g = l->data;
+		GSList *templates = gnm_ft_category_group_get_templates_list (g, cc);
+
+		for (GSList *tl = templates; tl; tl = tl->next) {
+			GnmFT *t = tl->data;
+			char *name = g_strconcat (g->name, "-", t->name, NULL);
+			Sheet *sheet = sheet_new (wb, name, GNM_DEFAULT_COLS, GNM_DEFAULT_ROWS);
+			workbook_sheet_attach (wb, sheet);
+
+			g_printerr ("Auto-formatting %s...\n", name);
+			gnm_ft_apply_to_sheet_regions (t, sheet, regions);
+			for (GSList *l = regions; l; l = l->next) {
+				GnmRange const *r = l->data;
+				fillin_range (sheet, r);
+			}
+			g_free (name);
+		}
+
+		g_slist_free_full (templates, g_object_unref);
+	}
+
+	gnm_ft_category_group_list_free (groups);
+	g_slist_free (regions);
+
+	GOFileSaver *fs = go_file_saver_for_file_name (uri);
+	WorkbookView *wbv = workbook_view_new (wb);
+	workbook_view_save_as (wbv, fs, uri, cc);
+	g_object_unref (wbv);
+
+	g_object_unref (wb);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -3662,10 +3980,18 @@ main (int argc, char const **argv)
 	MAYBE_DO ("test_func_help") test_func_help ();
 	MAYBE_DO ("test_nonascii_numbers") test_nonascii_numbers ();
 	MAYBE_DO ("test_random") test_random ();
+	MAYBE_DO ("test_dpq") test_dpq ();
 	if (argc > 2) {
 		MAYBE_DO ("test_recalc") {
 			char *url = go_shell_arg_to_uri (argv[2]);
 			test_recalc (cc, url);
+			g_free (url);
+		}
+	}
+	if (argc > 2) {
+		MAYBE_DO ("test_auto_format") {
+			char *url = go_shell_arg_to_uri (argv[2]);
+			test_auto_format (cc, url);
 			g_free (url);
 		}
 	}

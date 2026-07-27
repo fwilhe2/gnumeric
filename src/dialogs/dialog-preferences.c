@@ -394,7 +394,7 @@ double_pref_widget_to_conf (GtkSpinButton *button, double_conf_setter_t setter)
 	double_conf_getter_t getter
 		= g_object_get_data (G_OBJECT (button), "getter");
 	double val_in_button = gtk_spin_button_get_value (button);
-	double val_in_conf = getter();
+	double val_in_conf = getter ();
 
 	if (fabs (val_in_conf - val_in_button) > 1e-10) /* dead simple */
 		setter (val_in_button);
@@ -762,7 +762,7 @@ pref_undo_page_initializer (PrefState *state,
 				gnm_conf_get_undo_max_descriptor_width,
 				_("Length of Undo Descriptors"));
 	int_pref_create_widget (gnm_conf_get_undo_size_node (),
-				page, row++, 1000, 0, 30000, 100,
+				page, row++, 1000, 0, 500000, 1000,
 				gnm_conf_set_undo_size,
 				gnm_conf_get_undo_size,
 				_("Maximal Undo Size"));

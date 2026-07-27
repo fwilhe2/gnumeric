@@ -12,18 +12,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef GNUMERIC_TOOL_DIALOGS_H
-#define GNUMERIC_TOOL_DIALOGS_H
+#ifndef GNM_TOOL_DIALOGS_H_
+#define GNM_TOOL_DIALOGS_H_
 
 #include <gnumeric.h>
 #include <numbers.h>
 #include <widgets/gnm-expr-entry.h>
 
-typedef struct _scenario_state scenario_state_t;
-
 typedef void (*state_destroy_t) (GnmGenericToolState *state);
 
-struct _GenericToolState {
+struct GnmGenericToolState_ {
 	GtkBuilder  *gui;
 	GtkWidget *dialog;
 	GnmExprEntry *input_entry;

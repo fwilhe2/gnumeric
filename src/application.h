@@ -1,5 +1,5 @@
-#ifndef _GNM_APPLICATION_H_
-# define _GNM_APPLICATION_H_
+#ifndef GNM_APPLICATION_H_
+#define GNM_APPLICATION_H_
 
 #include <gnumeric.h>
 #include <glib-object.h>
@@ -61,7 +61,7 @@ GnmRange const	*gnm_app_clipboard_area_get	  (void);
 
 typedef void (*GnmActionHandler) (GnmAction const *action, WorkbookControl *wbc,
 				  gpointer data);
-struct _GnmAction {
+struct GnmAction_ {
 	unsigned ref_count;
 	char *id;	 /* id of the function that will handle this */
 	char *label;	 /* untranslated, gettext domain will be passed later */
@@ -108,4 +108,4 @@ void gnm_app_flag_windows_changed_ (void);
 
 G_END_DECLS
 
-#endif /* _GNM_APPLICATION_H_ */
+#endif /* GNM_APPLICATION_H_ */

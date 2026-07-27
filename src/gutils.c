@@ -83,6 +83,11 @@ running_in_tree (void)
 
 static gboolean gutils_inited = FALSE;
 
+/**
+ * gutils_init: (skip)
+ *
+ * Initializes the Gnumeric utility library.
+ **/
 void
 gutils_init (void)
 {
@@ -136,6 +141,11 @@ gutils_init (void)
 	gutils_inited = TRUE;
 }
 
+/**
+ * gutils_shutdown: (skip)
+ *
+ * Shuts down the Gnumeric utility library and frees its resources.
+ **/
 void
 gutils_shutdown (void)
 {
@@ -163,30 +173,56 @@ gutils_shutdown (void)
 	gutils_xml_in_docs = NULL;
 }
 
+/**
+ * gnm_sys_lib_dir:
+ *
+ * Returns: (transfer none): the Gnumeric system library directory.
+ **/
 char const *
 gnm_sys_lib_dir (void)
 {
 	return gnumeric_lib_dir;
 }
 
+/**
+ * gnm_sys_data_dir:
+ *
+ * Returns: (transfer none): the Gnumeric system data directory.
+ **/
 char const *
 gnm_sys_data_dir (void)
 {
 	return gnumeric_data_dir;
 }
 
+/**
+ * gnm_sys_extern_plugin_dir:
+ *
+ * Returns: (transfer none): the Gnumeric external plugin directory.
+ **/
 char const *
 gnm_sys_extern_plugin_dir (void)
 {
 	return gnumeric_extern_plugin_dir;
 }
 
+/**
+ * gnm_locale_dir:
+ *
+ * Returns: (transfer none): the Gnumeric locale directory.
+ **/
 char const *
 gnm_locale_dir (void)
 {
 	return gnumeric_locale_dir;
 }
 
+/**
+ * gnm_usr_dir:
+ * @versioned: if %TRUE, include the Gnumeric version in the path
+ *
+ * Returns: (transfer none): the Gnumeric user directory.
+ **/
 char const *
 gnm_usr_dir (gboolean versioned)
 {
@@ -206,12 +242,18 @@ all_ascii (const char *s)
 	return FALSE;
 }
 
-/*
+/**
+ * gnm_utf8_strto:
+ * @s: string to parse
+ * @end: (out) (optional): location to store end of parsed string
+ *
  * Like strto[ld], but...
  * 1. handles non-ascii characters
  * 2. disallows 0x000.0p+00 and 0.0d+00
  * 3. ensures sane errno on exit
- */
+ *
+ * Returns: the parsed value as a #gnm_float.
+ **/
 gnm_float
 gnm_utf8_strto (const char *s, char **end)
 {
@@ -304,12 +346,18 @@ handle_denormal:
 	return res;
 }
 
-/*
+/**
+ * gnm_utf8_strtol:
+ * @s: string to parse
+ * @end: (out) (optional): location to store end of parsed string
+ *
  * Like strtol, but...
  * 1. handles non-ascii characters
  * 2. assumes base==10
  * 3. ensures sane errno on exit
- */
+ *
+ * Returns: the parsed value as a long.
+ **/
 long
 gnm_utf8_strtol (const char *s, char **end)
 {
@@ -363,6 +411,16 @@ gnm_utf8_strtol (const char *s, char **end)
 }
 
 
+/**
+ * gnm_regcomp_XL:
+ * @preg: #GORegexp
+ * @pattern: Excel-style pattern (with * and ?)
+ * @cflags: regex flags
+ * @anchor_start: if %TRUE, anchor at start of string
+ * @anchor_end: if %TRUE, anchor at end of string
+ *
+ * Returns: 0 on success, or a regex error code.
+ **/
 int
 gnm_regcomp_XL (GORegexp *preg, char const *pattern, int cflags,
 		gboolean anchor_start, gboolean anchor_end)
@@ -574,10 +632,16 @@ cb_gnm_pango_attr_list_equal (PangoAttribute *a, gpointer _sl)
 	return FALSE;
 }
 
-/*
+/**
+ * gnm_pango_attr_list_equal:
+ * @l1: (nullable): #PangoAttrList
+ * @l2: (nullable): #PangoAttrList
+ *
  * This is a bit of a hack.  It might claim a difference even when things
  * actually are equal.  But not the other way around.
- */
+ *
+ * Returns: %TRUE if the attribute lists are equal.
+ **/
 gboolean
 gnm_pango_attr_list_equal (PangoAttrList const *l1, PangoAttrList const *l2)
 {
@@ -615,14 +679,14 @@ gnm_pango_attr_list_equal (PangoAttrList const *l1, PangoAttrList const *l2)
 
 /* ------------------------------------------------------------------------- */
 
-struct _GnmLocale {
+struct GnmLocale_ {
 	char *num_locale;
 	char *monetary_locale;
 };
 /**
  * gnm_push_C_locale: (skip)
  *
- * Returns the current locale, and sets the locale and the value-format
+ * Returns: the current locale.  Sets the locale and the value-format
  * engine's locale to 'C'.  The caller must call gnm_pop_C_locale to free the
  * result and restore the previous locale.
  **/
@@ -659,6 +723,12 @@ gnm_pop_C_locale (GnmLocale *locale)
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * gnm_debug_flag:
+ * @flag: flag name
+ *
+ * Returns: %TRUE if the debug flag @flag is set.
+ **/
 gboolean
 gnm_debug_flag (const char *flag)
 {
@@ -671,30 +741,28 @@ gnm_debug_flag (const char *flag)
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * gnm_string_add_number:
+ * @buf: #GString
+ * @d: number to add
+ *
+ * Adds a string representation of @d to @buf.
+ **/
 void
 gnm_string_add_number (GString *buf, gnm_float d)
 {
-	size_t old_len = buf->len;
-	double d2;
-	static int digits;
-
-	if (digits == 0) {
-		gnm_float l10 = gnm_log10 (FLT_RADIX);
-		digits = (int)gnm_ceil (GNM_MANT_DIG * l10) +
-			(l10 == (int)l10 ? 0 : 1);
-	}
-
-	g_string_append_printf (buf, "%.*" GNM_FORMAT_g, digits - 1, d);
-	d2 = gnm_strto (buf->str + old_len, NULL);
-
-	if (d != d2) {
-		g_string_truncate (buf, old_len);
-		g_string_append_printf (buf, "%.*" GNM_FORMAT_g, digits, d);
-	}
+	go_dtoa (buf, "!" GNM_FORMAT_g, d);
 }
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * gnm_insert_meta_date:
+ * @doc: #GODoc
+ * @name: metadata name
+ *
+ * Inserts the current date into the document metadata.
+ **/
 void
 gnm_insert_meta_date (GODoc *doc, char const *name)
 {
@@ -762,12 +830,29 @@ gnm_object_has_readable_prop (gconstpointer obj, const char *property,
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * gnm_float_equal:
+ * @a: pointer to #gnm_float
+ * @b: pointer to #gnm_float
+ *
+ * This function is intended for use with #GHashTable.
+ *
+ * Returns: %TRUE if the values pointed to by @a and @b are equal.
+ **/
 gint
 gnm_float_equal (gnm_float const *a, const gnm_float *b)
 {
 	return (*a == *b);
 }
 
+/**
+ * gnm_float_hash:
+ * @d: pointer to #gnm_float
+ *
+ * This function is intended for use with #GHashTable.
+ *
+ * Returns: a hash value for the value pointed to by @d.
+ **/
 guint
 gnm_float_hash (gnm_float const *d)
 {
@@ -846,6 +931,12 @@ gnm_hash_table_foreach_ordered (GHashTable *h,
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * gnm_xml_in_doc_dispose_on_exit:
+ * @pdoc: (transfer none): location of pointer to #GsfXMLInDoc
+ *
+ * Registers @pdoc to be freed on exit.
+ **/
 void
 gnm_xml_in_doc_dispose_on_exit (GsfXMLInDoc **pdoc)
 {
@@ -857,7 +948,7 @@ gnm_xml_in_doc_dispose_on_exit (GsfXMLInDoc **pdoc)
  * @xout: #GsfXMLOut sink
  * @id: expected tag being closed
  *
- * Closes an xml tag, expected it to be @id.  If it is not, tags will
+ * Closes an xml tag, expected to be @id.  If it is not, tags will
  * continue to be closed until the expected one is found in the hope
  * that getting back to sync will make the result less corrupted.
  */
@@ -918,7 +1009,8 @@ gnm_file_saver_get_sheet (GOFileSaver const *fs, WorkbookView const *wbv)
  *
  * This function determines what sheets to save.
  *
- * Returns: (transfer container) (element-type Sheet): the sheets to export
+ * Returns: (transfer container) (element-type Sheet) (nullable): the
+ * sheets to export
  *
  * Note: the return value should be unreffed, not freed.
  */
@@ -957,6 +1049,18 @@ gnm_file_saver_get_sheets (GOFileSaver const *fs,
 	return sel;
 }
 
+/**
+ * gnm_file_saver_common_export_option:
+ * @fs: #GOFileSaver
+ * @wb: #Workbook
+ * @key: option key
+ * @value: option value
+ * @err: (out) (optional): location to store #GError
+ *
+ * Handles common export options like "sheet" or "active-sheet".
+ *
+ * Returns: %TRUE if an error occurred.
+ **/
 gboolean
 gnm_file_saver_common_export_option (GOFileSaver const *fs,
 				     Workbook const *wb,
@@ -1033,6 +1137,15 @@ gnm_cpp_expr (const char *expr, G_GNUC_UNUSED GHashTable *vars)
 }
 
 
+/**
+ * gnm_cpp:
+ * @src: source string
+ * @vars: #GHashTable of variables
+ *
+ * Simple C-style preprocessor for strings.
+ *
+ * Returns: (transfer full): the preprocessed string.
+ **/
 char *
 gnm_cpp (const char *src, GHashTable *vars)
 {
@@ -1049,7 +1162,7 @@ gnm_cpp (const char *src, GHashTable *vars)
 			end = src + strlen (src);
 
 		if (*src == '#') {
-			if (strncmp (src, "#ifdef ", 7) == 0 || strncmp (src, "#ifndef ", 8) == 0) {
+			if (g_str_has_prefix (src, "#ifdef ") || g_str_has_prefix (src, "#ifndef ")) {
 				int is_not = (src[3] == 'n');
 				const char *var = src + 7 + is_not;
 				char *w;
@@ -1064,14 +1177,14 @@ gnm_cpp (const char *src, GHashTable *vars)
 				res = is_not ^ !!g_hash_table_lookup (vars, w);
 				g_string_append_c (ifdefs, ifdefs->str[ifdefs->len - 1] && res);
 				g_free (w);
-			} else if (strncmp (src, "#if ", 4) == 0) {
+			} else if (g_str_has_prefix (src, "#if ")) {
 				gboolean res = gnm_cpp_expr (src + 4, vars) > 0;
 				g_string_append_c (ifdefs, ifdefs->str[ifdefs->len - 1] && res);
-			} else if (strncmp (src, "#else", 5) == 0) {
+			} else if (g_str_has_prefix (src, "#else") && ifdefs->len >= 2) {
 				ifdefs->str[ifdefs->len - 1] =
 					!ifdefs->str[ifdefs->len - 1] &&
 					ifdefs->str[ifdefs->len - 2];
-			} else if (strncmp (src, "#endif", 6) == 0 && ifdefs->len > 1) {
+			} else if (g_str_has_prefix (src, "#endif") && ifdefs->len > 1) {
 				g_string_set_size (ifdefs, ifdefs->len - 1);
 			} else {
 				g_warning ("cpp failure");
@@ -1086,3 +1199,197 @@ gnm_cpp (const char *src, GHashTable *vars)
 	g_string_free (ifdefs, TRUE);
 	return g_string_free (res, FALSE);
 }
+
+/**
+ * gnm_shortest_rep_in_files:
+ *
+ * Should we write the shortest representation of floating point values
+ * in text-based formats (gnumeric/xlsx/ods)?
+ *
+ * This is currently off because
+ * (1) There are test suite considerations.  Files currently written with
+ *     fixed precision will not round-trip.  Presumably that can be sorted
+ *     out.
+ * (2) go_dtoa is not perfect.  We don't want to deal with (1) twice.
+ *
+ * Note: this does not change the semantics of the files.  The files mean
+ * precisely the same thing, i.e., the different strings are representations
+ * of the same IEEE-754 number which is (generally) not a nice decimal
+ * number with few decimals.
+ *
+ * Returns: %TRUE if we should write the shortest representation of floating
+ * point values.
+ **/
+gboolean
+gnm_shortest_rep_in_files (void)
+{
+	static int q = -1;
+	if (q == -1)
+		q = g_getenv ("GNM_SHORTREP_FILES") != NULL;
+	return q;
+}
+
+/**
+ * gnm_export_range_for_sheet:
+ * @sheet: #Sheet
+ * @dest: (out): location to store range
+ *
+ * Returns: -1 if no ssconvert selection has been made; 0 if the sheet is not
+ * to be exported, and 1 with a valid range if a selection has been made for
+ * the sheet.
+ **/
+int
+gnm_export_range_for_sheet (Sheet const *sheet, GnmRange *dest)
+{
+	GnmRangeRef const *rr;
+
+	g_return_val_if_fail (IS_SHEET (sheet), -1);
+	g_return_val_if_fail (dest != NULL, -1);
+
+	rr = g_object_get_data (G_OBJECT (sheet->workbook), "ssconvert-range");
+	if (rr) {
+		GnmEvalPos ep;
+		Sheet *start_sheet, *end_sheet;
+
+		gnm_rangeref_normalize (rr,
+					eval_pos_init_sheet (&ep, sheet),
+					&start_sheet, &end_sheet,
+					dest);
+		if (sheet->index_in_wb >= start_sheet->index_in_wb &&
+		    sheet->index_in_wb <= end_sheet->index_in_wb)
+			return 1;
+	}
+
+	memset (dest, 0, sizeof (*dest));
+	return rr ? 0 : -1;
+}
+
+
+#ifdef GNM_SUPPLIES_GNM_SSCANF
+/**
+ * gnm_sscanf:
+ * @str: string to scan
+ * @fmt: format string
+ *
+ * Miniature sscanf that understands _Decimal64 arguments.
+ * Handles
+ * * "%g", "%gl", "%Lg", "%Wg"
+ * * "%d", "%u"
+ * * "%s", "%c", "%*s"
+ * * whitespace
+ * * literal characters including "%%"
+ * and very little else.
+ *
+ * Returns: the number of items successfully matched and assigned.
+ **/
+int
+gnm_sscanf (const char *str, const char *fmt, ...)
+{
+	va_list args;
+	int res = 0;
+	char *tmp = g_new (char, strlen (str) + 1);
+
+	va_start (args, fmt);
+	while (*fmt) {
+		char c = *fmt++;
+		if (c == '%') {
+			int flag_l = 0, flag_L = 0, flag_ast = 0;
+#ifdef GNM_WITH_DECIMAL64
+			int flag_W = 0;
+#endif
+			int nchars;
+
+			if (*fmt == '%') {
+				fmt++;
+				goto regular;
+			}
+
+			while (TRUE) {
+				if (*fmt == '*') { fmt++; flag_ast++; continue; }
+				if (*fmt == 'l') { fmt++; flag_l++; continue; }
+				if (*fmt == 'L') { fmt++; flag_L++; continue; }
+#ifdef GNM_WITH_DECIMAL64
+				if (*fmt == *GNM_SCANF_g) { fmt++; flag_W++; continue; }
+#endif
+				break;
+			}
+
+			if (*fmt != 'c') {
+				while (g_ascii_isspace (*str))
+					str++;
+			}
+
+			if (sscanf (str, (*fmt == 'c' ? "%c%n" : "%s%n"), tmp, &nchars) != 1)
+				break;
+			str += nchars;
+
+			if (flag_ast && *fmt) {
+				fmt++;
+				continue;
+			}
+
+			switch (*fmt++) {
+			case 'e': case 'E': case 'f': case 'F':
+			case 'g': case 'G': case 'a': case 'A':
+#ifdef GNM_WITH_DECIMAL64
+				if (flag_W) {
+					*va_arg(args, _Decimal64 *) = go_strtoDd (tmp, NULL);
+					break;
+				}
+#endif
+				if (flag_L)
+					*va_arg(args, long double *) = go_strtold (tmp, NULL);
+				else if (flag_l)
+					*va_arg(args, double *) = go_strtod (tmp, NULL);
+				else
+					*va_arg(args, float *) = go_strtod (tmp, NULL);
+				break;
+
+			case 'd':
+				if (flag_l) {
+					*va_arg(args, long *) = strtol (tmp, NULL, 10);
+				} else {
+					*va_arg(args, int *) = strtol (tmp, NULL, 10);
+				}
+				break;
+
+			case 'u':
+				if (flag_l) {
+					*va_arg(args, long *) = strtoul (tmp, NULL, 10);
+				} else {
+					*va_arg(args, int *) = strtoul (tmp, NULL, 10);
+				}
+				break;
+
+			case 'c':
+				*va_arg(args, char *) = tmp[0];
+				break;
+
+			default:
+				g_printerr ("Unhandled format character '%c'\n", fmt[-1]);
+				abort ();
+			}
+
+			res++;
+		} else if (g_ascii_isspace (c)) {
+			while (g_ascii_isspace (*str))
+				str++;
+		} else {
+		regular:
+			if (*str == c) {
+				str++;
+			} else if (*str == 0) {
+				res = EOF;
+				break;
+			} else {
+				break;
+			}
+		}
+	}
+
+	va_end (args);
+	g_free (tmp);
+
+	return res;
+}
+#endif

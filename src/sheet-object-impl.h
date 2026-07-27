@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_OBJECT_IMPL_H_
-# define _GNM_SHEET_OBJECT_IMPL_H_
+#ifndef GNM_SHEET_OBJECT_IMPL_H_
+#define GNM_SHEET_OBJECT_IMPL_H_
 
 G_BEGIN_DECLS
 
@@ -22,7 +22,7 @@ typedef enum {
 	SHEET_OBJECT_OBSCURED		= 1 << 18	/* cells associated with region are hidden */
 } SheetObjectFlags;
 
-struct _SheetObject {
+struct SheetObject_ {
 	GObject            parent_object;
 	Sheet             *sheet;
 	GList             *realized_list;
@@ -107,7 +107,7 @@ typedef struct {
 
 /***************************************************************************/
 
-struct _SheetObjectView {
+struct SheetObjectView_ {
 	GocGroup base;
 
 	GnmSOResizeMode resize_mode;
@@ -181,4 +181,4 @@ typedef struct {
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_OBJECT_IMPL_H_ */
+#endif /* GNM_SHEET_OBJECT_IMPL_H_ */

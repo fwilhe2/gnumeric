@@ -46,7 +46,7 @@ static gboolean ssdiff_highlight = FALSE;
 static gboolean ssdiff_xml = FALSE;
 static char *ssdiff_output = NULL;
 
-static const GOptionEntry ssdiff_options [] = {
+static const GOptionEntry ssdiff_options[] = {
 	{
 		"version", 'v',
 		0, G_OPTION_ARG_NONE, &ssdiff_show_version,
@@ -124,8 +124,7 @@ read_file (GnmDiffStateFile *dsf, const char *filename, GOIOContext *ioc)
 			    g_get_prgname (),
 			    filename,
 			    err ? err->message : "?");
-		if (err)
-			g_error_free (err);
+		g_clear_error (&err);
 		return TRUE;
 	}
 
@@ -289,10 +288,7 @@ xml_dtor (gpointer user)
 	DiffState *state = user;
 	g_clear_object (&state->xml);
 
-	if (state->xml_convs) {
-		gnm_conventions_unref (state->xml_convs);
-		state->xml_convs = NULL;
-	}
+	g_clear_object (&state->xml_convs);
 }
 
 static void
@@ -968,8 +964,7 @@ main (int argc, char const **argv)
 		g_printerr (_("%s: Failed to create output file: %s\n"),
 			    g_get_prgname (),
 			    error ? error->message : "?");
-		if (error)
-			g_error_free (error);
+		g_clear_error (&error);
 		return 1;
 	}
 

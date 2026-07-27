@@ -17,14 +17,14 @@
  * along with this program; if not, see <https://www.gnu.org/licenses/>
  */
 
-#ifndef GNM_SO_ANCHOR_MODE_CHOOSER_H
-#define GNM_SO_ANCHOR_MODE_CHOOSER_H
+#ifndef GNM_SO_ANCHOR_MODE_CHOOSER_H_
+#define GNM_SO_ANCHOR_MODE_CHOOSER_H_
 
 #include <gnumeric.h>
 #include <sheet-object.h>
 #include <glib-object.h>
 
-typedef struct _GnmSOAnchorModeChooser GnmSOAnchorModeChooser;
+typedef struct GnmSOAnchorModeChooser_ GnmSOAnchorModeChooser;
 
 #define GNM_SO_ANCHOR_MODE_CHOOSER_TYPE     (gnm_so_anchor_mode_chooser_get_type ())
 #define GNM_SO_ANCHOR_MODE_CHOOSER(obj)     (G_TYPE_CHECK_INSTANCE_CAST((obj), GNM_SO_ANCHOR_MODE_CHOOSER_TYPE, GnmSOAnchorModeChooser))
@@ -36,4 +36,4 @@ void gnm_so_anchor_mode_chooser_set_mode (GnmSOAnchorModeChooser *chooser,
                                           GnmSOAnchorMode mode);
 GnmSOAnchorMode gnm_so_anchor_mode_chooser_get_mode (GnmSOAnchorModeChooser const *chooser);
 
-#endif /* GNM_SO_ANCHOR_MODE_CHOOSER_H */
+#endif /* GNM_SO_ANCHOR_MODE_CHOOSER_H_ */

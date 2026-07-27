@@ -453,13 +453,13 @@ plugin_service_ui_activate (GOPluginService *service, GOErrorInfo **ret_error)
 
 	GO_INIT_RET_ERROR_INFO (ret_error);
 
-	if (strncmp (uifile, "res:", 4) == 0) {
+	if (g_str_has_prefix (uifile, "res:")) {
 		size_t len;
 		gconstpointer data = go_rsm_lookup (uifile + 4, &len);
 		src = data
 			? gsf_input_memory_new (data, len, FALSE)
 			: NULL;
-	} else if (strncmp (uifile, "data:", 5) == 0) {
+	} else if (g_str_has_prefix (uifile, "data:")) {
 		const char *data = uifile + 5;
 		src = gsf_input_memory_new (data, strlen (data), FALSE);
 	} else {
@@ -860,8 +860,8 @@ gnm_plugin_loader_module_func_exec_action (GOPluginService *service,
 		return;
 	}
 	action_index = GPOINTER_TO_INT (action_index_ptr);
-	if (NULL != loader_data->module_ui_actions_array [action_index].handler)
-		(*loader_data->module_ui_actions_array [action_index].handler) (action, wbc);
+	if (NULL != loader_data->module_ui_actions_array[action_index].handler)
+		(*loader_data->module_ui_actions_array[action_index].handler) (action, wbc);
 }
 
 static void
@@ -970,8 +970,7 @@ gplm_service_unload (GOPluginLoader *l, GOPluginService *s, GOErrorInfo **err)
 		GnmPluginServiceUICallbacks *cbs = go_plugin_service_get_cbs (s);
 		cbs->plugin_func_exec_action = NULL;
 	} else if (GNM_IS_PLUGIN_SERVICE_SOLVER (s)) {
-		GnmPluginServiceSolverCallbacks *cbs =
-			go_plugin_service_get_cbs (s);
+		GnmPluginServiceSolverCallbacks *cbs = go_plugin_service_get_cbs (s);
 		cbs->creator = NULL;
 		cbs->functional = NULL;
 	} else

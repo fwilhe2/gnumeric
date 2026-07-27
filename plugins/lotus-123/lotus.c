@@ -561,7 +561,7 @@ lotus_color (guint i)
 
 /* ------------------------------------------------------------------------- */
 
-static gint8
+static const gint8
 lotus_pattern_table[74] = {
 	0,	/* 0	Transparent */
 	-1,	/* 1	SolidForeground */
@@ -878,17 +878,6 @@ record_next (record_t *r)
 /* ------------------------------------------------------------------------- */
 
 static GnmValue *
-lotus_value (gnm_float v)
-{
-	if (v == gnm_floor (v) &&
-	    v >= G_MININT &&
-	    v <= G_MAXINT)
-		return value_new_int ((int)v);
-	else
-		return value_new_float (v);
-}
-
-static GnmValue *
 lotus_lnumber (const record_t *r, int ofs)
 {
 	const guint8 *p;
@@ -898,19 +887,19 @@ lotus_lnumber (const record_t *r, int ofs)
 
 	/* FIXME: Some special values indicate ERR, NA, BLANK, and string.  */
 
-	return lotus_value (gsf_le_get_double (p));
+	return value_new_float (gsf_le_get_double (p));
 }
 
 GnmValue *
 lotus_unpack_number (guint32 u)
 {
-	double v = (u >> 6);
+	gnm_float v = (u >> 6);
 
 	if (u & 0x20) v = 0 - v;
 	if (u & 0x10)
-		return lotus_value (v / gnm_pow10 (u & 15));
+		return value_new_float (v / gnm_pow10 (u & 15));
 	else
-		return lotus_value (v * gnm_pow10 (u & 15));
+		return value_new_float (v * gnm_pow10 (u & 15));
 }
 
 GnmValue *
@@ -924,7 +913,7 @@ lotus_smallnum (signed int d)
 		int mant = (d >> 4);
 		return (f > 0)
 			? value_new_int (f * mant)
-			: lotus_value ((gnm_float)mant / -f);
+			: value_new_float ((gnm_float)mant / -f);
 	} else
 		return value_new_int (d >> 1);
 }
@@ -942,7 +931,7 @@ lotus_extfloat (guint64 mant, guint16 signexp)
 	 * NOTE: the gnm_ldexp may under- or overflow.  That ought to do
 	 * the right thing.
 	 */
-	return lotus_value (sign * gnm_ldexp (mant, exp - 63));
+	return value_new_float (sign * gnm_ldexp (mant, exp - 63));
 }
 
 GnmValue *
@@ -973,9 +962,9 @@ lotus_treal (const record_t *r, int ofs)
 
 /* ------------------------------------------------------------------------- */
 
-typedef struct _LotusRLDB LotusRLDB;
+typedef struct LotusRLDB_ LotusRLDB;
 
-struct _LotusRLDB {
+struct LotusRLDB_ {
 	int refcount;
 	LotusRLDB *top;
 	int ndims;
@@ -1420,7 +1409,7 @@ lotus_set_colwidth_cb (LotusState *state,
 
 	value_set = (flags & 1) != 0;
 	if (end - start >= gnm_sheet_get_max_cols (sheet))
-		sheet_col_set_default_size_pixels (sheet, size);
+		sheet_col_set_default_size_pts (sheet, size);
 	else {
 		int i;
 		for (i = start; i <= end; i++)
@@ -1465,7 +1454,7 @@ lotus_set_rowheight_cb (LotusState *state,
 
 	value_set = (flags & 1) != 0;
 	if (end - start >= gnm_sheet_get_max_rows (sheet))
-		sheet_row_set_default_size_pixels (sheet, size);
+		sheet_row_set_default_size_pts (sheet, size);
 	else {
 		int i;
 		for (i = start; i <= end; i++)
@@ -1608,7 +1597,7 @@ lotus_read_old (LotusState *state, record_t *r)
 			break;
 		}
 		case LOTUS_NUMBER: CHECK_RECORD_SIZE (>= 13) {
-			GnmValue *v = lotus_value (gsf_le_get_double (r->data + 5));
+			GnmValue *v = value_new_float (gsf_le_get_double (r->data + 5));
 			guint8 fmt = GSF_LE_GET_GUINT8 (r->data);
 			int col = GSF_LE_GET_GUINT16 (r->data + 1);
 			int row = GSF_LE_GET_GUINT16 (r->data + 3);
@@ -1667,7 +1656,7 @@ lotus_read_old (LotusState *state, record_t *r)
 				} else
 					v = value_new_error_VALUE (NULL);
 			} else
-				v = lotus_value (gsf_le_get_double (r->data + 5));
+				v = value_new_float (gsf_le_get_double (r->data + 5));
 			cell = lotus_cell_fetch (state, state->sheet, col, row);
 			if (cell) {
 				gnm_cell_set_expr_and_value (cell, texpr, v, TRUE);
@@ -1758,131 +1747,173 @@ lotus_get_lmbcs (char const *data, int maxlen, int def_group)
 			break;
 
 		case 0x01: {
-			gunichar uc = lmbcs_group_1[p[1]];
-			if (uc)
-				g_string_append_unichar (res, uc);
-			p += 2;
+			if (p + 1 < theend) {
+				gunichar uc = lmbcs_group_1[p[1]];
+				if (uc)
+					g_string_append_unichar (res, uc);
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x02: {
-			gunichar uc = lmbcs_group_2[p[1]];
-			if (uc)
-				g_string_append_unichar (res, uc);
-			p += 2;
+			if (p + 1 < theend) {
+				gunichar uc = lmbcs_group_2[p[1]];
+				if (uc)
+					g_string_append_unichar (res, uc);
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x03: {
-			guint8 c = p[1];
-			if (c >= 0x80) {
-				gunichar uc = lmbcs_group_3[c - 0x80];
-				if (uc)
-					g_string_append_unichar (res, uc);
-			}
-			p += 2;
+			if (p + 1 < theend) {
+				guint8 c = p[1];
+				if (c >= 0x80) {
+					gunichar uc = lmbcs_group_3[c - 0x80];
+					if (uc)
+						g_string_append_unichar (res, uc);
+				}
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x04: {
-			guint8 c = p[1];
-			if (c >= 0x80) {
-				gunichar uc = lmbcs_group_4[c - 0x80];
-				if (uc)
-					g_string_append_unichar (res, uc);
-			}
-			p += 2;
+			if (p + 1 < theend) {
+				guint8 c = p[1];
+				if (c >= 0x80) {
+					gunichar uc = lmbcs_group_4[c - 0x80];
+					if (uc)
+						g_string_append_unichar (res, uc);
+				}
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x05: {
-			guint8 c = p[1];
-			if (c >= 0x80) {
-				gunichar uc = lmbcs_group_5[c - 0x80];
-				if (uc)
-					g_string_append_unichar (res, uc);
-			}
-			p += 2;
+			if (p + 1 < theend) {
+				guint8 c = p[1];
+				if (c >= 0x80) {
+					gunichar uc = lmbcs_group_5[c - 0x80];
+					if (uc)
+						g_string_append_unichar (res, uc);
+				}
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x06: {
-			gunichar uc = lmbcs_group_6[p[1]];
-			if (uc)
-				g_string_append_unichar (res, uc);
-			p += 2;
+			if (p + 1 < theend) {
+				gunichar uc = lmbcs_group_6[p[1]];
+				if (uc)
+					g_string_append_unichar (res, uc);
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x08: {
-			guint8 c = p[1];
-			if (c >= 0x80) {
-				gunichar uc = lmbcs_group_8[c - 0x80];
-				if (uc)
-					g_string_append_unichar (res, uc);
-			}
-			p += 2;
+			if (p + 1 < theend) {
+				guint8 c = p[1];
+				if (c >= 0x80) {
+					gunichar uc = lmbcs_group_8[c - 0x80];
+					if (uc)
+						g_string_append_unichar (res, uc);
+				}
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x0b: {
-			guint8 c = p[1];
-			if (c >= 0x80) {
-				gunichar uc = lmbcs_group_b[c - 0x80];
-				if (uc)
-					g_string_append_unichar (res, uc);
-			}
-			p += 2;
+			if (p + 1 < theend) {
+				guint8 c = p[1];
+				if (c >= 0x80) {
+					gunichar uc = lmbcs_group_b[c - 0x80];
+					if (uc)
+						g_string_append_unichar (res, uc);
+				}
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x0f: {
-			gunichar uc = lmbcs_group_f[p[1]];
-			if (uc)
-				g_string_append_unichar (res, uc);
-			p += 2;
+			if (p + 1 < theend) {
+				gunichar uc = lmbcs_group_f[p[1]];
+				if (uc)
+					g_string_append_unichar (res, uc);
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x07: case 0x0c: case 0x0e: {
-			unsigned code = (p[0] << 8) | p[1];
-			g_warning ("Unhandled character 0x%04x", code);
-			p += 2;
+			if (p + 1 < theend) {
+				unsigned code = (p[0] << 8) | p[1];
+				g_warning ("Unhandled character 0x%04x", code);
+				p += 2;
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x10: case 0x11: case 0x13:
 		case 0x15: case 0x16: case 0x17: {
-			unsigned code = (p[0] << 16) | (p[1] << 8) | p[2];
-			g_warning ("Unhandled character 0x%06x", code);
-			p += 3;
+			if (p + 2 < theend) {
+				unsigned code = (p[0] << 16) | (p[1] << 8) | p[2];
+				g_warning ("Unhandled character 0x%06x", code);
+				p += 3;
+			} else
+				p = theend;
 			/* See http://www.batutis.com/i18n/papers/lmbcs/ */
 			break;
 		}
 
 		case 0x12: {
-			gunichar uc = lmbcs_12 (p + 1);
-			p += 3;
-			if (uc)
-				g_string_append_unichar (res, uc);
+			if (p + 2 < theend) {
+				gunichar uc = lmbcs_12 (p + 1);
+				p += 3;
+				if (uc)
+					g_string_append_unichar (res, uc);
+			} else
+				p = theend;
 			break;
 		}
 
 		case 0x18: case 0x19: case 0x1a: case 0x1b:
 		case 0x1c: case 0x1d: case 0x1e: case 0x1f:
 			/* Ignore two bytes.  */
-			p += 2;
+			if (p + 1 < theend)
+				p += 2;
+			else
+				p = theend;
 			break;
 
 		case 0x14: {
-			/* Big-endian two-byte unicode with private-
-			   use-area filled in by something.  */
-			gunichar uc = (p[1] << 8) | p[2];
-			if (uc >= 0xe000 && uc <= 0xf8ff) {
-				g_warning ("Unhandled character 0x14%04x", uc);
+			if (p + 2 < theend) {
+				/* Big-endian two-byte unicode with private-
+				   use-area filled in by something.  */
+				gunichar uc = (p[1] << 8) | p[2];
+				if (uc >= 0xe000 && uc <= 0xf8ff) {
+					g_warning ("Unhandled character 0x14%04x", uc);
+				} else
+					g_string_append_unichar (res, uc);
+				p += 3;
 			} else
-				g_string_append_unichar (res, uc);
-			p += 3;
+				p = theend;
 			break;
 		}
 
@@ -1903,7 +1934,13 @@ lotus_get_lmbcs (char const *data, int maxlen, int def_group)
 				case 0x08: if (c >= 0x80) uc = lmbcs_group_8[c - 0x80]; p++; break;
 				case 0x0b: if (c >= 0x80) uc = lmbcs_group_b[c - 0x80]; p++; break;
 				case 0x0f: uc = lmbcs_group_f[c]; p++; break;
-				case 0x12: uc = lmbcs_12 (p); p += 2; break;
+				case 0x12:
+					if (p + 1 < theend) {
+						uc = lmbcs_12 (p);
+						p += 2;
+					} else
+						p = theend;
+					break;
 				default:
 					g_warning ("Unhandled character set 0x%x", def_group);
 					p++;
@@ -2042,7 +2079,7 @@ lotus_read_new (LotusState *state, record_t *r)
 				cp.col = 0;
 				cp.row = row;
 				sheet_style_set_list  (sheet, &cp, styles, NULL, NULL);
-				style_list_free (styles);
+				sheet_style_list_free (styles);
 
 #if 0
 				g_printerr ("%s's row %d copies style from %s's row %d\n",
@@ -2675,7 +2712,7 @@ static const guint8 works_color_table[16][3]={
 static GnmColor *
 works_color (guint i)
 {
-	if (i == 0) return style_color_auto_font();
+	if (i == 0) return style_color_auto_font ();
 	if (i < G_N_ELEMENTS (works_color_table))
 		return gnm_color_new_rgb8 (works_color_table[i][0],
 					     works_color_table[i][1],
@@ -2683,7 +2720,7 @@ works_color (guint i)
 	return NULL;
 }
 
-static const gchar* works_data_fmts[]=
+static const gchar* const works_data_fmts[]=
 {
 	"dd.mm.yyyy",
 	"d mmmm yyyy",
@@ -2695,7 +2732,7 @@ static const gchar* works_data_fmts[]=
 	"mmmm"
 };
 
-static const gchar* works_time_fmts[]=
+static const gchar* const works_time_fmts[]=
 {
 	"h:mm AM/PM",
 	"h:mm:ss AM/PM",
@@ -2703,7 +2740,7 @@ static const gchar* works_time_fmts[]=
 	"h:mm:ss"
 };
 
-static const gchar* works_frac_fmts[]=
+static const gchar* const works_frac_fmts[]=
 {
 	"# ?" "?/?" "?" /* silly trick to avoid using a trigraph */,
 	"# ?/4",
@@ -2724,27 +2761,27 @@ works_format_string (guint8 arg)
 	type = arg & 0xf;
 	prec = (arg >> 5) & 7;
 
-	str = g_string_new(NULL);
+	str = g_string_new (NULL);
 
 	switch (type) {
 		case 0: /* fixed */
 		case 2: /* currency */
-			g_string_append(str,"0");
-			append_precision(str,prec);
+			g_string_append (str,"0");
+			append_precision (str, prec);
 			break;
 		case 1: /* exp */
-			g_string_append(str,"0");
-			append_precision(str,prec);
-			g_string_append(str,"E+00");
+			g_string_append (str,"0");
+			append_precision (str, prec);
+			g_string_append (str,"E+00");
 			break;
 		case 3: /* percent */
-			g_string_append(str,"0");
-			append_precision(str,prec);
-			g_string_append(str,"%");
+			g_string_append (str,"0");
+			append_precision (str, prec);
+			g_string_append (str,"%");
 			break;
 		case 4: /* thousands */
-			g_string_append(str,"# ##0");
-			append_precision(str,prec);
+			g_string_append (str,"# ##0");
+			append_precision (str, prec);
 			break;
 		case 5:
 
@@ -2756,38 +2793,38 @@ works_format_string (guint8 arg)
 				case 3:
 				case 4:
 				case 5:
-					g_string_append(str,works_time_fmts[prec-2]);
+					g_string_append (str, works_time_fmts[prec-2]);
 					break;
 			};
 			break;
 		case 6:
-			g_string_append(str,works_data_fmts[prec]);
+			g_string_append (str, works_data_fmts[prec]);
 			break;
 		case 10: /* fixed */
-			g_string_append_len(str,"000000000",prec+1);
+			g_string_append_len (str,"000000000",prec+1);
 			break;
 		case 11: /* fraction (no ...) */
 		case 12: /* fraction */
 			if (type == 11) {
 				if (prec == 0) {
-					g_string_append(str,"# ?/2");
+					g_string_append (str,"# ?/2");
 					break;
 				} else if (prec == 1) {
-					g_string_append(str,"# ?/3");
+					g_string_append (str,"# ?/3");
 					break;
 				}
 			}
-			g_string_append(str,works_frac_fmts[prec]);
+			g_string_append (str, works_frac_fmts[prec]);
 			break;
 		case 13: /* currency + red */
 		case 14: /* thousands + red */
-			g_string_append(str,"# ##0");
-			append_precision(str,prec);
-			g_string_append(str,";[Red]-# ##0"); /* l10n??? */
-			append_precision(str,prec);
+			g_string_append (str,"# ##0");
+			append_precision (str, prec);
+			g_string_append (str,";[Red]-# ##0"); /* l10n??? */
+			append_precision (str, prec);
 			break;
 	}
-	return g_string_free(str, FALSE);
+	return g_string_free (str, FALSE);
 }
 
 static GnmValue *
@@ -2804,7 +2841,7 @@ works_get_strval (const record_t *r, guint ofs, int fmt, LotusState *state)
 	}
 
 	font = g_hash_table_lookup (state->works_style_font,
-				    GINT_TO_POINTER(fmt));
+				    GINT_TO_POINTER (fmt));
 	converter = font ? font->converter : (GIConv)-1;
 	if (converter == (GIConv)-1)
 		converter = state->works_conv;
@@ -2859,7 +2896,7 @@ lotus_read_works (LotusState *state, record_t *r)
 			state->sheet = NULL;
 			break;
 
-		case WORKS_SMALL_FLOAT: CHECK_RECORD_SIZE (>= 6) {
+		case WORKS_SMALL_FLOAT: CHECK_RECORD_SIZE (>= 10) {
 			int row = GSF_LE_GET_GUINT16 (r->data + 2);
 			int col = r->data[0];
 #if 0
@@ -2867,12 +2904,12 @@ lotus_read_works (LotusState *state, record_t *r)
 #endif
 			guint32 raw = GSF_LE_GET_GUINT32 (r->data + 6);
 			char flag = raw & 1;
-			float x;
+			gnm_float x;
 			GnmValue *v;
 
 			raw = (raw&0xfc000000)|((raw&0x3fffffe)<<3);
 			x = gsf_le_get_float (&raw);
-			v = lotus_value (flag ? x/100.0 : x);
+			v = value_new_float (flag ? x / 100 : x);
 			(void)insert_value (state, state->sheet, col, row, v);
 			break;
 		}
@@ -2891,7 +2928,7 @@ lotus_read_works (LotusState *state, record_t *r)
 #endif
 
 		case LOTUS_NUMBER: CHECK_RECORD_SIZE (>= 14) {
-			GnmValue *v = lotus_value (gsf_le_get_double (r->data + 6));
+			GnmValue *v = value_new_float (gsf_le_get_double (r->data + 6));
 			int col = GSF_LE_GET_GUINT16 (r->data + 0);
 			int row = GSF_LE_GET_GUINT16 (r->data + 2);
 			int fmt = GSF_LE_GET_GUINT16 (r->data + 4);
@@ -2917,7 +2954,7 @@ lotus_read_works (LotusState *state, record_t *r)
 			break;
 		}
 		case LOTUS_BLANK: CHECK_RECORD_SIZE (>= 6) {
-			GnmValue *v = value_new_empty();
+			GnmValue *v = value_new_empty ();
 			int col = GSF_LE_GET_GUINT16 (r->data + 0);
 			int row = GSF_LE_GET_GUINT16 (r->data + 2);
 			int fmt = GSF_LE_GET_GUINT16 (r->data + 4);
@@ -2952,7 +2989,7 @@ lotus_read_works (LotusState *state, record_t *r)
 				} else
 					v = value_new_error_VALUE (NULL);
 			} else
-				v = lotus_value (gsf_le_get_double (r->data + 6));
+				v = value_new_float (gsf_le_get_double (r->data + 6));
 			cell = lotus_cell_fetch (state, state->sheet, col, row);
 			if (cell) {
 				gnm_cell_set_expr_and_value (cell, texpr, v, TRUE);
@@ -2964,16 +3001,15 @@ lotus_read_works (LotusState *state, record_t *r)
 		}
 
 		case WORKS_FONT: CHECK_RECORD_SIZE (>= 38) {
-			WksFontEntry *font = wks_font_new();
+			WksFontEntry *font = wks_font_new ();
 			int codepage;
 			int fid = fontidx++;
 			int l;
 			font->variant = GSF_LE_GET_GUINT16(r->data + 0);
-			l = strlen (r->data + 2);
-			if (l > 34) l = 34;
-			font->typeface = g_malloc(l + 1);
+			l = strnlen (r->data + 2, 34);
+			font->typeface = g_malloc (l + 1);
 			/* verify UTF-8? */
-			memcpy(font->typeface, r->data + 2, l);
+			memcpy (font->typeface, r->data + 2, l);
 			font->typeface[l] = 0;
 			font->size = r->data[36];
 
@@ -3008,7 +3044,7 @@ lotus_read_works (LotusState *state, record_t *r)
 
 			style = gnm_style_new ();
 
-			font = g_hash_table_lookup(state->fonts,GUINT_TO_POINTER ((guint)fontid));
+			font = g_hash_table_lookup (state->fonts,GUINT_TO_POINTER ((guint)fontid));
 
 			if (font) {
 				facebits = font->variant;
@@ -3023,16 +3059,16 @@ lotus_read_works (LotusState *state, record_t *r)
 					gnm_style_set_font_size (style, font->size / 2.0);
 
 				if (font->variant & 0xF0) {
-					color = works_color((font->variant >> 4) & 0xF);
+					color = works_color ((font->variant >> 4) & 0xF);
 					if (color)
 						gnm_style_set_font_color (style, color);
 				}
 
 				if (font->typeface)
-					gnm_style_set_font_name(style, font->typeface);
+					gnm_style_set_font_name (style, font->typeface);
 
 				g_hash_table_insert (state->works_style_font,
-						     GUINT_TO_POINTER((guint)styleid),
+						     GUINT_TO_POINTER ((guint)styleid),
 						     font);
 			}
 
@@ -3053,7 +3089,7 @@ lotus_read_works (LotusState *state, record_t *r)
 				default:
 					tmp = GNM_HALIGN_GENERAL;
 			}
-			gnm_style_set_align_h(style, tmp);
+			gnm_style_set_align_h (style, tmp);
 
 			tmp = (align >> 6) & 3;
 			switch (tmp) {
@@ -3067,16 +3103,16 @@ lotus_read_works (LotusState *state, record_t *r)
 					tmp = GNM_VALIGN_TOP;
 					break;
 			}
-			gnm_style_set_align_v(style, tmp);
+			gnm_style_set_align_v (style, tmp);
 
 			if (align & 0x20) {
-				gnm_style_set_wrap_text(style, TRUE);
+				gnm_style_set_wrap_text (style, TRUE);
 			}
 
-			fmt = works_format_string(r->data[0]);
+			fmt = works_format_string (r->data[0]);
 			if (fmt) {
-				if (*fmt) gnm_style_set_format_text(style, fmt);
-				g_free(fmt);
+				if (*fmt) gnm_style_set_format_text (style, fmt);
+				g_free (fmt);
 			}
 
 #ifdef DEBUG_STYLE

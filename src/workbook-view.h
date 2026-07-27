@@ -1,5 +1,5 @@
-#ifndef _GNM_WORKBOOK_VIEW_H_
-# define _GNM_WORKBOOK_VIEW_H_
+#ifndef GNM_WORKBOOK_VIEW_H_
+#define GNM_WORKBOOK_VIEW_H_
 
 #include <gnumeric.h>
 #include <dependent.h>
@@ -7,7 +7,7 @@
 
 G_BEGIN_DECLS
 
-struct _WorkbookView {
+struct WorkbookView_ {
 	GoView  base;
 
 	Workbook *wb;
@@ -121,4 +121,4 @@ do {										\
 
 G_END_DECLS
 
-#endif /* _GNM_WORKBOOK_VIEW_H_ */
+#endif /* GNM_WORKBOOK_VIEW_H_ */

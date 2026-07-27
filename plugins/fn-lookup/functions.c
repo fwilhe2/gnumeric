@@ -39,8 +39,6 @@
 #include <mathfunc.h>
 #include <gutils.h>
 #include <workbook.h>
-#include <sheet.h>
-#include <parse-util.h>
 #include <gnm-i18n.h>
 
 #include <goffice/goffice.h>
@@ -800,6 +798,154 @@ find_index_bisection (GnmFuncEvalInfo *ei,
 	return res;
 }
 
+static int
+find_index_x (GnmFuncEvalInfo *ei,
+	      GnmValue const *find, GnmValue const *data,
+	      int match_mode, int search_mode, gboolean vertical)
+{
+	int high, low, lastlow, res;
+	LookupBisectionCacheItem *bc;
+	gboolean stringp;
+	int (*comparer) (const void *,const void *);
+	LookupBisectionCacheItemElem key;
+	BisectionLookupInfo info;
+	int i;
+
+	bc = get_bisection_lookup_cache (ei, data, find->v_any.type, vertical,
+					 &info);
+	if (!bc)
+		return LOOKUP_DATA_ERROR;
+
+	stringp = VALUE_IS_STRING (find);
+	comparer = stringp ? bisection_compare_string : bisection_compare_float;
+
+	if (info.is_new) {
+		int lp, length = calc_length (data, ei->pos, vertical);
+
+		bc->data = g_new (LookupBisectionCacheItemElem, length + 1);
+
+		if (stringp)
+			protect_string_pool++;
+
+		for (lp = 0; lp < length; lp++) {
+			GnmValue const *v = get_elem (data, lp, ei->pos, vertical);
+			if (!find_compare_type_valid (find, v))
+				continue;
+
+			if (stringp) {
+				char *vc = g_utf8_casefold (value_peek_string (v), -1);
+				bc->data[bc->n].u.str = g_string_chunk_insert (lookup_string_pool, vc);
+				g_free (vc);
+			} else
+				bc->data[bc->n].u.f = value_get_as_float (v);
+
+			bc->data[bc->n].index = lp;
+			bc->n++;
+		}
+
+		bc->data = g_renew (LookupBisectionCacheItemElem,
+				    bc->data,
+				    bc->n);
+		bisection_lookup_cache_commit (&info);
+
+		if (stringp)
+			protect_string_pool--;
+	}
+
+	if (stringp) {
+		char *vc = g_utf8_casefold (value_peek_string (find), -1);
+		key.u.str = g_string_chunk_insert (lookup_string_pool, vc);
+		g_free (vc);
+	} else {
+		key.u.f = value_get_as_float (find);
+	}
+
+	if (search_mode == 2 || search_mode == -2) {
+		/* Binary search.  */
+		int type = (search_mode == 2 ? 1 : -1);
+		lastlow = LOOKUP_NOT_THERE;
+		low = 0;
+		high = bc->n - 1;
+		while (low <= high) {
+			int mid = (low + high) / 2;
+			int c = comparer (&key, bc->data + mid);
+			if (c == 0) {
+				/* Found exact match.  */
+				return bc->data[mid].index;
+			}
+			if (type < 0)
+				c = -c; /* Reverse sorted data.  */
+			if (c > 0) {
+				lastlow = mid;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+
+		if (match_mode == 0)
+			return LOOKUP_NOT_THERE;
+		if (match_mode == -1)
+			res = lastlow;
+		else if (match_mode == 1)
+			res = (lastlow + 1 < bc->n) ? lastlow + 1 : LOOKUP_NOT_THERE;
+		else
+			return LOOKUP_NOT_THERE; /* Wildcard not supported in binary search for now */
+
+		if (res >= 0)
+			return bc->data[res].index;
+		return LOOKUP_NOT_THERE;
+	} else {
+		/* Linear search.  */
+		int start = (search_mode == -1) ? bc->n - 1 : 0;
+		int end = (search_mode == -1) ? -1 : bc->n;
+		int step = (search_mode == -1) ? -1 : 1;
+
+		if (match_mode == 2 && stringp) {
+			/* Wildcard.  */
+			GORegexp rx;
+			GORegmatch rm;
+			res = LOOKUP_NOT_THERE;
+			if (gnm_regcomp_XL (&rx, value_peek_string (find), GO_REG_ICASE, TRUE, TRUE) != GO_REG_OK)
+				return LOOKUP_DATA_ERROR;
+			for (i = start; i != end; i += step) {
+				if (go_regexec (&rx, bc->data[i].u.str, 1, &rm, 0) == GO_REG_OK) {
+					res = bc->data[i].index;
+					break;
+				}
+			}
+			go_regfree (&rx);
+			return res;
+		}
+
+		/* Exact match.  */
+		for (i = start; i != end; i += step) {
+			if (comparer (&key, bc->data + i) == 0)
+				return bc->data[i].index;
+		}
+
+		if (match_mode == 0 || match_mode == 2)
+			return LOOKUP_NOT_THERE;
+
+		/* match_mode -1 or 1: Next smaller/larger.  */
+		int best_i = -1;
+		for (i = start; i != end; i += step) {
+			int c = comparer (&key, bc->data + i);
+			if (match_mode == -1 && c > 0) { /* find > data[i] */
+				if (best_i == -1 || comparer (bc->data + i, bc->data + best_i) > 0)
+					best_i = i;
+			} else if (match_mode == 1 && c < 0) { /* find < data[i] */
+				if (best_i == -1 || comparer (bc->data + i, bc->data + best_i) < 0)
+					best_i = i;
+			}
+		}
+		if (best_i != -1)
+			return bc->data[best_i].index;
+	}
+
+	return LOOKUP_NOT_THERE;
+}
+
 /***************************************************************************/
 
 static GnmFuncHelp const help_address[] = {
@@ -846,7 +992,7 @@ gnumeric_address (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 		break;
 	case 4: case 8: ref.col_relative = ref.row_relative = TRUE; break;
 
-	default :
+	default:
 		return value_new_error_VALUE (ei->pos);
 	}
 
@@ -1305,6 +1451,125 @@ gnumeric_match (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 
 /***************************************************************************/
 
+static GnmFuncHelp const help_xlookup[] = {
+	{ GNM_FUNC_HELP_NAME, F_("XLOOKUP:search @{lookup_array} for @{lookup_value} and return the corresponding item from @{return_array}")},
+	{ GNM_FUNC_HELP_ARG, F_("lookup_value:value to look up")},
+	{ GNM_FUNC_HELP_ARG, F_("lookup_array:range to search")},
+	{ GNM_FUNC_HELP_ARG, F_("return_array:range of return values")},
+	{ GNM_FUNC_HELP_ARG, F_("if_not_found:value to return if no match is found; defaults to #N/A")},
+	{ GNM_FUNC_HELP_ARG, F_("match_mode:0 for exact match (default), -1 for exact match or next smaller, 1 for exact match or next larger, 2 for wildcard match")},
+	{ GNM_FUNC_HELP_ARG, F_("search_mode:1 for first-to-last (default), -1 for last-to-first, 2 for binary search ascending, -2 for binary search descending")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("XLOOKUP function finds the item in @{lookup_array} that matches @{lookup_value} and returns the corresponding item from @{return_array}.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=XLOOKUP(\"Apple\",A1:A5,B1:B5)" },
+	{ GNM_FUNC_HELP_SEEALSO, "VLOOKUP,HLOOKUP,XMATCH"},
+	{ GNM_FUNC_HELP_END}
+};
+
+static GnmValue *
+gnumeric_xlookup (GnmFuncEvalInfo *ei, GnmValue const * const *args)
+{
+	GnmValue const *find = args[0];
+	GnmValue const *lookup_array = args[1];
+	GnmValue const *return_array = args[2];
+	GnmValue const *if_not_found = args[3];
+	int match_mode = args[4] ? value_get_as_int (args[4]) : 0;
+	int search_mode = args[5] ? value_get_as_int (args[5]) : 1;
+	int index;
+	gboolean vertical;
+
+	if (!find_type_valid (find)) {
+		if (if_not_found)
+			return value_dup (if_not_found);
+		return value_new_error_NA (ei->pos);
+	}
+
+	vertical = (value_area_get_width (lookup_array, ei->pos) <=
+		    value_area_get_height (lookup_array, ei->pos));
+
+	index = find_index_x (ei, find, lookup_array, match_mode, search_mode, vertical);
+
+	if (index == LOOKUP_DATA_ERROR)
+		return value_new_error_VALUE (ei->pos);
+
+	if (index >= 0) {
+		int rw = value_area_get_width (return_array, ei->pos);
+		int rh = value_area_get_height (return_array, ei->pos);
+
+		if (vertical) {
+			if (index >= rh)
+				return value_new_error_REF (ei->pos);
+			if (rw == 1)
+				return value_dup (value_area_fetch_x_y (return_array, 0, index, ei->pos));
+			else {
+				GnmValue *res = value_new_array (rw, 1);
+				int i;
+				for (i = 0; i < rw; i++)
+					value_array_set (res, i, 0, value_dup (value_area_fetch_x_y (return_array, i, index, ei->pos)));
+				return res;
+			}
+		} else {
+			if (index >= rw)
+				return value_new_error_REF (ei->pos);
+			if (rh == 1)
+				return value_dup (value_area_fetch_x_y (return_array, index, 0, ei->pos));
+			else {
+				GnmValue *res = value_new_array (1, rh);
+				int i;
+				for (i = 0; i < rh; i++)
+					value_array_set (res, 0, i, value_dup (value_area_fetch_x_y (return_array, index, i, ei->pos)));
+				return res;
+			}
+		}
+	}
+
+	if (if_not_found)
+		return value_dup (if_not_found);
+
+	return value_new_error_NA (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_xmatch[] = {
+	{ GNM_FUNC_HELP_NAME, F_("XMATCH:the index of @{lookup_value} in @{lookup_array}")},
+	{ GNM_FUNC_HELP_ARG, F_("lookup_value:value to look up")},
+	{ GNM_FUNC_HELP_ARG, F_("lookup_array:range to search")},
+	{ GNM_FUNC_HELP_ARG, F_("match_mode:0 for exact match (default), -1 for exact match or next smaller, 1 for exact match or next larger, 2 for wildcard match")},
+	{ GNM_FUNC_HELP_ARG, F_("search_mode:1 for first-to-last (default), -1 for last-to-first, 2 for binary search ascending, -2 for binary search descending")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("XMATCH searches @{lookup_array} for @{lookup_value} and returns the 1-based index.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=XMATCH(\"Apple\",A1:A5)" },
+	{ GNM_FUNC_HELP_SEEALSO, "MATCH,XLOOKUP"},
+	{ GNM_FUNC_HELP_END}
+};
+
+static GnmValue *
+gnumeric_xmatch (GnmFuncEvalInfo *ei, GnmValue const * const *args)
+{
+	GnmValue const *find = args[0];
+	int match_mode = args[2] ? value_get_as_int (args[2]) : 0;
+	int search_mode = args[3] ? value_get_as_int (args[3]) : 1;
+	int index;
+	gboolean vertical;
+
+	if (!find_type_valid (find))
+		return value_new_error_NA (ei->pos);
+
+	vertical = (value_area_get_width (args[1], ei->pos) <=
+		    value_area_get_height (args[1], ei->pos));
+
+	index = find_index_x (ei, find, args[1], match_mode, search_mode, vertical);
+
+	if (index == LOOKUP_DATA_ERROR)
+		return value_new_error_VALUE (ei->pos);
+
+	if (index >= 0)
+		return value_new_int (index + 1);
+
+	return value_new_error_NA (ei->pos);
+}
+
+/***************************************************************************/
+
 static GnmFuncHelp const help_indirect[] = {
 	{ GNM_FUNC_HELP_NAME, F_("INDIRECT:contents of the cell pointed to by the @{ref_text} string")},
         { GNM_FUNC_HELP_ARG, F_("ref_text:textual reference")},
@@ -1366,8 +1631,8 @@ static GnmValue *
 gnumeric_index (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	GnmExpr const *source;
-	int elem[3] = { 0, 0, 0 };
-	int i = 0;
+	int elem[3] = { -1, -1, 0 };
+	int i, width, height;
 	gboolean valid;
 	GnmValue *v, *res;
 
@@ -1383,16 +1648,23 @@ gnumeric_index (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	if (VALUE_IS_ERROR (v))
 		return v;
 
+	if (argc == 1) {
+		// Gnumeric extension.  Avoid using this
+		elem[0] = elem[1] = 0;
+	}
+
 	for (i = 0; i + 1 < argc && i < (int)G_N_ELEMENTS (elem); i++) {
-		GnmValue *vi = value_coerce_to_number (
-			gnm_expr_eval (argv[i + 1], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY),
-			&valid, ei->pos);
-		if (!valid) {
-			value_release (v);
-			return vi;
+		if (argv[i + 1] != NULL) {
+			GnmValue *vi = value_coerce_to_number (
+				gnm_expr_eval (argv[i + 1], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY),
+				&valid, ei->pos);
+			if (!valid) {
+				value_release (v);
+				return vi;
+			}
+			elem[i] = value_get_as_int (vi) - 1;
+			value_release (vi);
 		}
-		elem[i] = value_get_as_int (vi) - 1;
-		value_release (vi);
 	}
 
 	if (GNM_EXPR_GET_OPER (source) == GNM_EXPR_OP_SET) {
@@ -1411,32 +1683,43 @@ gnumeric_index (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 		return value_new_error_REF (ei->pos);
 	}
 
-	if (elem[1] < 0 ||
-	    elem[1] >= value_area_get_width (v, ei->pos) ||
-	    elem[0] < 0 ||
-	    elem[0] >= value_area_get_height (v, ei->pos)) {
+	width = value_area_get_width (v, ei->pos);
+	height = value_area_get_height (v, ei->pos);
+
+	if (argc == 2 && width > 1 && height == 1) {
+		elem[1] = elem[0];
+		elem[0] = -1;
+	}
+
+	if (elem[1] < -1 || elem[1] >= width ||
+	    elem[0] < -1 || elem[0] >= height) {
 		value_release (v);
 		return value_new_error_REF (ei->pos);
 	}
 
-#warning Work out a way to fall back to returning value when a reference is unneeded
-	if (VALUE_IS_CELLRANGE (v)) {
-		GnmRangeRef const *src = &v->v_range.cell;
-		GnmCellRef a = src->a, b = src->b;
-		Sheet *start_sheet, *end_sheet;
-		GnmRange r;
+	gboolean qyslice = (elem[0] == -1);
+	gboolean qxslice = (elem[1] == -1);
+	int start_col = qxslice ? 0 : elem[1];
+	int end_col   = qxslice ? width - 1 : elem[1];
+	int start_row = qyslice ? 0 : elem[0];
+	int end_row   = qyslice ? height - 1 : elem[0];
 
-		gnm_rangeref_normalize (src, ei->pos, &start_sheet, &end_sheet, &r);
-		r.start.row += elem[0];
-		r.start.col += elem[1];
-		a.row = r.start.row; if (a.row_relative) a.row -= ei->pos->eval.row;
-		b.row = r.start.row; if (b.row_relative) b.row -= ei->pos->eval.row;
-		a.col = r.start.col; if (a.col_relative) a.col -= ei->pos->eval.col;
-		b.col = r.start.col; if (b.col_relative) b.col -= ei->pos->eval.col;
-		res = value_new_cellrange_unsafe (&a, &b);
-	} else if (VALUE_IS_ARRAY (v))
-		res = value_dup (value_area_fetch_x_y (v, elem[1], elem[0], ei->pos));
-	else
+	if (VALUE_IS_CELLRANGE (v)) {
+#warning Work out a way to fall back to returning value when a reference is unneeded
+		res = value_area_slice (v,
+					start_col, start_row,
+					end_col, end_row,
+					ei->pos);
+	} else if (VALUE_IS_ARRAY (v)) {
+		if (!qyslice && !qxslice)
+			res = value_dup (value_area_fetch_x_y (v, elem[1], elem[0], ei->pos));
+		else {
+			res = value_area_slice (v,
+						start_col, start_row,
+						end_col, end_row,
+						ei->pos);
+		}
+	} else
 		res = value_new_error_REF (ei->pos);
 	value_release (v);
 	return res;
@@ -1454,7 +1737,7 @@ static GnmFuncHelp const help_column[] = {
 				 "returns #VALUE!") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=COLUMN(A1:C4)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=COLUMN(A:C)" },
-	{ GNM_FUNC_HELP_EXAMPLES, F_("column() in G13 equals 7.") },
+	{ GNM_FUNC_HELP_EXAMPLES, F_("COLUMN() in G13 equals 7.") },
 	{ GNM_FUNC_HELP_SEEALSO, "COLUMNS,ROW,ROWS" },
 	{ GNM_FUNC_HELP_END }
 };
@@ -1664,6 +1947,7 @@ gnumeric_rows (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 
 static GnmFuncHelp const help_sheets[] = {
 	{ GNM_FUNC_HELP_NAME, F_("SHEETS:number of sheets in @{reference}")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_ARG, F_("reference:array, reference, or range, defaults to the maximum range")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{reference} is neither an array nor a reference nor a range, "
 				 "SHEETS returns #VALUE!")},
@@ -1678,7 +1962,7 @@ gnumeric_sheets (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 	Workbook const *wb = ei->pos->sheet->workbook;
 	GnmValue const *v = args[0];
 
-	if(v) {
+	if (v) {
 		if (VALUE_IS_CELLRANGE (v)) {
 			GnmRangeRef const *r = &v->v_range.cell;
 			int ans_min, ans_max, a, b;
@@ -1702,6 +1986,7 @@ gnumeric_sheets (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 /***************************************************************************/
 static GnmFuncHelp const help_sheet[] = {
 	{ GNM_FUNC_HELP_NAME, F_("SHEET:sheet number of @{reference}")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_ARG, F_("reference:reference or literal sheet name, defaults to the current sheet")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{reference} is neither a reference "
 				 "nor a literal sheet name, "
@@ -1719,7 +2004,7 @@ gnumeric_sheet (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 	GnmValue const *v = args[0];
 	int n;
 
-	if(v) {
+	if (v) {
 		if (VALUE_IS_CELLRANGE (v)) {
 			GnmRangeRef const *r = &v->v_range.cell;
 			int a, b;
@@ -1729,15 +2014,15 @@ gnumeric_sheet (GnmFuncEvalInfo *ei, GnmValue const * const *args)
 
 			if (a == -1 && b == -1)
 				n = ei->pos->sheet->index_in_wb;
-			else if (a == b || a * b < 0)
-				n = MAX (a,b);
-			else
-				return value_new_error_NUM (ei->pos);
+			else {
+				/* Excel returns the first sheet of a 3D range */
+				n = (a != -1) ? a : b;
+			}
 		} else if (VALUE_IS_STRING (v)) {
 			Sheet *sheet = workbook_sheet_by_name
 				(wb, value_peek_string (v));
 			if (!sheet)
-				return value_new_error_NUM (ei->pos);
+				return value_new_error_REF (ei->pos);
 			n = sheet->index_in_wb;
 		} else
 			return value_new_error_VALUE (ei->pos);
@@ -1797,9 +2082,8 @@ gnumeric_transpose (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	res = value_new_array_non_init (rows, cols);
 
 	for (r = 0; r < rows; ++r) {
-		res->v_array.vals [r] = g_new (GnmValue *, cols);
 		for (c = 0; c < cols; ++c)
-			res->v_array.vals[r][c] = value_dup(
+			res->v_array.vals[r][c] = value_dup (
 				value_area_get_x_y (matrix, c, r, ep));
 	}
 
@@ -1838,14 +2122,12 @@ gnumeric_flip (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	if (vertical)
 		for (c = 0; c < cols; ++c) {
-			res->v_array.vals [c] = g_new (GnmValue *, rows);
 			for (r = 0; r < rows; ++r)
 				res->v_array.vals[c][rows - r - 1] = value_dup
 					(value_area_get_x_y (matrix, c, r, ep));
 		}
 	else
 		for (c = 0; c < cols; ++c) {
-			res->v_array.vals [c] = g_new (GnmValue *, rows);
 			for (r = 0; r < rows; ++r)
 				res->v_array.vals[c][r] = value_dup
 					(value_area_get_x_y (matrix, cols - c - 1, r, ep));
@@ -1864,7 +2146,8 @@ static GnmFuncHelp const help_array[] = {
 
 
 static GnmValue *
-callback_function_array (GnmEvalPos const *ep, GnmValue const *value, void *closure)
+callback_function_array (GnmEvalPos const *ep, GnmValue const *value,
+			 gboolean direct, void *closure)
 {
 	GSList **list = closure;
 
@@ -1961,6 +2244,151 @@ gnumeric_sort (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	return result;
 }
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_unique[] = {
+	{ GNM_FUNC_HELP_NAME, F_("UNIQUE:unique values in a range or array")},
+	{ GNM_FUNC_HELP_ARG, F_("data:range or array")},
+	{ GNM_FUNC_HELP_ARG, F_("by_col:by column if TRUE, by row otherwise; defaults to FALSE")},
+	{ GNM_FUNC_HELP_ARG, F_("exactly_once:suppress values present multiple times; defaults to FALSE")},
+	{ GNM_FUNC_HELP_SEEALSO, ("SORT")},
+	{ GNM_FUNC_HELP_END }
+};
+
+static gsize
+hash_col_row (GnmValue const *data, GnmEvalPos const * const ep,
+	      gboolean by_col, int i)
+{
+	int size = by_col ? value_area_get_height (data, ep) : value_area_get_width (data, ep);
+	int j;
+	gsize h = 0;
+
+	for (j = 0; j < size; j++) {
+		GnmValue const *v = by_col
+			? value_area_get_x_y (data, i, j, ep)
+			: value_area_get_x_y (data, j, i, ep);
+		gsize h1;
+		if (value_type_of (v) == VALUE_STRING) {
+			char *s = g_utf8_casefold (value_peek_string (v), -1);
+			h1 = g_str_hash (s);
+			g_free (s);
+		} else
+			h1 = value_hash (v);
+
+		h ^= h1;
+		h ^= h >> 23;
+		h *= 0x2127599bf4325c37ULL;
+	}
+	return h;
+}
+
+static GnmValDiff
+compare_col_row (GnmValue const *data, GnmEvalPos const * const ep,
+		 gboolean by_col, int i1, int i2)
+{
+	int size = by_col ? value_area_get_height (data, ep) : value_area_get_width (data, ep);
+	int j;
+
+	for (j = 0; j < size; j++) {
+		GnmValue const *v1 = by_col
+			? value_area_get_x_y (data, i1, j, ep)
+			: value_area_get_x_y (data, j, i1, ep);
+		GnmValueType t1 = value_type_of (v1);
+		GnmValue const *v2 = by_col
+			? value_area_get_x_y (data, i2, j, ep)
+			: value_area_get_x_y (data, j, i2, ep);
+		GnmValueType t2 = value_type_of (v2);
+
+		return t1 == t2
+			? value_compare (v1, v2, FALSE)
+			: (t1 < t2 ? IS_LESS : IS_GREATER);
+	}
+
+	return IS_EQUAL;
+}
+
+static GnmValue *
+gnumeric_unique (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	GnmEvalPos const * const ep = ei->pos;
+        GnmValue const * const data = argv[0];
+	gboolean by_col = argv[1] ? value_get_as_checked_bool (argv[1]) : FALSE;
+	gboolean exactly_once = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
+	int i, sx, sy, x, y, count, rcount;
+	guint8 *keep;
+	GnmValue *res;
+	GHashTable *seen;
+
+	sx = value_area_get_width (data, ep);
+	sy = value_area_get_height (data, ep);
+	count = by_col ? sx : sy;
+
+	keep = g_new0 (guint8, count);
+	seen = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+				      NULL, (GDestroyNotify)g_slist_free);
+	for (i = 0; i < count; i++) {
+		gsize h = hash_col_row (data, ep, by_col, i);
+		GSList *l, *items = g_hash_table_lookup (seen, GSIZE_TO_POINTER (h));
+		gboolean found = FALSE;
+
+		for (l = items; l; l = l->next) {
+			int i2 = GPOINTER_TO_INT (l->data);
+			if (compare_col_row (data, ep, by_col, i, i2) == IS_EQUAL) {
+				found = TRUE;
+				if (exactly_once)
+					keep[i2] = 2;
+				break;
+			}
+		}
+		if (!found) {
+			keep[i] = 1;
+			if (items)
+				items->next = g_slist_prepend (items->next, GINT_TO_POINTER (i));
+			else
+				g_hash_table_insert (seen, GSIZE_TO_POINTER (h),
+						     g_slist_prepend (NULL, GINT_TO_POINTER (i)));
+		}
+	}
+
+	rcount = 0;
+	for (i = 0; i < count; i++) {
+		if (exactly_once && keep[i] > 1) keep[i] = 0;
+		rcount += keep[i];
+	}
+
+	if (rcount == 0)
+		res = value_new_error_VALUE (ep);
+	else if (by_col) {
+		res = value_new_array_empty (rcount, sy);
+		for (i = x = 0; x < sx; x++) {
+			if (!keep[x])
+				continue;
+			for (y = 0; y < sy; y++) {
+				GnmValue const *v = value_area_get_x_y (data, x, y, ep);
+				res->v_array.vals[i][y] = value_dup (v);
+			}
+			i++;
+		}
+	} else {
+		res = value_new_array_empty (sx, rcount);
+		for (i = y = 0; y < sy; y++) {
+			if (!keep[y])
+				continue;
+			for (x = 0; x < sx; x++) {
+				GnmValue const *v = value_area_get_x_y (data, x, y, ep);
+				res->v_array.vals[x][i] = value_dup (v);
+			}
+			i++;
+		}
+	}
+
+	g_hash_table_destroy (seen);
+
+	g_free (keep);
+	return res;
+}
+
 /***************************************************************************/
 
 GnmFuncDescriptor const lookup_functions[] = {
@@ -2011,19 +2439,28 @@ GnmFuncDescriptor const lookup_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "sheets",      "|A",
 	  help_sheets,     gnumeric_sheets, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "sheet",      "|?",
 	  help_sheet,     gnumeric_sheet, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "sort",         "r|f",
 	  help_sort, gnumeric_sort, NULL,
-	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_SUBSET, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "transpose", "A",
 	  help_transpose, gnumeric_transpose, NULL,
 	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "unique",       "A|bb",
+	  help_unique, gnumeric_unique, NULL,
+	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_SUBSET, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "vlookup",   "EAf|bb",
 	  help_vlookup, gnumeric_vlookup, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "xlookup",   "EAA|?ff",
+	  help_xlookup, gnumeric_xlookup, NULL,
+	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	{ "xmatch",   "EA|ff",
+	  help_xmatch, gnumeric_xmatch, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "array", NULL,
 	  help_array, NULL, gnumeric_array,
 	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },

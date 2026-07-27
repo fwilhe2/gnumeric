@@ -1,5 +1,5 @@
-#ifndef _GNM_FORMAT_H_
-# define _GNM_FORMAT_H_
+#ifndef GNM_FORMAT_H_
+#define GNM_FORMAT_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
@@ -23,8 +23,8 @@ GOFormatNumberError format_value_layout (PangoLayout *layout,
 					 int col_width,
 					 GODateConventions const *date_conv);
 
-GOFormatNumberError gnm_format_layout    (PangoLayout *result,
-					  GOFontMetrics *metrics,
+GOFormatNumberError gnm_format_layout    (PangoLayout *layout,
+					  GOFontMetrics const *metrics,
 					  GOFormat const *format,
 					  GnmValue const *value,
 					  int col_width,
@@ -42,7 +42,7 @@ int gnm_format_is_time_for_value (GOFormat const *fmt,
 int gnm_format_month_before_day (GOFormat const *fmt,
 				 GnmValue const *value);
 
-char *gnm_format_frob_slashes (const char *s);
+char *gnm_format_frob_slashes (const char *fmt);
 
 GOFormat *gnm_format_for_date_editing (GnmCell const *cell);
 
@@ -77,4 +77,4 @@ GOFormat *gnm_format_import (const char *fmt,
 
 G_END_DECLS
 
-#endif /* _GNM_FORMAT_H_ */
+#endif /* GNM_FORMAT_H_ */

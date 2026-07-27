@@ -57,7 +57,6 @@
 #include <graph.h>
 #include <style-border.h>
 #include <style-conditions.h>
-#include <gutils.h>
 #include <expr-name.h>
 
 #include <go-val.h>
@@ -374,7 +373,7 @@ xlsx_write_rich_text (GsfXMLOut *xml, char const *text, PangoAttrList *attrs,
 		attr = pango_attr_iterator_get (iter, PANGO_ATTR_FOREGROUND);
 		if (attr) {
 			PangoColor *color = &((PangoAttrColor *) attr)->color;
-			char *buf = g_strdup_printf("ff%02x%02x%02x", color->red >> 8, color->green >> 8, color->blue >> 8);
+			char *buf = g_strdup_printf ("ff%02x%02x%02x", color->red >> 8, color->green >> 8, color->blue >> 8);
 			gsf_xml_out_start_element (xml, "color");
 			gsf_xml_out_add_cstr_unchecked (xml, "rgb", buf);
 			gsf_xml_out_end_element (xml); /* </color> */
@@ -1444,10 +1443,10 @@ xlsx_write_sheet_view (GsfXMLOut *xml, SheetView const *sv)
 		gsf_xml_out_add_int (xml, "zoomScale", tmp);
 
 	switch (sv->view_mode) {
-	case GNM_SHEET_VIEW_NORMAL_MODE : break;
-	case GNM_SHEET_VIEW_PAGE_BREAK_MODE :
+	case GNM_SHEET_VIEW_NORMAL_MODE: break;
+	case GNM_SHEET_VIEW_PAGE_BREAK_MODE:
 		gsf_xml_out_add_cstr_unchecked (xml, "view", "pageBreakPreview"); break;
-	case GNM_SHEET_VIEW_LAYOUT_MODE :
+	case GNM_SHEET_VIEW_LAYOUT_MODE:
 		gsf_xml_out_add_cstr_unchecked (xml, "view", "pageLayout"); break;
 	}
 
@@ -1562,7 +1561,7 @@ row_boring (Sheet *sheet, int r)
 
 static void
 xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
-		  GnmRange const *extent, GnmStyle **col_styles)
+		  GnmRange const *extent, GPtrArray *col_styles)
 {
 	int r, c;
 	char *content;
@@ -1573,7 +1572,7 @@ xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
 	GPtrArray *all_cells = sheet_cells (sheet, extent);
 	guint cno = 0;
 	int *boring_count;
-	guint8 *non_defaults_rows = sheet_style_get_nondefault_rows (sheet, col_styles);
+	GByteArray *non_defaults_rows = sheet_style_get_nondefault_rows (sheet, col_styles);
 
 	boring_count = g_new0 (int, extent->end.row + 1);
 	r = extent->end.row;
@@ -1627,7 +1626,7 @@ xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
 			int dr, rows = (cell ? cell->pos.row : extent->end.row + 1) - r;
 			rows = MIN (rows, boring_count[r]);
 			for (dr = 0; dr < rows; dr++)
-				if (non_defaults_rows[r + dr])
+				if (non_defaults_rows->data[r + dr])
 					break;
 			rows = MIN (rows, dr);
 			if (rows > 0) {
@@ -1661,7 +1660,7 @@ xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
 				style = style1 = gnm_style_dup (style);
 				gnm_style_set_format (style1, fmt2);
 			}
-			style_id = style && style != col_styles[c]
+			style_id = style && style != g_ptr_array_index (col_styles, c)
 				? xlsx_get_style_id (state, style)
 				: -1;
 			if (style1)
@@ -1680,7 +1679,7 @@ xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
 					gsf_xml_out_add_int (xml, "s", style_id);
 
 				switch (val->v_any.type) {
-				default :
+				default:
 				case VALUE_EMPTY:
 					type = NULL; /* FIXME : what to do ? */
 					break;
@@ -1781,7 +1780,7 @@ xlsx_write_cells (XLSXWriteState *state, GsfXMLOut *xml,
 			gsf_xml_out_end_element (xml); /* </row> */
 	}
 	gsf_xml_out_end_element (xml); /* </sheetData> */
-	g_free (non_defaults_rows);
+	g_byte_array_free (non_defaults_rows, TRUE);
 	g_free (boring_count);
 	g_ptr_array_free (all_cells, TRUE);
 	g_free (cheesy_span);
@@ -1904,8 +1903,7 @@ xlsx_write_cond_rule (XLSXWriteState *state, GsfXMLOut *xml,
 		gsf_xml_out_simple_element (xml, "formula", str);
 		g_free (str);
 	}
-	if (alt_texpr)
-		gnm_expr_top_unref (alt_texpr);
+	gnm_expr_top_unref (alt_texpr);
 	gsf_xml_out_end_element (xml); /* </cfRule> */
 }
 
@@ -1940,7 +1938,7 @@ xlsx_write_conditional_formatting (XLSXWriteState *state, GsfXMLOut *xml)
 		gsf_xml_out_end_element (xml); /* </conditionalFormatting> */
 	}
 
-	style_list_free (cond_styles);
+	sheet_style_list_free (cond_styles);
 }
 
 
@@ -1984,40 +1982,40 @@ xlsx_write_validation (XLValInputPair const *vip, G_GNUC_UNUSED gpointer dummy, 
 	if (NULL != vip->v) {
 		tmp = NULL;
 		switch (vip->v->type) {
-		default : /* fall back to the default */
-		case GNM_VALIDATION_TYPE_ANY : /* the default "none" */  break;
-		case GNM_VALIDATION_TYPE_AS_INT :		tmp = "whole"; break;
-		case GNM_VALIDATION_TYPE_AS_NUMBER :	tmp = "decimal"; break;
-		case GNM_VALIDATION_TYPE_IN_LIST :		tmp = "list"; break;
-		case GNM_VALIDATION_TYPE_AS_DATE :		tmp = "date"; break;
-		case GNM_VALIDATION_TYPE_AS_TIME :		tmp = "time"; break;
-		case GNM_VALIDATION_TYPE_TEXT_LENGTH :	tmp = "textLength"; break;
-		case GNM_VALIDATION_TYPE_CUSTOM :		tmp = "custom"; break;
+		default: /* fall back to the default */
+		case GNM_VALIDATION_TYPE_ANY: /* the default "none" */  break;
+		case GNM_VALIDATION_TYPE_AS_INT:		tmp = "whole"; break;
+		case GNM_VALIDATION_TYPE_AS_NUMBER:	tmp = "decimal"; break;
+		case GNM_VALIDATION_TYPE_IN_LIST:		tmp = "list"; break;
+		case GNM_VALIDATION_TYPE_AS_DATE:		tmp = "date"; break;
+		case GNM_VALIDATION_TYPE_AS_TIME:		tmp = "time"; break;
+		case GNM_VALIDATION_TYPE_TEXT_LENGTH:	tmp = "textLength"; break;
+		case GNM_VALIDATION_TYPE_CUSTOM:		tmp = "custom"; break;
 		}
 		if (NULL != tmp)
 			gsf_xml_out_add_cstr_unchecked (info->xml, "type", tmp);
 
 		tmp = NULL;
 		switch (vip->v->op) {
-		default : /* fall back to the default */
-		case GNM_VALIDATION_OP_BETWEEN :	/* the default "between" */ break;
+		default: /* fall back to the default */
+		case GNM_VALIDATION_OP_BETWEEN:	/* the default "between" */ break;
 		case GNM_VALIDATION_OP_NOT_BETWEEN: tmp = "notBetween"; break;
-		case GNM_VALIDATION_OP_EQUAL :	tmp = "equal"; break;
-		case GNM_VALIDATION_OP_NOT_EQUAL :	tmp = "notEqual"; break;
-		case GNM_VALIDATION_OP_LT :		tmp = "lessThan"; break;
-		case GNM_VALIDATION_OP_GT :		tmp = "greaterThan"; break;
-		case GNM_VALIDATION_OP_LTE :	tmp = "lessThanOrEqual"; break;
-		case GNM_VALIDATION_OP_GTE :	tmp = "greaterThanOrEqual"; break;
+		case GNM_VALIDATION_OP_EQUAL:	tmp = "equal"; break;
+		case GNM_VALIDATION_OP_NOT_EQUAL:	tmp = "notEqual"; break;
+		case GNM_VALIDATION_OP_LT:		tmp = "lessThan"; break;
+		case GNM_VALIDATION_OP_GT:		tmp = "greaterThan"; break;
+		case GNM_VALIDATION_OP_LTE:	tmp = "lessThanOrEqual"; break;
+		case GNM_VALIDATION_OP_GTE:	tmp = "greaterThanOrEqual"; break;
 		}
 		if (NULL != tmp)
 			gsf_xml_out_add_cstr_unchecked (info->xml, "operator", tmp);
 
 		tmp = NULL;
 		switch (vip->v->style) {
-		default : /* fall back to the default */
-		case GNM_VALIDATION_STYLE_STOP : /* "stop" the default */ break;
-		case GNM_VALIDATION_STYLE_WARNING : tmp = "warning"; break;
-		case GNM_VALIDATION_STYLE_INFO : tmp = "information"; break;
+		default: /* fall back to the default */
+		case GNM_VALIDATION_STYLE_STOP: /* "stop" the default */ break;
+		case GNM_VALIDATION_STYLE_WARNING: tmp = "warning"; break;
+		case GNM_VALIDATION_STYLE_INFO: tmp = "information"; break;
 		}
 		if (NULL != tmp)
 			gsf_xml_out_add_cstr_unchecked (info->xml, "errorStyle", tmp);
@@ -2090,7 +2088,7 @@ xlsx_write_validations (XLSXWriteState *state, GsfXMLOut *xml, G_GNUC_UNUSED Gnm
 		gsf_xml_out_end_element (xml); /*  </dataValidations> */
 
 		g_hash_table_destroy (group);
-		style_list_free (validations);
+		sheet_style_list_free (validations);
 	}
 }
 
@@ -2177,7 +2175,7 @@ xlsx_write_hlinks (XLSXWriteState *state, GsfXMLOut *xml, G_GNUC_UNUSED GnmRange
 		gsf_xml_out_end_element (xml); /*  </hyperlinks> */
 
 		g_hash_table_destroy (group);
-		style_list_free (hlinks);
+		sheet_style_list_free (hlinks);
 	}
 }
 
@@ -2219,7 +2217,7 @@ xlsx_write_col (XLSXWriteState *state, GsfXMLOut *xml,
 }
 
 static void
-xlsx_write_cols (XLSXWriteState *state, GsfXMLOut *xml, GnmStyle **styles)
+xlsx_write_cols (XLSXWriteState *state, GsfXMLOut *xml, GPtrArray *styles)
 {
 	int first_col = 0, i;
 	int last_col = gnm_sheet_get_last_col (state->sheet);
@@ -2229,17 +2227,18 @@ xlsx_write_cols (XLSXWriteState *state, GsfXMLOut *xml, GnmStyle **styles)
 
 	for (i = first_col + 1; i <= last_col; i++) {
 		ColRowInfo const *ci = sheet_col_get_info (state->sheet, i);
-		if (!col_row_info_equal (info, ci) || styles[i] != styles[i - 1]) {
+		if (!col_row_info_equal (info, ci) ||
+		    g_ptr_array_index (styles, i) != g_ptr_array_index (styles, i - 1)) {
 			xlsx_write_col (state, xml, info,
 					first_col, i - 1,
-					styles[i - 1]);
+					g_ptr_array_index (styles, i - 1));
 			info	  = ci;
 			first_col = i;
 		}
 	}
 	xlsx_write_col (state, xml, info,
 			first_col, i - 1,
-			styles[i - 1]);
+			g_ptr_array_index (styles, i - 1));
 
 	gsf_xml_out_end_element (xml); /* </cols> */
 }
@@ -2313,12 +2312,12 @@ xlsx_write_autofilters (XLSXWriteState *state, GsfXMLOut *xml)
 			break;
 		}
 
-		case GNM_FILTER_OP_BLANKS :
+		case GNM_FILTER_OP_BLANKS:
 			gsf_xml_out_start_element (xml, "filters");
 			xlsx_add_bool (xml, "blank", TRUE);
 			gsf_xml_out_end_element (xml); /* </filters> */
 			break;
-		case GNM_FILTER_OP_NON_BLANKS :
+		case GNM_FILTER_OP_NON_BLANKS:
 			gsf_xml_out_start_element (xml, "customFilters");
 			gsf_xml_out_start_element (xml, "customFilter");
 			gsf_xml_out_add_cstr_unchecked (xml, "operator", "notEqual");
@@ -2430,10 +2429,10 @@ xlsx_write_breaks (G_GNUC_UNUSED XLSXWriteState *state, GsfXMLOut *xml, GnmPageB
 		gsf_xml_out_add_int (xml, "max", maxima);
 
 		switch (binfo->type) {
-		case GNM_PAGE_BREAK_MANUAL :	gsf_xml_out_add_bool (xml, "man", TRUE); break;
-		case GNM_PAGE_BREAK_AUTO :	break;
-		case GNM_PAGE_BREAK_NONE :	break;
-		case GNM_PAGE_BREAK_DATA_SLICE :gsf_xml_out_add_bool (xml, "pt", TRUE); break;
+		case GNM_PAGE_BREAK_MANUAL:	gsf_xml_out_add_bool (xml, "man", TRUE); break;
+		case GNM_PAGE_BREAK_AUTO:	break;
+		case GNM_PAGE_BREAK_NONE:	break;
+		case GNM_PAGE_BREAK_DATA_SLICE:gsf_xml_out_add_bool (xml, "pt", TRUE); break;
 		}
 		gsf_xml_out_end_element (xml); /* </brk> */
 	}
@@ -2443,8 +2442,8 @@ xlsx_write_breaks (G_GNUC_UNUSED XLSXWriteState *state, GsfXMLOut *xml, GnmPageB
 static int
 xlsx_find_paper_code (GtkPaperSize *psize)
 {
-	XLSXPaperDefs *paper_defs;
-	XLSXPaperDefs paper[] =
+	XLSXPaperDefs const *paper_defs;
+	static const XLSXPaperDefs paper[] =
 		{{ 74 , 90 , 90 , 205 , GTK_UNIT_MM },
 		 { 38 , 92 , 3.625 , 6.5 , GTK_UNIT_INCH },
 		 { 94 , 97 , 97 , 151 , GTK_UNIT_MM },
@@ -2835,7 +2834,7 @@ xlsx_write_sheet (XLSXWriteState *state, GsfOutfile *wb_part, Sheet *sheet)
 	GSList   *drawing_objs, *legacy_drawing_objs, *comments, *others, *objects, *p;
 	char const *chart_drawing_rel_id = NULL;
 	char const *legacy_drawing_rel_id = NULL;
-	GnmStyle **col_styles;
+	GPtrArray *col_styles;
 	GnmPrintInformation *pi = NULL;
 	GHashTable *zorder;
 	int z;
@@ -3033,7 +3032,7 @@ xlsx_write_sheet (XLSXWriteState *state, GsfOutfile *wb_part, Sheet *sheet)
 	gsf_output_close (sheet_part);
 	g_object_unref (sheet_part);
 	g_free (name);
-	g_free (col_styles);
+	g_ptr_array_free (col_styles, TRUE);
 
 	state->sheet = NULL;
 
@@ -3246,7 +3245,7 @@ xlsx_write_workbook (XLSXWriteState *state, GsfOutfile *root_part)
 	gsf_xml_out_end_element (xml); /* </workbook> */
 	g_object_unref (xml);
 
-	xlsx_conventions_free (state->convs);
+	g_object_unref (state->convs);
 	g_hash_table_destroy (state->shared_string_hash);
 	g_ptr_array_free (state->shared_string_array, TRUE);
 	g_hash_table_destroy (state->styles_hash);

@@ -21,7 +21,6 @@
 #include <workbook-view.h>
 #include <workbook-priv.h>
 #include <gnumeric-conf.h>
-#include <application.h>
 
 #include <goffice/goffice.h>
 
@@ -76,7 +75,13 @@ make_format_chooser (GList *list, GtkComboBox *combo)
 	}
 }
 
-/* Show view in a wbcg. Use current or new wbcg according to policy */
+/**
+ * gui_wb_view_show:
+ * @wbcg: #WBCGtk
+ * @wbv: #WorkbookView
+ *
+ * Show @wbv in a #WBCGtk. Use current or new #WBCGtk according to policy.
+ **/
 void
 gui_wb_view_show (WBCGtk *wbcg, WorkbookView *wbv)
 {
@@ -103,12 +108,17 @@ gui_wb_view_show (WBCGtk *wbcg, WorkbookView *wbv)
 
 /**
  * gui_file_read:
+ * @wbcg: #WBCGtk
+ * @uri: file URI
+ * @optional_format: (nullable): #GOFileOpener
+ * @optional_encoding: (nullable): encoding
  *
  * Returns: (transfer none): the new #WorkbookView for the file read.
  **/
 WorkbookView *
 gui_file_read (WBCGtk *wbcg, char const *uri,
-	       GOFileOpener const *optional_format, gchar const *optional_encoding)
+	       GOFileOpener const *optional_format,
+	       gchar const *optional_encoding)
 {
 	GOIOContext *io_context;
 	WorkbookView *wbv;
@@ -136,6 +146,15 @@ gui_file_read (WBCGtk *wbcg, char const *uri,
 	return wbv;
 }
 
+/**
+ * gnm_gui_file_template:
+ * @wbcg: #WBCGtk
+ * @uri: template URI
+ *
+ * Reads a template file and shows it in a new workbook.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gnm_gui_file_template (WBCGtk *wbcg, char const *uri)
 {
@@ -189,7 +208,7 @@ file_opener_find_by_id (GList *openers, char const *id)
 
 	for (l = openers; l != NULL; l = l->next, i++) {
 		if (GO_IS_FILE_OPENER (l->data) &&
-		    strcmp (id, go_file_opener_get_id(l->data)) == 0)
+		    strcmp (id, go_file_opener_get_id (l->data)) == 0)
 			return i;
 	}
 
@@ -213,10 +232,14 @@ cb_advanced_clicked (GtkButton *advanced, GtkFileChooser *fsel)
 	}
 }
 
-/*
- * Suggests automatic file type recognition, but lets the user choose an
- * import filter for selected file.
- */
+/**
+ * gui_file_open:
+ * @wbcg: #WBCGtk
+ * @type: #GnmFileOpenStyle
+ * @default_format: (nullable): default opener ID
+ *
+ * Open a file with a dialog.
+ **/
 void
 gui_file_open (WBCGtk *wbcg, GnmFileOpenStyle type, char const *default_format)
 {
@@ -516,9 +539,21 @@ out:
 	g_free (newname);
 }
 
+/**
+ * gui_file_save_as:
+ * @wbcg: #WBCGtk
+ * @wbv: #WorkbookView
+ * @type: #GnmFileSaveAsStyle
+ * @default_format: (nullable): default saver ID
+ * @from_save: whether this was called from a save operation
+ *
+ * Save a workbook with a new name using a dialog.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gui_file_save_as (WBCGtk *wbcg, WorkbookView *wb_view, GnmFileSaveAsStyle type,
-		  char const *default_format)
+		  char const *default_format, gboolean from_save)
 {
 	GList *savers = NULL, *l;
 	GtkFileChooser *fsel;
@@ -661,8 +696,24 @@ gui_file_save_as (WBCGtk *wbcg, WorkbookView *wb_view, GnmFileSaveAsStyle type,
 		g_free (newname);
 	} else {
 		char *basename;
+		char *wb_uri2 = NULL;
+		const char *ext;
 
 		wb_uri = go_doc_get_uri (GO_DOC (wb));
+		ext = go_file_saver_get_extension (fs);
+		if (wb_uri && ext && from_save &&
+		    !go_url_check_extension (wb_uri, ext, NULL)) {
+			// We came from plain save with a format we cannot
+			// save.  Adjust the extension to match what we
+			// are defaulting to save
+			const char *rdot = strrchr (wb_uri, '.');
+			if (rdot)
+				wb_uri = wb_uri2 = g_strdup_printf
+					("%-.*s.%s",
+					 (int)(rdot - wb_uri),
+					 wb_uri,
+					 ext);
+		}
 		if (!wb_uri) wb_uri = _("Untitled");
 		basename = go_basename_from_uri (wb_uri);
 
@@ -677,6 +728,7 @@ gui_file_save_as (WBCGtk *wbcg, WorkbookView *wb_view, GnmFileSaveAsStyle type,
 		gtk_file_chooser_set_uri (fsel, wb_uri);
 
 		g_free (basename);
+		g_free (wb_uri2);
 	}
 
 	while (1) {
@@ -795,6 +847,15 @@ warn_about_overwrite (WBCGtk *wbcg,
 	return response == GTK_RESPONSE_YES;
 }
 
+/**
+ * gui_file_save:
+ * @wbcg: #WBCGtk
+ * @wbv: #WorkbookView
+ *
+ * Save a workbook.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gui_file_save (WBCGtk *wbcg, WorkbookView *wb_view)
 {
@@ -811,7 +872,8 @@ gui_file_save (WBCGtk *wbcg, WorkbookView *wb_view)
 
 	if (wb->file_format_level < GO_FILE_FL_AUTO)
 		return gui_file_save_as (wbcg, wb_view,
-					 GNM_FILE_SAVE_AS_STYLE_SAVE, NULL);
+					 GNM_FILE_SAVE_AS_STYLE_SAVE, NULL,
+					 TRUE);
 	else {
 		gboolean ok = TRUE;
 		const char *uri = go_doc_get_uri (GO_DOC (wb));
@@ -848,6 +910,14 @@ gui_file_save (WBCGtk *wbcg, WorkbookView *wb_view)
 	}
 }
 
+/**
+ * gui_file_export_repeat:
+ * @wbcg: #WBCGtk
+ *
+ * Repeat the last export operation.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gui_file_export_repeat (WBCGtk *wbcg)
 {
@@ -882,7 +952,7 @@ gui_file_export_repeat (WBCGtk *wbcg)
 		    go_gtk_dialog_run (GTK_DIALOG (dialog), wbcg_toplevel (wbcg))) {
 			/* We need to copy wb->last_export_uri since it will be reset during saving */
 			gchar *uri = g_strdup (last_uri);
-			if(workbook_view_save_as (wb_view, fs, uri, GO_CMD_CONTEXT (wbcg))) {
+			if (workbook_view_save_as (wb_view, fs, uri, GO_CMD_CONTEXT (wbcg))) {
 				workbook_update_history (wb, GNM_FILE_SAVE_AS_STYLE_EXPORT);
 				g_free (uri);
 				return TRUE;

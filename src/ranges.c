@@ -281,7 +281,7 @@ range_as_string (GnmRange const *r)
 		 col_name (r->start.col), row_name (r->start.row));
 
 	if (r->start.col != r->end.col || r->start.row != r->end.row)
-		sprintf (buffer + strlen(buffer), ":%s%s",
+		sprintf (buffer + strlen (buffer), ":%s%s",
 			 col_name (r->end.col), row_name (r->end.row));
 
 	return buffer;
@@ -696,7 +696,7 @@ range_is_full (GnmRange const *r, Sheet const *sheet, gboolean horiz)
  *
  * The idea here is that users may select a whole column or row when they
  * really are only concerned with the extent of the sheet.
- * On the otehr hand, if users select any smaller region they probably
+ * On the other hand, if users select any smaller region they probably
  * intend to select just that.
  *
  * WARNING THIS IS EXPENSIVE!
@@ -1024,7 +1024,7 @@ global_range_name (Sheet const *sheet, GnmRange const *r)
  * @sheet:
  * @pos:
  *
- * Returns the range name depending on the preference setting.
+ * Returns: the range name depending on the preference setting.
  **/
 char *
 undo_cell_pos_name (Sheet const *sheet, GnmCellPos const *pos)
@@ -1039,7 +1039,7 @@ undo_cell_pos_name (Sheet const *sheet, GnmCellPos const *pos)
  * @sheet:
  * @r:
  *
- * Returns the range name depending on the preference setting.
+ * Returns: the range name depending on the preference setting.
  **/
 char *
 undo_range_name (Sheet const *sheet, GnmRange const *r)

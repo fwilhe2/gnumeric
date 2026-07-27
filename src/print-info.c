@@ -1,4 +1,3 @@
-
 /*
  * print-info.c: Print information management.  This keeps
  * track of what the print parameters for a sheet are.
@@ -43,6 +42,11 @@
 GList *gnm_print_hf_formats = NULL;
 static gint hf_formats_base_num = 0;
 
+/**
+ * gnm_print_comment_placement_get_type:
+ *
+ * Returns: the GType for #GnmPrintCommentPlacement.
+ **/
 GType
 gnm_print_comment_placement_get_type (void)
 {
@@ -66,6 +70,11 @@ gnm_print_comment_placement_get_type (void)
 	return etype;
 }
 
+/**
+ * gnm_print_errors_get_type:
+ *
+ * Returns: the GType for #GnmPrintErrors.
+ **/
 GType
 gnm_print_errors_get_type (void)
 {
@@ -89,6 +98,14 @@ gnm_print_errors_get_type (void)
 }
 
 
+/**
+ * gnm_print_hf_new:
+ * @left: (nullable): left side format
+ * @middle: (nullable): middle format
+ * @right: (nullable): right side format
+ *
+ * Returns: (transfer full): a newly allocated #GnmPrintHF.
+ **/
 GnmPrintHF *
 gnm_print_hf_new (char const *left_side_format,
 		  char const *middle_format,
@@ -104,6 +121,13 @@ gnm_print_hf_new (char const *left_side_format,
 	return hf;
 }
 
+/**
+ * gnm_print_hf_same:
+ * @a: #GnmPrintHF
+ * @b: #GnmPrintHF
+ *
+ * Returns: %TRUE if @a and @b are the same.
+ **/
 gboolean
 gnm_print_hf_same (GnmPrintHF const *a, GnmPrintHF const *b)
 {
@@ -129,6 +153,12 @@ gnm_print_hf_same (GnmPrintHF const *a, GnmPrintHF const *b)
 	return TRUE;
 }
 
+/**
+ * gnm_print_hf_register:
+ * @hf: #GnmPrintHF
+ *
+ * Returns: (transfer none): the registered #GnmPrintHF.
+ **/
 GnmPrintHF *
 gnm_print_hf_register (GnmPrintHF *hf)
 {
@@ -148,6 +178,12 @@ gnm_print_hf_register (GnmPrintHF *hf)
 }
 
 
+/**
+ * gnm_print_hf_copy:
+ * @source: #GnmPrintHF
+ *
+ * Returns: (transfer full): a copy of @source.
+ **/
 GnmPrintHF *
 gnm_print_hf_copy (GnmPrintHF const *source)
 {
@@ -161,6 +197,12 @@ gnm_print_hf_copy (GnmPrintHF const *source)
 	return res;
 }
 
+/**
+ * gnm_print_hf_free:
+ * @print_hf: (nullable): #GnmPrintHF
+ *
+ * Frees the #GnmPrintHF.
+ **/
 void
 gnm_print_hf_free (GnmPrintHF *print_hf)
 {
@@ -173,6 +215,11 @@ gnm_print_hf_free (GnmPrintHF *print_hf)
 	g_free (print_hf);
 }
 
+/**
+ * gnm_print_hf_get_type:
+ *
+ * Returns: the GType for #GnmPrintHF.
+ **/
 GType
 gnm_print_hf_get_type (void)
 {
@@ -186,6 +233,12 @@ gnm_print_hf_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_print_info_free:
+ * @pi: (nullable): #GnmPrintInformation
+ *
+ * Frees the #GnmPrintInformation.
+ **/
 void
 gnm_print_info_free (GnmPrintInformation *pi)
 {
@@ -208,6 +261,11 @@ gnm_print_info_free (GnmPrintInformation *pi)
 	g_free (pi);
 }
 
+/**
+ * gnm_print_information_get_type:
+ *
+ * Returns: the GType for #GnmPrintInformation.
+ **/
 GType
 gnm_print_information_get_type (void)
 {
@@ -228,7 +286,7 @@ load_formats (void)
 		char const *left_format;
 		char const *middle_format;
 		char const *right_format;
-	} const predefined_formats [] = {
+	} const predefined_formats[] = {
 		{ "",                 "",                             "" },
 		{ "",                 N_("Page &[PAGE]"),             "" },
 		{ "",                 N_("Page &[PAGE] of &[PAGES]"), "" },
@@ -244,16 +302,16 @@ load_formats (void)
 	{
 		int i;
 
-		for (i = 0; predefined_formats [i].left_format; i++) {
+		for (i = 0; predefined_formats[i].left_format; i++) {
 			GnmPrintHF *format;
 
 			format = gnm_print_hf_new (
-				predefined_formats [i].left_format[0]?
-				_(predefined_formats [i].left_format):"",
-				predefined_formats [i].middle_format[0]?
-				_(predefined_formats [i].middle_format):"",
-				predefined_formats [i].right_format[0]?
-				_(predefined_formats [i].right_format):"");
+				predefined_formats[i].left_format[0]?
+				_(predefined_formats[i].left_format):"",
+				predefined_formats[i].middle_format[0]?
+				_(predefined_formats[i].middle_format):"",
+				predefined_formats[i].right_format[0]?
+				_(predefined_formats[i].right_format):"");
 
 			gnm_print_hf_formats = g_list_prepend (gnm_print_hf_formats, format);
 			hf_formats_base_num++;
@@ -356,7 +414,7 @@ gnm_print_info_load_defaults (GnmPrintInformation *res)
 /**
  * gnm_print_information_new:
  *
- * Returns a newly allocated GnmPrintInformation buffer
+ * Returns: a newly allocated #GnmPrintInformation buffer
  *
  */
 GnmPrintInformation *
@@ -408,9 +466,9 @@ save_formats (void)
 		if (base-- > 0)
 			continue;
 
-		GO_SLIST_PREPEND (left, g_strdup(hf->left_format));
-		GO_SLIST_PREPEND (middle, g_strdup(hf->middle_format));
-		GO_SLIST_PREPEND (right, g_strdup(hf->right_format));
+		GO_SLIST_PREPEND (left, g_strdup (hf->left_format));
+		GO_SLIST_PREPEND (middle, g_strdup (hf->middle_format));
+		GO_SLIST_PREPEND (right, g_strdup (hf->right_format));
 	}
 	GO_SLIST_REVERSE(left);
 	gnm_conf_set_printsetup_hf_left (left);
@@ -444,6 +502,12 @@ make_triple (const GnmPrintHF *hf)
 	return l;
 }
 
+/**
+ * gnm_print_info_save:
+ * @pi: #GnmPrintInformation
+ *
+ * Saves the #GnmPrintInformation to the configuration.
+ **/
 void
 gnm_print_info_save (GnmPrintInformation *pi)
 {
@@ -482,6 +546,12 @@ gnm_print_info_save (GnmPrintInformation *pi)
 	gnm_conf_set_page_setup (pi->page_setup);
 }
 
+/**
+ * unit_name_to_unit:
+ * @name: name of the unit
+ *
+ * Returns: the #GtkUnit for @name.
+ **/
 GtkUnit
 unit_name_to_unit (char const *name)
 {
@@ -503,6 +573,12 @@ unit_name_to_unit (char const *name)
 	return GTK_UNIT_POINTS;
 }
 
+/**
+ * unit_to_unit_name:
+ * @unit: #GtkUnit
+ *
+ * Returns: the name of the unit @unit.
+ **/
 char const *
 unit_to_unit_name (GtkUnit unit)
 {
@@ -665,7 +741,7 @@ static struct {
 	char const *name;
 	void (*render)(GString *target, GnmPrintHFRenderInfo *info, char const *args);
 	char *name_trans;
-} render_ops [] = {
+} render_ops[] = {
 	{ N_("TAB"),   render_tab   , NULL},
 	{ N_("PAGE"),  render_page  , NULL},
 	{ N_("PAGES"), render_pages , NULL},
@@ -697,14 +773,14 @@ render_opcode (GString *target, char /* non-const */ *opcode,
 	}
 	opcode_trans = g_utf8_casefold (opcode, -1);
 
-	for (i = 0; render_ops [i].name; i++) {
-		if (render_ops [i].name_trans == NULL) {
-			render_ops [i].name_trans = g_utf8_casefold (_(render_ops [i].name), -1);
+	for (i = 0; render_ops[i].name; i++) {
+		if (render_ops[i].name_trans == NULL) {
+			render_ops[i].name_trans = g_utf8_casefold (_(render_ops[i].name), -1);
 		}
 
-		if ((g_ascii_strcasecmp (render_ops [i].name, opcode) == 0) ||
-		    (g_utf8_collate (render_ops [i].name_trans, opcode_trans) == 0)) {
-			(*render_ops [i].render)(target, info, args);
+		if ((g_ascii_strcasecmp (render_ops[i].name, opcode) == 0) ||
+		    (g_utf8_collate (render_ops[i].name_trans, opcode_trans) == 0)) {
+			(*render_ops[i].render)(target, info, args);
 		}
 	}
 	g_free (opcode_trans);
@@ -738,6 +814,14 @@ render_opcode (GString *target, char /* non-const */ *opcode,
                           with a space character.
 #endif
 
+/**
+ * gnm_print_hf_format_render:
+ * @format: the format string
+ * @info: #GnmPrintHFRenderInfo
+ * @render_type: #GnmPrintHFRenderType
+ *
+ * Returns: (transfer full): the rendered string.
+ **/
 char *
 gnm_print_hf_format_render (char const *format, GnmPrintHFRenderInfo *info, GnmPrintHFRenderType render_type)
 {
@@ -770,6 +854,11 @@ gnm_print_hf_format_render (char const *format, GnmPrintHFRenderInfo *info, GnmP
 	return g_string_free (result, FALSE);
 }
 
+/**
+ * gnm_print_hf_render_info_new:
+ *
+ * Returns: (transfer full): a newly allocated #GnmPrintHFRenderInfo.
+ **/
 GnmPrintHFRenderInfo *
 gnm_print_hf_render_info_new (void)
 {
@@ -787,8 +876,14 @@ gnm_print_hf_render_info_new (void)
 	return hfi;
 }
 
+/**
+ * gnm_print_hf_render_info_free:
+ * @hfi: #GnmPrintHFRenderInfo
+ *
+ * Frees the #GnmPrintHFRenderInfo.
+ **/
 void
-gnm_print_hf_render_info_destroy (GnmPrintHFRenderInfo *hfi)
+gnm_print_hf_render_info_free (GnmPrintHFRenderInfo *hfi)
 {
 	g_return_if_fail (hfi != NULL);
 
@@ -813,6 +908,11 @@ hf_render_info_copy (GnmPrintHFRenderInfo *hfi)
 	return res;
 }
 
+/**
+ * gnm_print_hf_render_info_get_type:
+ *
+ * Returns: the GType for #GnmPrintHFRenderInfo.
+ **/
 GType
 gnm_print_hf_render_info_get_type (void)
 {
@@ -821,7 +921,7 @@ gnm_print_hf_render_info_get_type (void)
 	if (t == 0) {
 		t = g_boxed_type_register_static ("GnmPrintHFRenderInfo",
 			 (GBoxedCopyFunc)hf_render_info_copy,
-			 (GBoxedFreeFunc)gnm_print_hf_render_info_destroy);
+			 (GBoxedFreeFunc)gnm_print_hf_render_info_free);
 	}
 	return t;
 }
@@ -998,6 +1098,12 @@ print_shutdown (void)
 
 #define COPY(field) dst->field = src->field
 
+/**
+ * gnm_print_info_dup:
+ * @src: #GnmPrintInformation
+ *
+ * Returns: (transfer full): a copy of @src.
+ **/
 GnmPrintInformation *
 gnm_print_info_dup (GnmPrintInformation const *src)
 {
@@ -1062,8 +1168,8 @@ gnm_print_info_dup (GnmPrintInformation const *src)
  * @bottom: (out) (optional): bottom margin.
  * @left: (out) (optional): left margin.
  * @right: (out) (optional): right margin.
- * @edge_to_below_header: (out) (optional):  margin.
- * @edge_to_above_footer: (out) (optional):  margin.
+ * @edge_to_below_header: (out) (optional): margin.
+ * @edge_to_above_footer: (out) (optional): margin.
  */
 void
 print_info_get_margins (GnmPrintInformation *pi,
@@ -1090,6 +1196,13 @@ print_info_get_margins (GnmPrintInformation *pi,
 		*edge_to_above_footer = pi->edge_to_above_footer;
 }
 
+/**
+ * print_info_set_margin_header:
+ * @pi: #GnmPrintInformation
+ * @header: margin in points
+ *
+ * Sets the header margin for @pi.
+ **/
 void
 print_info_set_margin_header (GnmPrintInformation *pi, double header)
 {
@@ -1100,6 +1213,13 @@ print_info_set_margin_header (GnmPrintInformation *pi, double header)
 	gtk_page_setup_set_top_margin (pi->page_setup, header, GTK_UNIT_POINTS);
 }
 
+/**
+ * print_info_set_margin_footer:
+ * @pi: #GnmPrintInformation
+ * @footer: margin in points
+ *
+ * Sets the footer margin for @pi.
+ **/
 void
 print_info_set_margin_footer (GnmPrintInformation *pi, double footer)
 {
@@ -1110,6 +1230,13 @@ print_info_set_margin_footer (GnmPrintInformation *pi, double footer)
         gtk_page_setup_set_bottom_margin (pi->page_setup, footer, GTK_UNIT_POINTS);
 }
 
+/**
+ * print_info_set_margin_left:
+ * @pi: #GnmPrintInformation
+ * @left: margin in points
+ *
+ * Sets the left margin for @pi.
+ **/
 void
 print_info_set_margin_left (GnmPrintInformation *pi, double left)
 {
@@ -1120,6 +1247,13 @@ print_info_set_margin_left (GnmPrintInformation *pi, double left)
 	gtk_page_setup_set_left_margin (pi->page_setup, left, GTK_UNIT_POINTS);
 }
 
+/**
+ * print_info_set_margin_right:
+ * @pi: #GnmPrintInformation
+ * @right: margin in points
+ *
+ * Sets the right margin for @pi.
+ **/
 void
 print_info_set_margin_right (GnmPrintInformation *pi, double right)
 {
@@ -1130,6 +1264,13 @@ print_info_set_margin_right (GnmPrintInformation *pi, double right)
 	gtk_page_setup_set_right_margin (pi->page_setup, right, GTK_UNIT_POINTS);
 }
 
+/**
+ * print_info_set_edge_to_above_footer:
+ * @pi: #GnmPrintInformation
+ * @e_f: margin in points
+ *
+ * Sets the edge-to-above-footer margin for @pi.
+ **/
 void
 print_info_set_edge_to_above_footer (GnmPrintInformation *pi, double e_f)
 {
@@ -1140,6 +1281,13 @@ print_info_set_edge_to_above_footer (GnmPrintInformation *pi, double e_f)
 	pi->edge_to_above_footer = e_f;
 }
 
+/**
+ * print_info_set_edge_to_below_header:
+ * @pi: #GnmPrintInformation
+ * @e_h: margin in points
+ *
+ * Sets the edge-to-below-header margin for @pi.
+ **/
 void
 print_info_set_edge_to_below_header (GnmPrintInformation *pi, double e_h)
 {
@@ -1151,6 +1299,16 @@ print_info_set_edge_to_below_header (GnmPrintInformation *pi, double e_h)
 }
 
 
+/**
+ * print_info_set_margins:
+ * @pi: #GnmPrintInformation
+ * @header: header margin in points
+ * @footer: footer margin in points
+ * @left: left margin in points
+ * @right: right margin in points
+ *
+ * Sets the margins for @pi.
+ **/
 void
 print_info_set_margins (GnmPrintInformation *pi,
 			double header, double footer, double left, double right)
@@ -1194,6 +1352,13 @@ paper_log_func (G_GNUC_UNUSED const gchar   *log_domain,
 		*pwarn = 1;
 }
 
+/**
+ * page_setup_set_paper:
+ * @page_setup: #GtkPageSetup
+ * @paper: paper name
+ *
+ * Returns: %TRUE if the paper name is unknown.
+ **/
 gboolean
 page_setup_set_paper (GtkPageSetup *page_setup, char const *paper)
 {
@@ -1271,6 +1436,13 @@ page_setup_set_paper (GtkPageSetup *page_setup, char const *paper)
 	return bad_paper;
 }
 
+/**
+ * print_info_set_paper:
+ * @pi: #GnmPrintInformation
+ * @paper: paper name
+ *
+ * Returns: %TRUE if the paper name is unknown.
+ **/
 gboolean
 print_info_set_paper (GnmPrintInformation *pi, char const *paper)
 {
@@ -1280,6 +1452,12 @@ print_info_set_paper (GnmPrintInformation *pi, char const *paper)
 	return page_setup_set_paper (pi->page_setup, paper);
 }
 
+/**
+ * page_setup_get_paper:
+ * @page_setup: #GtkPageSetup
+ *
+ * Returns: (transfer full): the name of the paper.
+ **/
 char *
 page_setup_get_paper (GtkPageSetup *page_setup)
 {
@@ -1300,7 +1478,7 @@ page_setup_get_paper (GtkPageSetup *page_setup)
 	name =  gtk_paper_size_get_name (gtk_page_setup_get_paper_size (page_setup));
 
 /* Working around gtk bug 426416 */
-	if (strncmp (name, "custom", 6) == 0) {
+	if (g_str_has_prefix (name, "custom")) {
 		double width = gtk_paper_size_get_width (paper, GTK_UNIT_MM);
 		double height = gtk_paper_size_get_height (paper, GTK_UNIT_MM);
 		return g_strdup_printf ("custom_Gnm-%.0fx%.0fmm_%.0fx%.0fmm",
@@ -1309,6 +1487,12 @@ page_setup_get_paper (GtkPageSetup *page_setup)
 	return g_strdup (name);
 }
 
+/**
+ * print_info_get_paper:
+ * @pi: #GnmPrintInformation
+ *
+ * Returns: (transfer full): the name of the paper.
+ **/
 char *
 print_info_get_paper (GnmPrintInformation *pi)
 {
@@ -1318,6 +1502,12 @@ print_info_get_paper (GnmPrintInformation *pi)
 	return page_setup_get_paper (pi->page_setup);
 }
 
+/**
+ * print_info_get_paper_size:
+ * @pi: #GnmPrintInformation
+ *
+ * Returns: (transfer none): the paper size.
+ **/
 GtkPaperSize *
 print_info_get_paper_size (GnmPrintInformation *pi)
 {
@@ -1346,6 +1536,13 @@ print_info_get_paper_display_name (GnmPrintInformation *pi)
 	return gtk_paper_size_get_display_name (paper);
 }
 
+/**
+ * print_info_get_paper_width:
+ * @pi: #GnmPrintInformation
+ * @unit: #GtkUnit
+ *
+ * Returns: the paper width in @unit.
+ **/
 double
 print_info_get_paper_width (GnmPrintInformation *pi, GtkUnit unit)
 {
@@ -1355,6 +1552,13 @@ print_info_get_paper_width (GnmPrintInformation *pi, GtkUnit unit)
 	return gtk_page_setup_get_paper_width (pi->page_setup, unit);
 }
 
+/**
+ * print_info_get_paper_height:
+ * @pi: #GnmPrintInformation
+ * @unit: #GtkUnit
+ *
+ * Returns: the paper height in @unit.
+ **/
 double
 print_info_get_paper_height (GnmPrintInformation *pi, GtkUnit unit)
 {
@@ -1384,8 +1588,6 @@ gnm_print_info_get_page_setup (GnmPrintInformation *pi)
  * @pi: #GnmPrintInformation
  * @page_setup: (transfer full): #GtkPageSetup
  *
- * Absorb a ref to @page_setup.
- *
  * WHY WHY WHY
  * 1) The life cycle in here is a tad odd, the load_defaults does nothing for the
  * case of an existing page_setup, and seems like it should be ignored for the
@@ -1412,6 +1614,12 @@ gnm_print_info_set_page_setup (GnmPrintInformation *pi,
 		pi->page_setup = page_setup;
 }
 
+/**
+ * print_info_get_paper_orientation:
+ * @pi: #GnmPrintInformation
+ *
+ * Returns: the paper orientation.
+ **/
 GtkPageOrientation
 print_info_get_paper_orientation (GnmPrintInformation *pi)
 {
@@ -1425,6 +1633,13 @@ print_info_get_paper_orientation (GnmPrintInformation *pi)
 	return orientation;
 }
 
+/**
+ * print_info_set_paper_orientation:
+ * @pi: #GnmPrintInformation
+ * @orientation: #GtkPageOrientation
+ *
+ * Sets the paper orientation for @pi.
+ **/
 void
 print_info_set_paper_orientation (GnmPrintInformation *pi,
 				  GtkPageOrientation orientation)
@@ -1457,6 +1672,12 @@ print_info_set_breaks (GnmPrintInformation *pi,
 	*target = breaks;
 }
 
+/**
+ * print_info_has_manual_breaks:
+ * @pi: #GnmPrintInformation
+ *
+ * Returns: %TRUE if @pi has manual page breaks.
+ **/
 gboolean
 print_info_has_manual_breaks (GnmPrintInformation *pi)
 {
@@ -1474,6 +1695,8 @@ print_info_has_manual_breaks (GnmPrintInformation *pi)
  * @is_vert:
  *
  * Allocate a collection of page breaks.
+ *
+ * Returns: (transfer full): a new #GnmPageBreaks.
  **/
 GnmPageBreaks *
 gnm_page_breaks_new (gboolean is_vert)
@@ -1513,7 +1736,7 @@ gnm_page_breaks_dup (GnmPageBreaks const *src)
 
 /**
  * gnm_page_breaks_free:
- * @breaks: (transfer none) (nullable): #GnmPageBreak
+ * @breaks: (transfer full) (nullable): #GnmPageBreak
  */
 void
 gnm_page_breaks_free (GnmPageBreaks *breaks)
@@ -1524,6 +1747,11 @@ gnm_page_breaks_free (GnmPageBreaks *breaks)
 	}
 }
 
+/**
+ * gnm_page_breaks_get_type:
+ *
+ * Returns: the GType for #GnmPageBreaks.
+ **/
 GType
 gnm_page_breaks_get_type (void)
 {
@@ -1565,6 +1793,16 @@ gnm_page_breaks_dup_non_auto_breaks (GnmPageBreaks const *src)
 		return NULL;
 }
 
+/**
+ * gnm_page_breaks_append_break:
+ * @breaks: #GnmPageBreaks
+ * @pos: position
+ * @type: #GnmPageBreakType
+ *
+ * Appends a page break at @pos of type @type.
+ *
+ * Returns: %TRUE if the break was appended.
+ **/
 gboolean
 gnm_page_breaks_append_break (GnmPageBreaks *breaks,
 			      int pos,
@@ -1595,6 +1833,13 @@ gnm_page_breaks_append_break (GnmPageBreaks *breaks,
 	return TRUE;
 }
 
+/**
+ * gnm_page_breaks_get_break:
+ * @breaks: (nullable): #GnmPageBreaks
+ * @pos: position
+ *
+ * Returns: the #GnmPageBreakType at @pos.
+ **/
 GnmPageBreakType
 gnm_page_breaks_get_break (GnmPageBreaks *breaks,
 			   int pos)
@@ -1615,6 +1860,13 @@ gnm_page_breaks_get_break (GnmPageBreaks *breaks,
 	return GNM_PAGE_BREAK_NONE;
 }
 
+/**
+ * gnm_page_breaks_get_next_manual_break:
+ * @breaks: (nullable): #GnmPageBreaks
+ * @pos: position
+ *
+ * Returns: the position of the next manual page break after @pos, or -1.
+ **/
 int
 gnm_page_breaks_get_next_manual_break (GnmPageBreaks *breaks,
 				       int pos)
@@ -1634,6 +1886,13 @@ gnm_page_breaks_get_next_manual_break (GnmPageBreaks *breaks,
 	return -1;
 }
 
+/**
+ * gnm_page_breaks_get_next_break:
+ * @breaks: (nullable): #GnmPageBreaks
+ * @pos: position
+ *
+ * Returns: the position of the next page break after @pos, or -1.
+ **/
 int
 gnm_page_breaks_get_next_break (GnmPageBreaks *breaks, int pos)
 {
@@ -1651,6 +1910,16 @@ gnm_page_breaks_get_next_break (GnmPageBreaks *breaks, int pos)
 	return -1;
 }
 
+/**
+ * gnm_page_breaks_set_break:
+ * @breaks: #GnmPageBreaks
+ * @pos: position
+ * @type: #GnmPageBreakType
+ *
+ * Sets the page break at @pos to @type.
+ *
+ * Returns: %TRUE if the break was set.
+ **/
 gboolean
 gnm_page_breaks_set_break (GnmPageBreaks *breaks,
 			   int pos,
@@ -1740,6 +2009,13 @@ gnm_page_breaks_clean (GnmPageBreaks *breaks)
 	}
 }
 
+/**
+ * print_info_set_printtofile_uri:
+ * @pi: #GnmPrintInformation
+ * @uri: (nullable): new uri
+ *
+ * Sets the print-to-file URI for @pi to @uri.
+ **/
 void
 print_info_set_printtofile_uri (GnmPrintInformation *pi,
 				gchar const *uri)
@@ -1748,6 +2024,14 @@ print_info_set_printtofile_uri (GnmPrintInformation *pi,
 	pi->printtofile_uri = g_strdup (uri);
 }
 
+/**
+ * print_info_set_printtofile_from_settings:
+ * @pi: #GnmPrintInformation
+ * @settings: #GtkPrintSettings
+ * @default_uri: default uri
+ *
+ * Sets the print-to-file URI for @pi from @settings.
+ **/
 void
 print_info_set_printtofile_from_settings (GnmPrintInformation *pi,
 					  GtkPrintSettings* settings,
@@ -1762,6 +2046,13 @@ print_info_set_printtofile_from_settings (GnmPrintInformation *pi,
 		print_info_set_printtofile_uri (pi, uri);
 }
 
+/**
+ * print_info_set_from_settings:
+ * @pi: #GnmPrintInformation
+ * @settings: #GtkPrintSettings
+ *
+ * Sets the print information for @pi from @settings.
+ **/
 void
 print_info_set_from_settings (GnmPrintInformation *pi,
 			      GtkPrintSettings* settings)
@@ -1772,6 +2063,12 @@ print_info_set_from_settings (GnmPrintInformation *pi,
 		 GNM_PRINT_ACTIVE_SHEET);
 }
 
+/**
+ * print_info_get_printrange:
+ * @pi: #GnmPrintInformation
+ *
+ * Returns: the #PrintRange for @pi.
+ **/
 PrintRange
 print_info_get_printrange (GnmPrintInformation *pi)
 {
@@ -1779,6 +2076,13 @@ print_info_get_printrange (GnmPrintInformation *pi)
 	return pi->print_range;
 }
 
+/**
+ * print_info_set_printrange:
+ * @pi: #GnmPrintInformation
+ * @pr: #PrintRange
+ *
+ * Sets the #PrintRange for @pi to @pr.
+ **/
 void
 print_info_set_printrange (GnmPrintInformation *pi, PrintRange pr)
 {
@@ -1803,6 +2107,14 @@ print_info_get_printtofile_uri (GnmPrintInformation *pi)
 }
 
 
+/**
+ * print_load_repeat_range:
+ * @str: string to parse
+ * @r: #GnmRange
+ * @sheet: #Sheet
+ *
+ * Returns: %TRUE if the string was parsed.
+ **/
 gboolean
 print_load_repeat_range (char const *str, GnmRange *r, Sheet const *sheet)
 {

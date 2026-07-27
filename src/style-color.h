@@ -1,5 +1,5 @@
-#ifndef _GNM_STYLE_COLOR_H_
-# define _GNM_STYLE_COLOR_H_
+#ifndef GNM_STYLE_COLOR_H_
+#define GNM_STYLE_COLOR_H_
 
 #include <gnumeric.h>
 #include <libgnumeric.h>
@@ -8,7 +8,7 @@
 
 G_BEGIN_DECLS
 
-struct _GnmColor {
+struct GnmColor_ {
 	GOColor	 go_color;
 	int      ref_count;
 	gboolean is_auto;
@@ -40,4 +40,4 @@ void gnm_color_shutdown (void);
 
 G_END_DECLS
 
-#endif /* _GNM_STYLE_COLOR_H_ */
+#endif /* GNM_STYLE_COLOR_H_ */

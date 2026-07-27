@@ -57,7 +57,9 @@ gnumeric_sum (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_sum,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
 }
@@ -124,7 +126,9 @@ gnumeric_product (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_bogusproduct,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
 }
@@ -133,7 +137,7 @@ gnumeric_product (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 
 static GnmFuncHelp const help_gnumeric_version[] = {
 	/* xgettext : see po-functions/README.translators */
- 	{ GNM_FUNC_HELP_NAME, N_("GNUMERIC_VERSION:the current version of Gnumeric")},
+	{ GNM_FUNC_HELP_NAME, N_("GNUMERIC_VERSION:the current version of Gnumeric")},
 	{ GNM_FUNC_HELP_DESCRIPTION, N_("GNUMERIC_VERSION returns the version of gnumeric as a string.")},
 	{ GNM_FUNC_HELP_EXAMPLES, "=GNUMERIC_VERSION()" },
 	{ GNM_FUNC_HELP_END }
@@ -274,11 +278,9 @@ gnumeric_table (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 				dependent_queue_recalc (GNM_CELL_TO_DEP (in[1]));
 				gnm_app_recalc_clear_caches ();
 				if (NULL != in[0]) {
-					gnm_cell_eval (in[2]);
-					value_array_set (res, x, y, value_dup (in[2]->value));
+					value_array_set (res, x, y, value_dup (gnm_cell_eval (in[2])));
 				} else {
-					gnm_cell_eval (x_iter);
-					value_array_set (res, x, y, value_dup (x_iter->value));
+					value_array_set (res, x, y, value_dup (gnm_cell_eval (x_iter)));
 				}
 				value_release (in[1]->value);
 				in[1]->value = v1;
@@ -488,7 +490,7 @@ static GnmFuncGroup *math_group = NULL;
 static GnmFuncGroup *gnumeric_group = NULL;
 static GnmFuncGroup *logic_group = NULL;
 
-static GnmFuncDescriptor const builtins [] = {
+static GnmFuncDescriptor const builtins[] = {
 	/* --- Math --- */
 	{	"sum",		NULL,
 		help_sum,	NULL,	gnumeric_sum,

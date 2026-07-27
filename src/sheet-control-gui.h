@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_CONTROL_GUI_H_
-# define _GNM_SHEET_CONTROL_GUI_H_
+#ifndef GNM_SHEET_CONTROL_GUI_H_
+#define GNM_SHEET_CONTROL_GUI_H_
 
 #include <gnumeric-fwd.h>
 #include <sheet-control.h>
@@ -23,7 +23,7 @@ void scg_object_anchor_to_coords (SheetControlGUI const *scg,
 void scg_object_coords_to_anchor (SheetControlGUI const *scg,
 				  double const *coords, SheetObjectAnchor *in_out);
 
-void scg_objects_drag		(SheetControlGUI *scg, GnmPane *gcanvas,
+void scg_objects_drag		(SheetControlGUI *scg, GnmPane *pane,
 				 SheetObject *primary,
 				 gdouble *dx, gdouble *dy,
 				 int drag_type, gboolean symmetric, gboolean snap_to_grid,
@@ -122,4 +122,4 @@ WBCGtk *scg_wbcg	(SheetControlGUI const *scg);
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_CONTROL_GUI_H_ */
+#endif /* GNM_SHEET_CONTROL_GUI_H_ */

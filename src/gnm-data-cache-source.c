@@ -34,7 +34,7 @@
 #include <gnm-i18n.h>
 #include <string.h>
 
-struct _GnmDataCacheSource {
+struct GnmDataCacheSource_ {
 	GObject		base;
 
 	Sheet	  *src_sheet;
@@ -113,13 +113,13 @@ gnm_data_cache_source_set_property (GObject *obj, guint property_id,
 	GnmDataCacheSource *src = (GnmDataCacheSource *)obj;
 
 	switch (property_id) {
-	case PROP_SHEET :
+	case PROP_SHEET:
 		gnm_data_cache_source_set_sheet (src, g_value_get_object (value));
 		break;
-	case PROP_RANGE :
+	case PROP_RANGE:
 		gnm_data_cache_source_set_range (src, g_value_get_boxed (value));
 		break;
-	case PROP_NAME :
+	case PROP_NAME:
 		gnm_data_cache_source_set_name (src, g_value_get_string (value));
 		break;
 	default:
@@ -133,13 +133,13 @@ gnm_data_cache_source_get_property (GObject *obj, guint property_id,
 {
 	GnmDataCacheSource const *src = (GnmDataCacheSource const *)obj;
 	switch (property_id) {
-	case PROP_SHEET :
+	case PROP_SHEET:
 		g_value_set_object (value, gnm_data_cache_source_get_sheet (src));
 		break;
-	case PROP_RANGE :
+	case PROP_RANGE:
 		g_value_set_boxed (value, gnm_data_cache_source_get_range (src));
 		break;
-	case PROP_NAME :
+	case PROP_NAME:
 		g_value_set_string (value, gnm_data_cache_source_get_name (src));
 		break;
 	default:
@@ -194,9 +194,9 @@ GSF_CLASS_FULL (GnmDataCacheSource, gnm_data_cache_source, NULL, NULL,
  * @src_range: #GnmRange
  * @src_name: char *, optionally %NULL
  *
- * Allocates a new Allocates a new #GnmDataCacheSource
+ * Allocates a new #GnmDataCacheSource
  *
- * Returns : #GODataCacheSource
+ * Returns: (transfer full): a new #GODataCacheSource.
  **/
 GODataCacheSource *
 gnm_data_cache_source_new (Sheet *src_sheet,

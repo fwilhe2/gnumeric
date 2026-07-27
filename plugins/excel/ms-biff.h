@@ -8,8 +8,8 @@
  * (C) 1998-2001 Michael Meeks
  * (C) 2002-2005 Jody Goldberg
  **/
-#ifndef GNM_BIFF_H
-#define GNM_BIFF_H
+#ifndef GNM_PLUGIN_EXCEL_MS_BIFF_H_
+#define GNM_PLUGIN_EXCEL_MS_BIFF_H_
 
 #include "rc4.h"
 
@@ -49,7 +49,7 @@ typedef struct {
 	guint8   xor_key[16];
 	RC4_KEY	 rc4_key;
 	unsigned char md5_digest[16];
-	int	 block;
+	guint32  block;
 	gboolean dont_decrypt_next_record;
 } BiffQuery;
 
@@ -72,7 +72,7 @@ guint32     ms_biff_query_bound_check (BiffQuery *q,
 /*                                Write Side                                 */
 /*****************************************************************************/
 
-typedef struct _BiffPut {
+typedef struct {
 	guint16		 opcode;
 	gsf_off_t	 streamPos;
 	unsigned	 curpos; /* Curpos is offset from beginning of header */
@@ -116,4 +116,4 @@ unsigned ms_biff_max_record_len (BiffPut const *bp);
 
 void ms_biff_put_abs_write (BiffPut *bp, gsf_off_t pos, gconstpointer buf, gsize size);
 
-#endif /* GNM_BIFF_H */
+#endif

@@ -340,7 +340,7 @@ build_exp (GnmExpr *l, GnmExpr *r)
 /*
  * Build an array expression.
  *
- * Returns %NULL on failure.  Caller must YYERROR in that case.
+ * Returns: %NULL on failure.  Caller must YYERROR in that case.
  */
 static GnmExpr *
 build_array (GSList *cols)
@@ -391,7 +391,7 @@ build_array (GSList *cols)
 /*
  * Build a range constructor.
  *
- * Returns %NULL on failure.  Caller must YYERROR in that case.
+ * Returns: %NULL on failure.  Caller must YYERROR in that case.
  */
 static GnmExpr *
 build_range_ctor (GnmExpr *l, GnmExpr *r, GnmExpr *validate)
@@ -416,7 +416,7 @@ build_range_ctor (GnmExpr *l, GnmExpr *r, GnmExpr *validate)
 /*
  * Build an intersection expression.
  *
- * Returns %NULL on failure.  Caller must YYERROR in that case.
+ * Returns: %NULL on failure.  Caller must YYERROR in that case.
  */
 static GnmExpr *
 build_intersect (GnmExpr *l, GnmExpr *r)
@@ -434,7 +434,7 @@ build_intersect (GnmExpr *l, GnmExpr *r)
 /*
  * Build a set expression.
  *
- * Returns %NULL on failure.  Caller must YYERROR in that case.
+ * Returns: %NULL on failure.  Caller must YYERROR in that case.
  */
 static GnmExpr *
 build_set (GnmExprList *list)
@@ -458,7 +458,7 @@ build_set (GnmExprList *list)
 /**
  * parse_string_as_value:
  *
- * Try to parse the entered text as a basic value (empty, bool, int,
+ * Try to parse the entered text as a basic value (empty, boolean, int,
  * gnm_float, err) if this succeeds, we store this as a GnmValue otherwise, we
  * return a string.
  */
@@ -506,7 +506,7 @@ parser_simple_name (const char *str, Sheet *sheet)
 			GnmParsePos pp = *state->pos;
 			pp.sheet = sheet;
 			/* Create a place holder */
-			nexpr = expr_name_add (&pp, str, NULL, NULL, TRUE, NULL);
+			nexpr = expr_name_add (&pp, str, NULL, NULL, NULL);
 			res = gnm_expr_new_name (nexpr, sheet, NULL);
 		} else {
 			report_err (state, g_error_new (1, PERR_UNKNOWN_NAME,
@@ -616,10 +616,8 @@ line:	opt_exp exp {
 	}
 
 	| error 	{
-		if (state->result != NULL) {
-			gnm_expr_list_unref (state->result);
-			state->result = NULL;
-		}
+		gnm_expr_list_unref (state->result);
+		state->result = NULL;
 	}
 	;
 
@@ -1054,24 +1052,24 @@ yylex (void)
 		return RANGE_INTERSECT;
 
 	if (c == '&' && state->convs->decode_ampersands) {
-		if (!strncmp (state->ptr, "amp;", 4)) {
+		if (g_str_has_prefix (state->ptr, "amp;")) {
 			state->ptr += 4;
 			return '&';
 		}
 
-		if (!strncmp (state->ptr, "lt;", 3)) {
+		if (g_str_has_prefix (state->ptr, "lt;")) {
 			state->ptr += 3;
 			if (*state->ptr == '='){
 				state->ptr++;
 				return tok_LTE;
 			}
-			if (!strncmp (state->ptr, "&gt;", 4)) {
+			if (g_str_has_prefix (state->ptr, "&gt;")) {
 				state->ptr += 4;
 				return tok_NE;
 			}
 			return '<';
 		}
-		if (!strncmp (state->ptr, "gt;", 3)) {
+		if (g_str_has_prefix (state->ptr, "gt;")) {
 			state->ptr += 3;
 			if (*state->ptr == '='){
 				state->ptr++;
@@ -1079,8 +1077,8 @@ yylex (void)
 			}
 			return '>';
 		}
-		if (!strncmp (state->ptr, "apos;", 5) ||
-		    !strncmp (state->ptr, "quot;", 5)) {
+		if (g_str_has_prefix (state->ptr, "apos;") ||
+		    g_str_has_prefix (state->ptr, "quot;")) {
 			char const *quotes_end;
 			char const *p;
 			char *string, *s;
@@ -1104,7 +1102,7 @@ yylex (void)
 					    p, 1);
 				return INVALID_TOKEN;
 			}
-			if (!strncmp (state->ptr + 6, quotes_end, 6)) {
+			if (g_str_has_prefix (state->ptr + 6, quotes_end)) {
 				state->ptr += 2 * 6;
 				goto double_quote_loop;
 			}
@@ -1112,27 +1110,27 @@ yylex (void)
 			s = string = g_malloc (1 + state->ptr - p);
 			while (p != state->ptr) {
 				if (*p == '&') {
-					if (!strncmp (p, "&amp;", 5)) {
+					if (g_str_has_prefix (p, "&amp;")) {
 						p += 5;
 						*s++ = '&';
 						continue;
-					} else if (!strncmp (p, "&lt;", 4)) {
+					} else if (g_str_has_prefix (p, "&lt;")) {
 						p += 4;
 						*s++ = '<';
 						continue;
-					} else if (!strncmp (p, "&gt;", 4)) {
+					} else if (g_str_has_prefix (p, "&gt;")) {
 						p += 4;
 						*s++ = '>';
 						continue;
-					} else if (!strncmp (p, quotes_end, 6)) {
+					} else if (g_str_has_prefix (p, quotes_end)) {
 						p += 12; /* two in a row is the escape mechanism */
 						*s++ = c;
 						continue;
-					} else if (!strncmp (p, "&quot;", 6)) {
+					} else if (g_str_has_prefix (p, "&quot;")) {
 						p += 6;
 						*s++ = '\"';
 						continue;
-					} else if (!strncmp (p, "&apos;", 6)) {
+					} else if (g_str_has_prefix (p, "&apos;")) {
 						p += 6;
 						*s++ = '\'';
 						continue;
@@ -1162,15 +1160,15 @@ yylex (void)
 	}
 
 	if (c == '#' && state->convs->accept_hash_logicals) {
-		if (!strncmp (state->ptr, "NOT#", 4)) {
+		if (g_str_has_prefix (state->ptr, "NOT#")) {
 			state->ptr += 4;
 			return eat_space (state, tok_NOT);
 		}
-		if (!strncmp (state->ptr, "AND#", 4)) {
+		if (g_str_has_prefix (state->ptr, "AND#")) {
 			state->ptr += 4;
 			return eat_space (state, tok_AND);
 		}
-		if (!strncmp (state->ptr, "OR#", 3)) {
+		if (g_str_has_prefix (state->ptr, "OR#")) {
 			state->ptr += 3;
 			return eat_space (state, tok_OR);
 		}
@@ -1350,7 +1348,7 @@ yylex (void)
 			       !g_unichar_isspace (tmp)) {
 				state->ptr = g_utf8_next_char (state->ptr);
 				if (tmp == '!' || tmp == '?' ||
-				((state->ptr - start) == 4 && 0 == strncmp (start, "#N/A", 4))) {
+				((state->ptr - start) == 4 && g_str_has_prefix (start, "#N/A"))) {
 					GOString *name = go_string_new_nocopy (g_strndup (start, state->ptr - start));
 					yylval.expr = register_expr_allocation
 						(gnm_expr_new_constant (
@@ -1378,7 +1376,7 @@ yylex (void)
 		if (end == NULL) {
 			size_t len = strlen (start);
 			g_string_free (s, TRUE);
-  			report_err (state,
+			report_err (state,
 				    g_error_new (1, PERR_MISSING_CLOSING_QUOTE,
 						 _("Could not find matching closing quote")),
 				    start + len, len);
@@ -1567,14 +1565,13 @@ setup_state (ParserState *pstate, const char *str,
 
 /**
  * gnm_expr_parse_str:
- *
- * @str   : The string to parse.
- * @pp	  : #GnmParsePos
- * @flags : See parse-utils for descriptions
+ * @str: The string to parse.
+ * @pp: #GnmParsePos
+ * @flags: See parse-utils for descriptions
  * @convs: (nullable): #GnmConventions
  * @error: (out) (nullable) (optional): ptr to store details of error.
  *
- * Parse a string. if @error is non-null it will be assumed that the
+ * Parse a string. if @error is non-%NULL it will be assumed that the
  * caller has passed a pointer to a GnmParseError struct AND that it will
  * take responsibility for freeing that struct and its contents.
  * with parse_error_free.

@@ -3,196 +3,22 @@
 #include <sf-trig.h>
 #include <mathfunc.h>
 
+#define IEEE_754
 #define ML_ERR_return_NAN { return gnm_nan; }
+#define ML_WARN_return_NAN { return gnm_nan; }
 #define ML_UNDERFLOW (GNM_EPSILON * GNM_EPSILON)
 #define ML_ERROR(cause) do { } while(0)
+#define ML_WARNING(typ,what) g_printerr("sf-gamma: trouble in %s\n", (what))
 
-static int qgammaf (gnm_float x, GnmQuad *mant, int *exp2);
+static int qgammaf (gnm_float x, GnmQuad *mant, int *expb);
 static void pochhammer_small_n (gnm_float x, gnm_float n, GnmQuad *res);
 
+/* ------------------------------------------------------------------------- */
+/* --- BEGIN MAGIC R SOURCE MARKER --- */
 
-/* Compute  gnm_log(gamma(a+1))  accurately also for small a (0 < a < 0.5). */
-gnm_float lgamma1p (gnm_float a)
-{
-    const gnm_float eulers_const =	 GNM_const(0.5772156649015328606065120900824024);
+// The following source code was imported from the R project.
+// It was automatically transformed by tools/import-R.
 
-    /* coeffs[i] holds (zeta(i+2)-1)/(i+2) , i = 1:N, N = 40 : */
-    const int N = 40;
-    static const gnm_float coeffs[40] = {
-	GNM_const(0.3224670334241132182362075833230126e-0),
-	GNM_const(0.6735230105319809513324605383715000e-1),
-	GNM_const(0.2058080842778454787900092413529198e-1),
-	GNM_const(0.7385551028673985266273097291406834e-2),
-	GNM_const(0.2890510330741523285752988298486755e-2),
-	GNM_const(0.1192753911703260977113935692828109e-2),
-	GNM_const(0.5096695247430424223356548135815582e-3),
-	GNM_const(0.2231547584535793797614188036013401e-3),
-	GNM_const(0.9945751278180853371459589003190170e-4),
-	GNM_const(0.4492623673813314170020750240635786e-4),
-	GNM_const(0.2050721277567069155316650397830591e-4),
-	GNM_const(0.9439488275268395903987425104415055e-5),
-	GNM_const(0.4374866789907487804181793223952411e-5),
-	GNM_const(0.2039215753801366236781900709670839e-5),
-	GNM_const(0.9551412130407419832857179772951265e-6),
-	GNM_const(0.4492469198764566043294290331193655e-6),
-	GNM_const(0.2120718480555466586923135901077628e-6),
-	GNM_const(0.1004322482396809960872083050053344e-6),
-	GNM_const(0.4769810169363980565760193417246730e-7),
-	GNM_const(0.2271109460894316491031998116062124e-7),
-	GNM_const(0.1083865921489695409107491757968159e-7),
-	GNM_const(0.5183475041970046655121248647057669e-8),
-	GNM_const(0.2483674543802478317185008663991718e-8),
-	GNM_const(0.1192140140586091207442548202774640e-8),
-	GNM_const(0.5731367241678862013330194857961011e-9),
-	GNM_const(0.2759522885124233145178149692816341e-9),
-	GNM_const(0.1330476437424448948149715720858008e-9),
-	GNM_const(0.6422964563838100022082448087644648e-10),
-	GNM_const(0.3104424774732227276239215783404066e-10),
-	GNM_const(0.1502138408075414217093301048780668e-10),
-	GNM_const(0.7275974480239079662504549924814047e-11),
-	GNM_const(0.3527742476575915083615072228655483e-11),
-	GNM_const(0.1711991790559617908601084114443031e-11),
-	GNM_const(0.8315385841420284819798357793954418e-12),
-	GNM_const(0.4042200525289440065536008957032895e-12),
-	GNM_const(0.1966475631096616490411045679010286e-12),
-	GNM_const(0.9573630387838555763782200936508615e-13),
-	GNM_const(0.4664076026428374224576492565974577e-13),
-	GNM_const(0.2273736960065972320633279596737272e-13),
-	GNM_const(0.1109139947083452201658320007192334e-13)
-    };
-
-    const gnm_float c = GNM_const(0.2273736845824652515226821577978691e-12);/* zeta(N+2)-1 */
-    gnm_float lgam;
-    int i;
-
-    if (gnm_abs (a) >= 0.5)
-	return gnm_lgamma (a + 1);
-
-    /* Abramowitz & Stegun 6.1.33,
-     * also  http://functions.wolfram.com/06.11.06.0008.01 */
-    lgam = c * gnm_logcf (-a / 2, N + 2, 1);
-    for (i = N - 1; i >= 0; i--)
-	lgam = coeffs[i] - a * lgam;
-
-    return (a * lgam - eulers_const) * a - log1pmx (a);
-} /* lgamma1p */
-
-/* ------------------------------------------------------------------------ */
-
-/* Imported src/nmath/stirlerr.c from R.  */
-/*
- *  AUTHOR
- *    Catherine Loader, catherine@research.bell-labs.com.
- *    October 23, 2000.
- *
- *  Merge in to R:
- *	Copyright (C) 2000, The R Core Development Team
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
- *  USA.
- *
- *
- *  DESCRIPTION
- *
- *    Computes the log of the error term in Stirling's formula.
- *      For n > 15, uses the series 1/12n - 1/360n^3 + ...
- *      For n <=15, integers or half-integers, uses stored values.
- *      For other n < 15, uses lgamma directly (don't use this to
- *        write lgamma!)
- *
- * Merge in to R:
- * Copyright (C) 2000, The R Core Development Team
- * R has lgammafn, and lgamma is not part of ISO C
- */
-
-
-/* stirlerr(n) = gnm_log(n!) - gnm_log( gnm_sqrt(2*pi*n)*(n/e)^n )
- *             = gnm_log Gamma(n+1) - 1/2 * [gnm_log(2*pi) + gnm_log(n)] - n*[gnm_log(n) - 1]
- *             = gnm_log Gamma(n+1) - (n + 1/2) * gnm_log(n) + n - gnm_log(2*pi)/2
- *
- * see also lgammacor() in ./lgammacor.c  which computes almost the same!
- */
-
-gnm_float stirlerr(gnm_float n)
-{
-
-#define S0 GNM_const(0.083333333333333333333)       /* 1/12 */
-#define S1 GNM_const(0.00277777777777777777778)     /* 1/360 */
-#define S2 GNM_const(0.00079365079365079365079365)  /* 1/1260 */
-#define S3 GNM_const(0.000595238095238095238095238) /* 1/1680 */
-#define S4 GNM_const(0.0008417508417508417508417508)/* 1/1188 */
-
-/*
-  error for 0, 0.5, 1.0, 1.5, ..., 14.5, 15.0.
-*/
-    static const gnm_float sferr_halves[31] = {
-	0.0, /* n=0 - wrong, place holder only */
-	GNM_const(0.1534264097200273452913848),  /* 0.5 */
-	GNM_const(0.0810614667953272582196702),  /* 1.0 */
-	GNM_const(0.0548141210519176538961390),  /* 1.5 */
-	GNM_const(0.0413406959554092940938221),  /* 2.0 */
-	GNM_const(0.03316287351993628748511048), /* 2.5 */
-	GNM_const(0.02767792568499833914878929), /* 3.0 */
-	GNM_const(0.02374616365629749597132920), /* 3.5 */
-	GNM_const(0.02079067210376509311152277), /* 4.0 */
-	GNM_const(0.01848845053267318523077934), /* 4.5 */
-	GNM_const(0.01664469118982119216319487), /* 5.0 */
-	GNM_const(0.01513497322191737887351255), /* 5.5 */
-	GNM_const(0.01387612882307074799874573), /* 6.0 */
-	GNM_const(0.01281046524292022692424986), /* 6.5 */
-	GNM_const(0.01189670994589177009505572), /* 7.0 */
-	GNM_const(0.01110455975820691732662991), /* 7.5 */
-	GNM_const(0.010411265261972096497478567), /* 8.0 */
-	GNM_const(0.009799416126158803298389475), /* 8.5 */
-	GNM_const(0.009255462182712732917728637), /* 9.0 */
-	GNM_const(0.008768700134139385462952823), /* 9.5 */
-	GNM_const(0.008330563433362871256469318), /* 10.0 */
-	GNM_const(0.007934114564314020547248100), /* 10.5 */
-	GNM_const(0.007573675487951840794972024), /* 11.0 */
-	GNM_const(0.007244554301320383179543912), /* 11.5 */
-	GNM_const(0.006942840107209529865664152), /* 12.0 */
-	GNM_const(0.006665247032707682442354394), /* 12.5 */
-	GNM_const(0.006408994188004207068439631), /* 13.0 */
-	GNM_const(0.006171712263039457647532867), /* 13.5 */
-	GNM_const(0.005951370112758847735624416), /* 14.0 */
-	GNM_const(0.005746216513010115682023589), /* 14.5 */
-	GNM_const(0.005554733551962801371038690)  /* 15.0 */
-    };
-    gnm_float nn;
-
-    if (n <= 15.0) {
-	nn = n + n;
-	if (nn == (int)nn) return(sferr_halves[(int)nn]);
-	return(lgamma1p (n ) - (n + 0.5)*gnm_log(n) + n - M_LN_SQRT_2PI);
-    }
-
-    nn = n*n;
-    if (n>500) return((S0-S1/nn)/n);
-    if (n> 80) return((S0-(S1-S2/nn)/nn)/n);
-    if (n> 35) return((S0-(S1-(S2-S3/nn)/nn)/nn)/n);
-    /* 15 < n <= 35 : */
-    return((S0-(S1-(S2-(S3-S4/nn)/nn)/nn)/nn)/n);
-}
-/* Cleaning up done by tools/import-R:  */
-#undef S0
-#undef S1
-#undef S2
-#undef S3
-#undef S4
-
-/* ------------------------------------------------------------------------ */
 /* Imported src/nmath/chebyshev.c from R.  */
 /*
  *  Mathlib : A C Library of Special Functions
@@ -209,9 +35,8 @@ gnm_float stirlerr(gnm_float n)
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
- *  02110-1301 USA.
+ *  along with this program; if not, a copy is available at
+ *  https://www.R-project.org/Licenses/
  *
  *  SYNOPSIS
  *
@@ -249,9 +74,9 @@ static gnm_float chebyshev_eval(gnm_float x, const gnm_float *a, const int n)
     gnm_float b0, b1, b2, twox;
     int i;
 
-    if (n < 1 || n > 1000) ML_ERR_return_NAN;
+    if (n < 1 || n > 1000) ML_WARN_return_NAN;
 
-    if (x < -1.1 || x > 1.1) ML_ERR_return_NAN;
+    if (x < GNM_const(-1.1) || x > GNM_const(1.1)) ML_WARN_return_NAN;
 
     twox = x * 2;
     b2 = b1 = 0;
@@ -261,7 +86,7 @@ static gnm_float chebyshev_eval(gnm_float x, const gnm_float *a, const int n)
 	b1 = b0;
 	b0 = twox * b1 - b2 + a[n - i];
     }
-    return (b0 - b2) * 0.5;
+    return (b0 - b2) * GNM_const(0.5);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -269,7 +94,7 @@ static gnm_float chebyshev_eval(gnm_float x, const gnm_float *a, const int n)
 /*
  *  Mathlib : A C Library of Special Functions
  *  Copyright (C) 1998 Ross Ihaka
- *  Copyright (C) 2000-2001 The R Development Core Team
+ *  Copyright (C) 2000-2001 The R Core Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -282,9 +107,8 @@ static gnm_float chebyshev_eval(gnm_float x, const gnm_float *a, const int n)
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
- *  USA.
+ *  along with this program; if not, a copy is available at
+ *  https://www.R-project.org/Licenses/
  *
  *  SYNOPSIS
  *
@@ -333,39 +157,24 @@ static gnm_float lgammacor(gnm_float x)
 
     gnm_float tmp;
 
-#ifdef NOMORE_FOR_THREADS
-    static int nalgm = 0;
-    static gnm_float xbig = 0, xmax = 0;
-
-    /* Initialize machine dependent constants, the first time gamma() is called.
-	FIXME for threads ! */
-    if (nalgm == 0) {
-	/* For IEEE gnm_float precision : nalgm = 5 */
-	nalgm = chebyshev_init(algmcs, 15, GNM_EPSILON/2);/*was d1mach(3)*/
-	xbig = 1 / gnm_sqrt(GNM_EPSILON/2); /* ~ 94906265.6 for IEEE gnm_float */
-	xmax = gnm_exp(fmin2(gnm_log(GNM_MAX / 12), -gnm_log(12 * GNM_MIN)));
-	/*   = GNM_MAX / 48 ~= 3.745e306 for IEEE gnm_float */
-    }
-#else
-/* For IEEE gnm_float precision GNM_EPSILON = 2^-52 = GNM_const(2.220446049250313e-16) :
+/* For IEEE double precision DBL_EPSILON = 2^-52 = 2.220446049250313e-16 :
  *   xbig = 2 ^ 26.5
- *   xmax = GNM_MAX / 48 =  2^1020 / 3 */
-# define nalgm 5
-# define xbig  GNM_const(94906265.62425156)
-# define xmax  GNM_const(3.745194030963158e306)
-#endif
+ *   xmax = DBL_MAX / 48 =  2^1020 / 3 */
+#define nalgm 5
+#define xbig  GNM_const(94906265.62425156)
+#define xmax  GNM_const(3.745194030963158e306)
 
     if (x < 10)
-	ML_ERR_return_NAN
+	ML_WARN_return_NAN
     else if (x >= xmax) {
-	ML_ERROR(ME_UNDERFLOW);
-	return ML_UNDERFLOW;
+	ML_WARNING(ME_UNDERFLOW, "lgammacor");
+	/* allow to underflow below */
     }
     else if (x < xbig) {
 	tmp = 10 / x;
 	return chebyshev_eval(tmp * tmp * 2 - 1, algmcs, nalgm) / x;
     }
-    else return 1 / (x * 12);
+    return 1 / (x * 12);
 }
 /* Cleaning up done by tools/import-R:  */
 #undef nalgm
@@ -377,7 +186,7 @@ static gnm_float lgammacor(gnm_float x)
 /*
  *  Mathlib : A C Library of Special Functions
  *  Copyright (C) 1998 Ross Ihaka
- *  Copyright (C) 2000 The R Development Core Team
+ *  Copyright (C) 2000-12 The R Core Team
  *  Copyright (C) 2003 The R Foundation
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -391,9 +200,8 @@ static gnm_float lgammacor(gnm_float x)
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301
- *  USA.
+ *  along with this program; if not, a copy is available at
+ *  https://www.R-project.org/Licenses/
  *
  *  SYNOPSIS
  *
@@ -402,7 +210,9 @@ static gnm_float lgammacor(gnm_float x)
  *
  *  DESCRIPTION
  *
- *    This function returns the value of the log beta function.
+ *    This function returns the value of the log beta function
+ *
+ *	log B(a,b) = log G(a) + log G(b) - log G(a+b)
  *
  *  NOTES
  *
@@ -415,50 +225,154 @@ gnm_float gnm_lbeta(gnm_float a, gnm_float b)
 {
     gnm_float corr, p, q;
 
-    p = q = a;
-    if(b < p) p = b;/* := min(a,b) */
-    if(b > q) q = b;/* := max(a,b) */
-
 #ifdef IEEE_754
     if(gnm_isnan(a) || gnm_isnan(b))
 	return a + b;
 #endif
+    p = q = a;
+    if(b < p) p = b;/* := min(a,b) */
+    if(b > q) q = b;/* := max(a,b) */
 
     /* both arguments must be >= 0 */
-
     if (p < 0)
-	ML_ERR_return_NAN
+	ML_WARN_return_NAN
     else if (p == 0) {
 	return gnm_pinf;
     }
-    else if (!gnm_finite(q)) {
+    else if (!gnm_finite(q)) { /* q == +Inf */
 	return gnm_ninf;
     }
 
     if (p >= 10) {
 	/* p and q are big. */
 	corr = lgammacor(p) + lgammacor(q) - lgammacor(p + q);
-	return gnm_log(q) * -0.5 + M_LN_SQRT_2PI + corr
-		+ (p - 0.5) * gnm_log(p / (p + q)) + q * gnm_log1p(-p / (p + q));
+	return gnm_log(q) * GNM_const(-0.5) + M_LN_SQRT_2PI + corr
+		+ (p - GNM_const(0.5)) * gnm_log(p / (p + q)) + q * gnm_log1p(-p / (p + q));
     }
     else if (q >= 10) {
 	/* p is small, but q is big. */
 	corr = lgammacor(q) - lgammacor(p + q);
 	return gnm_lgamma(p) + corr + p - p * gnm_log(p + q)
-		+ (q - 0.5) * gnm_log1p(-p / (p + q));
+		+ (q - GNM_const(0.5)) * gnm_log1p(-p / (p + q));
     }
-    else
+    else {
 	/* p and q are small: p <= q < 10. */
-	return gnm_lgamma (p) + gnm_lgamma (q) - gnm_lgamma (p + q);
+	/* R change for very small args */
+	if (p < GNM_const(1e-306)) return gnm_lgamma(p) + (gnm_lgamma(q) - gnm_lgamma(p+q));
+	else return gnm_lgamma (p) + gnm_lgamma (q) - gnm_lgamma (p + q);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
+/* --- END MAGIC R SOURCE MARKER --- */
+
+// dstirlerr(x) = stirlerr(x+1) - stirlerr(x)
+// but computed independently.
+static gnm_float
+dstirlerr (gnm_float x)
+{
+	gnm_float xph = x + GNM_const(0.5);
+	if (x < GNM_const(0.5))
+		return 1 - xph * gnm_log1p (1 / x);
+	if (x < 2)
+		return -1 / (2 * x) - xph * log1pmx (1 / x);
+	return -(x + 2) / (12 * x * x * x) - xph * gnm_taylor_log1p (1 / x, 4);
+}
+
+
+/* Parts from src/nmath/stirlerr.c from R.
+ * Copyright (C) 2000, The R Core Team
+ *
+ * stirlerr(n) = log(n!) - log( sqrt(2*pi*n)*(n/e)^n )
+ *             = log(n!) - (n + 1/2) * log(n) + n - log(2*pi)/2
+ */
+gnm_float
+stirlerr (gnm_float n)
+{
+	gnm_float S0 = GNM_const(1.) / 12;
+	gnm_float S1 = GNM_const(1.) / 360;
+	gnm_float S2 = GNM_const(1.) / 1260;
+	gnm_float S3 = GNM_const(1.) / 1680;
+	gnm_float S4 = GNM_const(1.) / 1188;
+	gnm_float S5 = GNM_const(691.) / 360360;
+	gnm_float S6 = GNM_const(1.) / 156;
+	gnm_float S7 = GNM_const(3617.) / 122400;
+	gnm_float S8 = GNM_const(43867.) / 244188;
+
+	static const gnm_float sferr_halves[31] = {
+		(gnm_float)NAN,                          /* 0.0 */
+		GNM_const(0.1534264097200273452913848),  /* 0.5 */
+		GNM_const(0.0810614667953272582196702),  /* 1.0 */
+		GNM_const(0.0548141210519176538961390),  /* 1.5 */
+		GNM_const(0.0413406959554092940938221),  /* 2.0 */
+		GNM_const(0.03316287351993628748511048), /* 2.5 */
+		GNM_const(0.02767792568499833914878929), /* 3.0 */
+		GNM_const(0.02374616365629749597132920), /* 3.5 */
+		GNM_const(0.02079067210376509311152277), /* 4.0 */
+		GNM_const(0.01848845053267318523077934), /* 4.5 */
+		GNM_const(0.01664469118982119216319487), /* 5.0 */
+		GNM_const(0.01513497322191737887351255), /* 5.5 */
+		GNM_const(0.01387612882307074799874573), /* 6.0 */
+		GNM_const(0.01281046524292022692424986), /* 6.5 */
+		GNM_const(0.01189670994589177009505572), /* 7.0 */
+		GNM_const(0.01110455975820691732662991), /* 7.5 */
+		GNM_const(0.010411265261972096497478567), /* 8.0 */
+		GNM_const(0.009799416126158803298389475), /* 8.5 */
+		GNM_const(0.009255462182712732917728637), /* 9.0 */
+		GNM_const(0.008768700134139385462952823), /* 9.5 */
+		GNM_const(0.008330563433362871256469318), /* 10.0 */
+		GNM_const(0.007934114564314020547248100), /* 10.5 */
+		GNM_const(0.007573675487951840794972024), /* 11.0 */
+		GNM_const(0.007244554301320383179543912), /* 11.5 */
+		GNM_const(0.006942840107209529865664152), /* 12.0 */
+		GNM_const(0.006665247032707682442354394), /* 12.5 */
+		GNM_const(0.006408994188004207068439631), /* 13.0 */
+		GNM_const(0.006171712263039457647532867), /* 13.5 */
+		GNM_const(0.005951370112758847735624416), /* 14.0 */
+		GNM_const(0.005746216513010115682023589), /* 14.5 */
+		GNM_const(0.005554733551962801371038690)  /* 15.0 */
+	};
+	gnm_float nn, y;
+
+	if (!(n > 0))
+		return gnm_nan;
+
+	if (n <= (G_N_ELEMENTS (sferr_halves) - 1) / 2) {
+		gnm_float nn = n + n;
+		if (nn == (int)nn) return (sferr_halves[(int)nn]);
+	}
+
+	nn = n * n;
+
+	// These breakpoints are selected to give a relative error of 2^-53.
+	if (n > GNM_const(3043.)) return (S0-S1/nn)/n;
+	if (n > GNM_const(200.2)) return (S0-(S1-S2/nn)/nn)/n;
+	if (n > GNM_const(55.57)) return (S0-(S1-(S2-S3/nn)/nn)/nn)/n;
+	if (n > GNM_const(27.01)) return (S0-(S1-(S2-(S3-S4/nn)/nn)/nn)/nn)/n;
+	if (n > GNM_const(17.23)) return (S0-(S1-(S2-(S3-(S4-S5/nn)/nn)/nn)/nn)/nn)/n;
+	if (n > GNM_const(12.77)) return (S0-(S1-(S2-(S3-(S4-(S5-S6/nn)/nn)/nn)/nn)/nn)/nn)/n;
+	if (n > GNM_const(10.38)) return (S0-(S1-(S2-(S3-(S4-(S5-(S6-S7/nn)/nn)/nn)/nn)/nn)/nn)/nn)/n;
+	if (n > GNM_const(8.946)) return (S0-(S1-(S2-(S3-(S4-(S5-(S6-(S7-S8/nn)/nn)/nn)/nn)/nn)/nn)/nn)/nn)/n;
+
+	// Adding a boat-load of more terms could get us down to 6-ish,
+	// but no further.  The series is not convergent.
+
+
+	y = 0;
+	while (n < 9) {
+		y -= dstirlerr (n);
+		n++;
+	}
+	return y + stirlerr (n);
+}
+
+
 
 gnm_float
-gnm_gammax (gnm_float x, int *exp2)
+gnm_gammax (gnm_float x, int *expb)
 {
 	GnmQuad r;
-	(void) qgammaf (x, &r, exp2);
+	(void) qgammaf (x, &r, expb);
 	return gnm_quad_value (&r);
 }
 
@@ -474,16 +388,16 @@ gnm_gamma (gnm_float x)
 {
 	int e;
 	gnm_float r = gnm_gammax (x, &e);
-	return gnm_ldexp (r, e);
+	return gnm_scalbn (r, e);
 }
 
 /* ------------------------------------------------------------------------- */
 
 gnm_float
-gnm_factx (gnm_float x, int *exp2)
+gnm_factx (gnm_float x, int *expb)
 {
 	GnmQuad r;
-	(void)qfactf (x, &r, exp2);
+	(void)qfactf (x, &r, expb);
 	return gnm_quad_value (&r);
 }
 
@@ -498,14 +412,14 @@ gnm_fact (gnm_float x)
 {
 	int e;
 	gnm_float r = gnm_factx (x, &e);
-	return gnm_ldexp (r, e);
+	return gnm_scalbn (r, e);
 }
 
 /* ------------------------------------------------------------------------- */
 
 /* 0: ok, 1: overflow, 2: nan */
 static int
-qbetaf (gnm_float a, gnm_float b, GnmQuad *mant, int *exp2)
+qbetaf (gnm_float a, gnm_float b, GnmQuad *mant, int *expb)
 {
 	GnmQuad ma, mb, mab;
 	int ea, eb, eab;
@@ -518,7 +432,7 @@ qbetaf (gnm_float a, gnm_float b, GnmQuad *mant, int *exp2)
 
 	if (ab <= 0 && ab == gnm_floor (ab)) {
 		gnm_quad_init (mant, 0);
-		*exp2 = 0;
+		*expb = 0;
 		return 0;
 	}
 
@@ -536,7 +450,7 @@ qbetaf (gnm_float a, gnm_float b, GnmQuad *mant, int *exp2)
 		pochhammer_small_n (a, b, &ma);
 		gnm_quad_div (mant, &mb, &ma);
 		gnm_quad_end (state);
-		*exp2 = eb;
+		*expb = eb;
 		return 0;
 	}
 
@@ -547,7 +461,7 @@ qbetaf (gnm_float a, gnm_float b, GnmQuad *mant, int *exp2)
 		gnm_quad_mul (&ma, &ma, &mb);
 		gnm_quad_div (mant, &ma, &mab);
 		gnm_quad_end (state);
-		*exp2 = ea + eb - eab;
+		*expb = ea + eb - eab;
 		return 0;
 	} else
 		return 1;
@@ -567,7 +481,7 @@ gnm_beta (gnm_float a, gnm_float b)
 	int e;
 
 	switch (qbetaf (a, b, &r, &e)) {
-	case 0: return gnm_ldexp (gnm_quad_value (&r), e);
+	case 0: return gnm_scalbn (gnm_quad_value (&r), e);
 	case 1: return gnm_pinf;
 	default: return gnm_nan;
 	}
@@ -597,7 +511,7 @@ gnm_lbeta3 (gnm_float a, gnm_float b, int *sign)
 	case 0: {
 		gnm_float m = gnm_quad_value (&r);
 		*sign = (m >= 0 ? +1 : -1);
-		return gnm_log (gnm_abs (m)) + e * M_LN2gnum;
+		return gnm_log (gnm_abs (m)) + e * (GNM_RADIX == 2 ? M_LN2gnum : M_LN10gnum);
 	}
 	case 1:
 		/* Overflow */
@@ -632,7 +546,7 @@ gnm_lbeta3 (gnm_float a, gnm_float b, int *sign)
 static void
 gamma_error_factor (GnmQuad *res, const GnmQuad *x)
 {
-	gnm_float num[] = {
+	static const gnm_float num[] = {
 		GNM_const(1.),
 		GNM_const(1.),
 		GNM_const(-139.),
@@ -643,7 +557,7 @@ gamma_error_factor (GnmQuad *res, const GnmQuad *x)
 		GNM_const(-4483131259.),
 		GNM_const(432261921612371.)
 	};
-	gnm_float den[] = {
+	static const gnm_float den[] = {
 		GNM_const(12.),
 		GNM_const(288.),
 		GNM_const(51840.),
@@ -804,7 +718,7 @@ pochhammer_naive (gnm_float x, int n)
  *
  * This function computes Pochhammer's symbol at @x and @n, i.e.,
  * Gamma(@x+@n)/Gamma(@x).  This is well defined unless @x or @x+@n is a
- * non-negative integer.  The ratio has a removable singlularity at @n=0
+ * non-negative integer.  The ratio has a removable singularity at @n=0
  * and the result is 1.
  *
  * Returns: Pochhammer's symbol (@x)_@n.
@@ -844,7 +758,7 @@ pochhammer (gnm_float x, gnm_float n)
 		r = gnm_quad_value (&qr);
 		gnm_quad_end (state);
 
-		return gnm_ldexp (r, de);
+		return gnm_scalbn (r, de);
 	}
 
 	if (x == rx && x <= 0) {
@@ -886,7 +800,7 @@ pochhammer (gnm_float x, gnm_float n)
 
 	/* Panic mode.  */
 	g_printerr ("x=%.20g  n=%.20g\n", x, n);
-	lr = ((x - 0.5) * gnm_log1p (n / x) +
+	lr = ((x - GNM_const(0.5)) * gnm_log1p (n / x) +
 	      n * gnm_log (x + n) -
 	      n +
 	      (lgammacor (x + n) - lgammacor (x)));
@@ -896,30 +810,27 @@ pochhammer (gnm_float x, gnm_float n)
 /* ------------------------------------------------------------------------- */
 
 static void
-rescale_mant_exp (GnmQuad *mant, int *exp2)
+rescale_mant_exp (GnmQuad *mant, int *expb)
 {
-	GnmQuad s;
 	int e;
-
-	(void)gnm_frexp (gnm_quad_value (mant), &e);
-	*exp2 += e;
-	gnm_quad_init (&s, gnm_ldexp (1.0, -e));
-	gnm_quad_mul (mant, mant, &s);
+	(void)gnm_unscalbn (gnm_quad_value (mant), &e);
+	*expb += e;
+	gnm_quad_scalbn (mant, mant, -e);
 }
 
 /* Tabulate up to, but not including, this number.  */
 #define QFACTI_LIMIT 10000
 
 static gboolean
-qfacti (int n, GnmQuad *mant, int *exp2)
+qfacti (int n, GnmQuad *mant, int *expb)
 {
 	static GnmQuad mants[QFACTI_LIMIT];
-	static int exp2s[QFACTI_LIMIT];
+	static int expbs[QFACTI_LIMIT];
 	static int init = 0;
 
 	if (n < 0 || n >= QFACTI_LIMIT) {
 		*mant = gnm_quad_zero;
-		*exp2 = 0;
+		*expb = 0;
 		return TRUE;
 	}
 
@@ -927,8 +838,8 @@ qfacti (int n, GnmQuad *mant, int *exp2)
 		void *state = gnm_quad_start ();
 
 		if (init == 0) {
-			gnm_quad_init (&mants[0], 0.5);
-			exp2s[0] = 1;
+			gnm_quad_init (&mants[0], GNM_const(1.) / GNM_RADIX);
+			expbs[0] = 1;
 			init++;
 		}
 
@@ -937,8 +848,8 @@ qfacti (int n, GnmQuad *mant, int *exp2)
 
 			gnm_quad_init (&m, init);
 			gnm_quad_mul (&mants[init], &m, &mants[init - 1]);
-			exp2s[init] = exp2s[init - 1];
-			rescale_mant_exp (&mants[init], &exp2s[init]);
+			expbs[init] = expbs[init - 1];
+			rescale_mant_exp (&mants[init], &expbs[init]);
 
 			init++;
 		}
@@ -947,18 +858,18 @@ qfacti (int n, GnmQuad *mant, int *exp2)
 	}
 
 	*mant = mants[n];
-	*exp2 = exp2s[n];
+	*expb = expbs[n];
 	return FALSE;
 }
 
 /* 0: ok, 1: overflow, 2: nan */
 int
-qfactf (gnm_float x, GnmQuad *mant, int *exp2)
+qfactf (gnm_float x, GnmQuad *mant, int *expb)
 {
 	void *state;
 	gboolean res = 0;
 
-	*exp2 = 0;
+	*expb = 0;
 
 	if (gnm_isnan (x) || (x < 0 && x == gnm_floor (x))) {
 		mant->h = mant->l = gnm_nan;
@@ -972,14 +883,14 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 
 	if (x == gnm_floor (x)) {
 		/* 0, 1, 2, ...  */
-		if (!qfacti ((int)x, mant, exp2))
+		if (!qfacti ((int)x, mant, expb))
 			return 0;
 	}
 
 	state = gnm_quad_start ();
 
 	if (x < -1) {
-		if (qfactf (-x - 1, mant, exp2))
+		if (qfactf (-x - 1, mant, expb))
 			res = 1;
 		else {
 			GnmQuad b;
@@ -988,9 +899,9 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 			gnm_quad_sinpi (&b, &b);
 			gnm_quad_mul (&b, &b, mant);
 			gnm_quad_div (mant, &gnm_quad_pi, &b);
-			*exp2 = -*exp2;
+			*expb = -*expb;
 		}
-	} else if (x >= QFACTI_LIMIT - 0.5) {
+	} else if (x >= QFACTI_LIMIT - GNM_const(0.5)) {
 		/*
 		 * Let y = x + 1 = m * 2^e; c = sqrt(2Pi).
 		 *
@@ -1001,38 +912,43 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 		gnm_float ef2;
 		gboolean debug = FALSE;
 
-		if (debug) g_printerr ("x=%.20g\n", x);
+		if (debug) g_printerr ("x=%.20" GNM_FORMAT_g "\n", x);
 
 		gnm_quad_init (&y, x + 1);
-		*exp2 = 0;
+		*expb = 0;
 
 		/* sqrt(2Pi) */
 		gnm_quad_sqrt (&f1, &gnm_quad_2pi);
-		if (debug) g_printerr ("f1=%.20g\n", gnm_quad_value (&f1));
+		if (debug) g_printerr ("f1=%.20" GNM_FORMAT_g " + %.20" GNM_FORMAT_g "\n",
+				       f1.h, f1.l);
 
 		/* (y/e)^y */
 		gnm_quad_div (&f2, &y, &gnm_quad_e);
 		gnm_quad_pow (&f2, &ef2, &f2, &y);
-		if (ef2 > G_MAXINT || ef2 < G_MININT) {
+		if (debug) g_printerr ("f2=(%.20" GNM_FORMAT_g " + %.20" GNM_FORMAT_g ") * B^%d\n",
+				       f2.h, f2.l, (int)ef2);
+		if (ef2 > G_MAXINT / 2 || ef2 < G_MININT / 2) {
 			res = 1;
 			f2.h = f2.l = gnm_pinf;
 		} else
-			*exp2 += (int)ef2;
-		if (debug) g_printerr ("f2=%.20g\n", gnm_quad_value (&f2));
+			*expb += (int)ef2;
 
 		/* sqrt(y) */
 		gnm_quad_sqrt (&f3, &y);
-		if (debug) g_printerr ("f3=%.20g\n", gnm_quad_value (&f3));
+		if (debug) g_printerr ("f3=%.20" GNM_FORMAT_g " + %.20" GNM_FORMAT_g "\n",
+				       f3.h, f3.l);
 
 		/* E(x) */
 		gamma_error_factor (&f4, &y);
-		if (debug) g_printerr ("f4=%.20g\n", gnm_quad_value (&f4));
+		if (debug) g_printerr ("f4=%.20" GNM_FORMAT_g " + %.20" GNM_FORMAT_g "\n",
+				       f4.h, f4.l);
 
 		gnm_quad_mul (mant, &f1, &f2);
 		gnm_quad_div (mant, mant, &f3);
 		gnm_quad_mul (mant, mant, &f4);
 
-		if (debug) g_printerr ("G(x+1)=%.20g * 2^%d %s\n", gnm_quad_value (mant), *exp2, res ? "overflow" : "");
+		if (debug) g_printerr ("G(x+1)=(%.20" GNM_FORMAT_g " + %.20" GNM_FORMAT_g ") * B^%d %s\n",
+				       mant->h, mant->l, *expb, res ? "overflow" : "");
 	} else {
 		GnmQuad s, qx, mFw;
 		gnm_float w, f;
@@ -1044,7 +960,7 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 		 * Do this before we do the stepping below which would kill
 		 * up to 4 bits of accuracy of f.
 		 */
-		w = gnm_floor (x + 0.5);
+		w = gnm_round (x);
 		f = x - w;
 		gnm_quad_init (&qx, x);
 
@@ -1064,12 +980,12 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 			pochhammer_small_n (w + 1, f, &r);
 			gnm_quad_mul (mant, &mFw, &r);
 			gnm_quad_div (mant, mant, &s);
-			*exp2 = eFw;
+			*expb = eFw;
 		}
 	}
 
 	if (res == 0)
-		rescale_mant_exp (mant, exp2);
+		rescale_mant_exp (mant, expb);
 
 	gnm_quad_end (state);
 	return res;
@@ -1077,22 +993,22 @@ qfactf (gnm_float x, GnmQuad *mant, int *exp2)
 
 /* 0: ok, 1: overflow, 2: nan */
 static int
-qgammaf (gnm_float x, GnmQuad *mant, int *exp2)
+qgammaf (gnm_float x, GnmQuad *mant, int *expb)
 {
-	if (x < -1.5 || x > 0.5)
-		return qfactf (x - 1, mant, exp2);
+	if (x < GNM_const(-1.5) || x > GNM_const(0.5))
+		return qfactf (x - 1, mant, expb);
 	else if (gnm_isnan (x) || x == gnm_floor (x)) {
-		*exp2 = 0;
+		*expb = 0;
 		mant->h = mant->l = gnm_nan;
 		return 2;
 	} else {
 		void *state = gnm_quad_start ();
 		GnmQuad qx;
 
-		qfactf (x, mant, exp2);
+		qfactf (x, mant, expb);
 		gnm_quad_init (&qx, x);
 		gnm_quad_div (mant, mant, &qx);
-		rescale_mant_exp (mant, exp2);
+		rescale_mant_exp (mant, expb);
 		gnm_quad_end (state);
 		return 0;
 	}
@@ -1100,6 +1016,13 @@ qgammaf (gnm_float x, GnmQuad *mant, int *exp2)
 
 /* ------------------------------------------------------------------------- */
 
+/**
+ * combin:
+ * @n: total number of items
+ * @k: number of items to pick
+ *
+ * Returns: the binomial coefficient of @n and @k.
+ */
 gnm_float
 combin (gnm_float n, gnm_float k)
 {
@@ -1126,7 +1049,7 @@ combin (gnm_float n, gnm_float k)
 		gnm_float c;
 		gnm_quad_mul (&m2, &m2, &m3);
 		gnm_quad_div (&m1, &m1, &m2);
-		c = gnm_ldexp (gnm_quad_value (&m1), e1 - e2 - e3);
+		c = gnm_scalbn (gnm_quad_value (&m1), e1 - e2 - e3);
 		gnm_quad_end (state);
 		return c;
 	}
@@ -1162,6 +1085,52 @@ permut (gnm_float n, gnm_float k)
 
 	return pochhammer (n - k + 1, k);
 }
+
+gnm_float
+gnm_fact2 (int x)
+{
+	static gnm_float table[400];
+	static gboolean init = FALSE;
+
+	if (x < 0)
+		return gnm_nan;
+	else if (x >= (int)G_N_ELEMENTS (table)) {
+		int n = x / 2;
+		if (x & 1) {
+			int e1, e2;
+			gnm_float res = gnm_factx (x, &e1) / gnm_factx (n, &e2);
+#if GNM_RADIX == 2
+			return gnm_ldexp (res, e1 - e2 - n);
+#else
+			return gnm_scalbn (gnm_ldexp (res, -n), e1 - e2);
+#endif
+		} else
+			return gnm_ldexp (gnm_fact (n), n);
+	}
+
+	if (!init) {
+		void *state = gnm_quad_start ();
+		GnmQuad p[2];
+
+		gnm_quad_init (&p[0], 1);
+		gnm_quad_init (&p[1], 1);
+		table[0] = table[1] = 1;
+
+		for (unsigned i = 2; i < G_N_ELEMENTS (table); i++) {
+			GnmQuad qi;
+			gnm_quad_init (&qi, i);
+			gnm_quad_mul (&p[i & 1], &p[i & 1], &qi);
+			table[i] = gnm_quad_value (&p[i & 1]);
+			if (isnan (table[i]))
+				table[i] = gnm_pinf;
+		}
+
+		gnm_quad_end (state);
+	}
+
+	return table[x];
+}
+
 
 /* ------------------------------------------------------------------------- */
 
@@ -1269,28 +1238,28 @@ static const guint32 lanczos_denom[G_N_ELEMENTS(lanczos_num)] = {
 /**
  * gnm_complex_gamma:
  * @z: a complex number
- * @exp2: (out) (allow-none): Return location for power of 2.
+ * @expb: (out) (optional): Return location for power-of-base
  *
  * Returns: (transfer full): the Gamma function evaluated at @z.
  */
 gnm_complex
-gnm_complex_gamma (gnm_complex z, int *exp2)
+gnm_complex_gamma (gnm_complex z, int *expb)
 {
-	if (exp2)
-		*exp2 = 0;
+	if (expb)
+		*expb = 0;
 
 	if (GNM_CREALP (z)) {
-		return GNM_CREAL (exp2 ? gnm_gammax (z.re, exp2) : gnm_gamma (z.re));
+		return GNM_CREAL (expb ? gnm_gammax (z.re, expb) : gnm_gamma (z.re));
 	} else if (z.re < 0) {
 		/* Gamma(z) = pi / (sin(pi*z) * Gamma(-z+1)) */
 		gnm_complex b = GNM_CMAKE (M_PIgnum * gnm_fmod (z.re, 2),
 					   M_PIgnum * z.im);
 		/* Hmm... sin overflows when b.im is large.  */
 		gnm_complex res = GNM_CDIV (GNM_CREAL (M_PIgnum),
-					    GNM_CMUL (gnm_complex_fact (GNM_CNEG (z), exp2),
+					    GNM_CMUL (gnm_complex_fact (GNM_CNEG (z), expb),
 						      GNM_CSIN (b)));
-		if (exp2)
-			*exp2 = -*exp2;
+		if (expb)
+			*expb = -*expb;
 		return res;
 	} else {
 		gnm_complex zmh, f, p, q;
@@ -1306,7 +1275,7 @@ gnm_complex_gamma (gnm_complex z, int *exp2)
 			q.re += lanczos_denom[i];
 		}
 
-		zmh = GNM_CMAKE (z.re - 0.5, z.im);
+		zmh = GNM_CMAKE (z.re - GNM_const(0.5), z.im);
 		f = GNM_CPOW (GNM_CADD (zmh, GNM_CREAL (lanczos_g)),
 			      GNM_CSCALE (zmh, 0.5));
 
@@ -1319,22 +1288,22 @@ gnm_complex_gamma (gnm_complex z, int *exp2)
 /**
  * gnm_complex_fact:
  * @z: a complex number
- * @exp2: (out) (allow-none): Return location for power of 2.
+ * @expb: (out) (optional): Return location for power-of-base.
  *
  * Returns: (transfer full): the factorial function evaluated at @z.
  */
 gnm_complex
-gnm_complex_fact (gnm_complex z, int *exp2)
+gnm_complex_fact (gnm_complex z, int *expb)
 {
-	if (exp2)
-		*exp2 = 0;
+	if (expb)
+		*expb = 0;
 
 	if (GNM_CREALP (z)) {
-		return GNM_CREAL (exp2 ? gnm_factx (z.re, exp2) : gnm_fact (z.re));
+		return GNM_CREAL (expb ? gnm_factx (z.re, expb) : gnm_fact (z.re));
 	} else {
 		// This formula is valid for all arguments except zero
 		// which we conveniently handled above.
-		return GNM_CMUL (gnm_complex_gamma (z, exp2), z);
+		return GNM_CMUL (gnm_complex_gamma (z, expb), z);
 	}
 }
 
@@ -1397,11 +1366,11 @@ gnm_complex_continued_fraction (gnm_complex *dst, size_t N,
 			if (m == 0)
 				return FALSE;
 
-			(void)gnm_frexp (m, &e);
+			(void)gnm_unscalbn (m, &e);
 			if (debug_cf)
-				g_printerr ("rescale by 2^%d\n", -e);
+				g_printerr ("rescale by %d^%d\n", GNM_RADIX, -e);
 
-			s = gnm_ldexp (1, -e);
+			s = gnm_scalbn (1, -e);
 			A0 = GNM_CSCALE (A0, s);
 			A1 = GNM_CSCALE (A1, s);
 			B0 = GNM_CSCALE (B0, s);
@@ -1862,7 +1831,7 @@ gnm_digamma_asymp (gnm_float x)
 		GNM_const(-26.32566091447594628148156)  // x^-19
 	};
 
-	gnm_float z = x - 0.5, zm2 = 1 / (z * z), zn = z;
+	gnm_float z = x - GNM_const(0.5), zm2 = 1 / (z * z), zn = z;
 	gnm_float eps = GNM_EPSILON * z;
 	gnm_float sum = z;
 	unsigned ui;
@@ -1890,9 +1859,15 @@ gnm_float
 gnm_digamma (gnm_float x)
 {
 	// x0 = x0a + x0b is the positive root
+#if GNM_RADIX == 2
 	gnm_float x0a = GNM_const(1.4616321449683622457627052426687441766262054443359375);
 	gnm_float x0b = GNM_const(9.549995429965697715184199075967050885129598840859878644035380181024307499273372559036557380022743e-17);
-
+#elif GNM_RADIX == 10
+	gnm_float x0a = GNM_const(1.461632144968362);
+	gnm_float x0b = GNM_const(0.341262659542326e-15);
+#else
+#error "Code needs fixing"
+#endif
 	if (gnm_isnan (x))
 		return x;
 
@@ -1909,11 +1884,11 @@ gnm_digamma (gnm_float x)
 		// at x+1.
 		return gnm_digamma (x + 1) - 1 / x;
 
-	if (x < x0a - 1.0 / 3.0)
+	if (x < x0a - GNM_const(1.0) / 3)
 		// Series for range [0.46;1.13]
 		return gnm_digamma_series_1 (x);
 
-	if (x < x0a + 1.0 / 3.0)
+	if (x < x0a + GNM_const(1.0) / 3)
 		// Series for range [1.13;1.79] around x0
 		// Take extra care to compute the difference to x0 with a high-
 		// precision version of x0
@@ -1929,7 +1904,7 @@ gnm_digamma (gnm_float x)
 		gnm_float sum = 0;
 		while (x > x0a + 1) {
 			x--;
-			sum += 1.0 / x;
+			sum += 1 / x;
 		}
 		return sum + gnm_digamma (x);
 	}

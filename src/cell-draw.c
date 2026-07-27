@@ -30,8 +30,12 @@ static gboolean
 cell_draw_simplify_cb (PangoAttribute *attribute,
 		       gboolean *recalc_height)
 {
-	if ((attribute->klass->type == PANGO_ATTR_RISE) ||
-	    (attribute->klass->type == PANGO_ATTR_SCALE)) {
+	gboolean full_width = (attribute->start_index == 0 &&
+			       attribute->end_index > G_MAXINT / 2);
+	// Full-width scale is zooming -- keep that
+
+	if (attribute->klass->type == PANGO_ATTR_RISE ||
+	    (attribute->klass->type == PANGO_ATTR_SCALE && !full_width)) {
 		*recalc_height = TRUE;
 		return TRUE;
 	}
@@ -41,11 +45,14 @@ cell_draw_simplify_cb (PangoAttribute *attribute,
 static void
 cell_draw_simplify_attributes (GnmRenderedValue *rv)
 {
-	PangoAttrList *pal = pango_layout_get_attributes (rv->layout);
+	PangoAttrList *pal = pango_attr_list_copy (pango_layout_get_attributes (rv->layout));
 	gboolean recalc_height = FALSE;
-	pango_attr_list_unref
-		(pango_attr_list_filter
-		 (pal, (PangoAttrFilterFunc) cell_draw_simplify_cb, &recalc_height));
+	PangoAttrList *excess = pango_attr_list_filter
+		(pal, (PangoAttrFilterFunc) cell_draw_simplify_cb, &recalc_height);
+	pango_attr_list_unref (excess);
+	pango_layout_set_attributes (rv->layout, pal);
+	pango_attr_list_unref (pal);
+
 	if (recalc_height)
 		pango_layout_get_size (rv->layout, NULL,
 				       &rv->layout_natural_height);
@@ -417,12 +424,13 @@ cell_draw_v_extension_markers (cairo_t *cr,
  * cell_draw:
  * @cell: #GnmCell const
  * @cr: #cairo_t
- * @x:
- * @y:
+ * @x: x coordinate
+ * @y: y coordinate
  * @width: including margins and leading grid line
  * @height: including margins and leading grid line
- * @h_center:
- * @style: (nullable):
+ * @h_center: horizontal center
+ * @show_extension_markers: if %TRUE, show markers if the cell is too narrow
+ * @style: (nullable): #GnmCellDrawStyle
  **/
 void
 cell_draw (GnmCell const *cell, cairo_t *cr,

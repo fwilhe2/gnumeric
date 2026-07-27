@@ -63,8 +63,7 @@ glpk_affine_func (GString *dst, GnmCell *target, GnmSubSolver *ssol,
 	}
 
 	gnm_solver_set_vars (sol, x1);
-	gnm_cell_eval (target);
-	y = cst + value_get_as_float (target->value);
+	y = cst + value_get_as_float (gnm_cell_eval (target));
 
 	cs = gnm_solver_get_lp_coeffs (sol, target, x1, x2, err);
 	if (!cs)
@@ -220,7 +219,7 @@ glpk_create_program (GnmSubSolver *ssol, GOIOContext *io_context, GError **err)
 		go_io_count_progress_update (io_context, 1);
 	}
 
- 	for (l = sp->constraints; l; l = l->next) {
+	for (l = sp->constraints; l; l = l->next) {
 		GnmSolverConstraint *c = l->data;
 		const char *op = NULL;
 		int i;
@@ -371,8 +370,7 @@ glpk_file_save (GOFileSaver const *fs, GOIOContext *io_context,
 
 fail:
 	go_io_progress_unset (io_context);
-	if (err)
-		g_error_free (err);
+	g_clear_error (&err);
 
 	if (sol)
 		g_object_unref (sol);

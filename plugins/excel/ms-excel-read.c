@@ -124,6 +124,10 @@ record_size_barf (size_t count, size_t itemsize, size_t space,
 	do {								\
 		size_t count_ = (count__);				\
 		size_t size_ = (size__);				\
+		if (G_UNLIKELY (data < q->data || data > q->data + q->length)) { \
+			record_size_barf (count_, size_, 0, G_STRFUNC);	\
+			return;						\
+		}							\
 		size_t space_ = q->length - (data - q->data);		\
 		if (G_UNLIKELY (product_gt (count_, size_, space_))) {	\
 			record_size_barf (count_, size_, space_, G_STRFUNC); \
@@ -472,7 +476,7 @@ handle_arrow_head (SheetObject *so, const char *prop_name,
 }
 
 static void
-excel_fill_bmp_header(guint8 *bmphdr, guint8 *data, guint32 len)
+excel_fill_bmp_header (guint8 *bmphdr, guint8 *data, guint32 len)
 {
 	guint bpp;
 	guint offset;
@@ -659,13 +663,16 @@ ms_sheet_realize_obj (MSContainer *container, MSObj *obj)
 								    attr->v.v_uint - 1);
 			if (blip != NULL) {
 			        if (blip->type && !strcmp (blip->type, "dib")) {
-					guint8 *data = g_malloc(blip->data_len + BMP_HDR_SIZE);
-					if (data) {
-						excel_fill_bmp_header(data, blip->data, blip->data_len);
-						memcpy(data + BMP_HDR_SIZE, blip->data, blip->data_len);
-						sheet_object_image_set_image (GNM_SO_IMAGE (so),
-									      blip->type, data, blip->data_len + BMP_HDR_SIZE);
-						g_free (data);
+					if (blip->data_len <= G_MAXSIZE - BMP_HDR_SIZE) {
+						size_t s = blip->data_len + BMP_HDR_SIZE;
+						guint8 *data = g_try_malloc (s);
+						if (data) {
+							excel_fill_bmp_header (data, blip->data, blip->data_len);
+							memcpy(data + BMP_HDR_SIZE, blip->data, blip->data_len);
+							sheet_object_image_set_image (GNM_SO_IMAGE (so),
+										      blip->type, data, s);
+							g_free (data);
+						}
 					}
 			        } else {
 					sheet_object_image_set_image (GNM_SO_IMAGE (so),
@@ -1027,11 +1034,12 @@ excel_get_chars (GnmXLImporter const *importer,
 	GIConv str_iconv = importer->str_iconv;
 
 	if (use_utf16) {
-		gunichar2 *uni_text = g_alloca (sizeof (gunichar2)*length);
+		gunichar2 *uni_text = g_new (gunichar2, length);
 
 		for (i = 0; i < length; i++, ptr += 2)
 			uni_text [i] = GSF_LE_GET_GUINT16 (ptr);
 		ans = g_utf16_to_utf8 (uni_text, length, NULL, NULL, NULL);
+		g_free (uni_text);
 	} else {
 		size_t outbytes = (length + 2) * 8;
 		char *outbuf = g_new (char, outbytes + 1);
@@ -1253,15 +1261,23 @@ sst_read_string (BiffQuery *q, MSContainer const *c,
 	total_len = GSF_LE_GET_GUINT16 (q->data + offset);
 	offset += 2;
 	do {
+		unsigned hlen;
 		offset = ms_biff_query_bound_check (q, offset, 1);
 		if (offset == (guint32)-1) {
 			g_free (res_str);
 			return offset;
 		}
-		offset += excel_read_string_header
+		hlen = excel_read_string_header
 			(q->data + offset, q->length - offset,
 			 &use_utf16, &n_markup, &has_extended,
 			 &post_data_len);
+		if (hlen == 0 ||
+		    n_markup > 100000 || total_n_markup > 100000 - n_markup ||
+		    post_data_len > 1000000 || total_end_len > 1000000 - post_data_len) {
+			g_free (res_str);
+			return (guint32)-1;
+		}
+		offset += hlen;
 		total_end_len += post_data_len;
 		total_n_markup += n_markup;
 		chars_left = (q->length - offset) / (use_utf16 ? 2 : 1);
@@ -1337,6 +1353,11 @@ excel_read_SST (BiffQuery *q, GnmXLImporter *importer)
 				    GSF_LE_GET_GUINT32 (q->data + 4));
 			gsf_mem_dump (q->data, q->length);
 		});
+
+	if (importer->sst) {
+		g_printerr ("Duplicate sst -- that cannot be good!\n");
+		return;
+	}
 
 	sst_len = GSF_LE_GET_GUINT32 (q->data + 4);
 	XL_CHECK_CONDITION (sst_len < INT_MAX / sizeof (ExcelStringEntry));
@@ -1546,9 +1567,9 @@ excel_read_BOUNDSHEET (BiffQuery *q, GnmXLImporter *importer)
 	}
 
 	switch (bs->type) {
-	case MS_BIFF_TYPE_Worksheet :
-	case MS_BIFF_TYPE_Macrosheet :
-	case MS_BIFF_TYPE_Chart :
+	case MS_BIFF_TYPE_Worksheet:
+	case MS_BIFF_TYPE_Macrosheet:
+	case MS_BIFF_TYPE_Chart:
 		bs->esheet = excel_sheet_new (importer, bs->name, bs->gnm_type);
 
 		if (bs->esheet && bs->esheet->sheet)
@@ -1556,7 +1577,7 @@ excel_read_BOUNDSHEET (BiffQuery *q, GnmXLImporter *importer)
 				      "visibility", bs->visibility,
 				      NULL);
 		break;
-	default :
+	default:
 		bs->esheet = NULL;
 	}
 
@@ -1759,7 +1780,7 @@ biff_format_data_destroy (BiffFormatData *d)
 }
 
 /** Default color table for BIFF5/BIFF7. */
-ExcelPaletteEntry const excel_default_palette_v7 [] = {
+ExcelPaletteEntry const excel_default_palette_v7[] = {
 	{  0,  0,  0}, {255,255,255}, {255,  0,  0}, {  0,255,  0},
 	{  0,  0,255}, {255,255,  0}, {255,  0,255}, {  0,255,255},
 
@@ -1782,7 +1803,7 @@ ExcelPaletteEntry const excel_default_palette_v7 [] = {
 	{102, 51,  0}, {153, 51,102}, { 51, 51,153}, { 66, 66, 66}
 };
 
-ExcelPaletteEntry const excel_default_palette_v8 [] = {
+ExcelPaletteEntry const excel_default_palette_v8[] = {
 	{  0,  0,  0}, {255,255,255}, {255,  0,  0}, {  0,255,  0},
 	{  0,  0,255}, {255,255,  0}, {255,  0,255}, {  0,255,255},
 
@@ -2494,7 +2515,7 @@ excel_read_XF_OLD (BiffQuery *q, GnmXLImporter *importer)
 
 	data = (importer->ver >= MS_BIFF_V3) ? q->data[4] : q->data[3];
 	switch (data & 0x07) {
-	default :
+	default:
 	case 0: xf->halign = GNM_HALIGN_GENERAL; break;
 	case 1: xf->halign = GNM_HALIGN_LEFT; break;
 	case 2: xf->halign = GNM_HALIGN_CENTER; break;
@@ -2515,7 +2536,7 @@ excel_read_XF_OLD (BiffQuery *q, GnmXLImporter *importer)
 		switch (data & 0x30) {
 		case 0x00: xf->valign = GNM_VALIGN_TOP; break;
 		case 0x10: xf->valign = GNM_VALIGN_CENTER; break;
-		default :
+		default:
 		case 0x20: xf->valign = GNM_VALIGN_BOTTOM; break;
 		}
 		switch (data & 0xc0) {
@@ -2539,18 +2560,18 @@ excel_read_XF_OLD (BiffQuery *q, GnmXLImporter *importer)
 		if (xf->pat_foregnd_col >= 24)
 			xf->pat_foregnd_col += 40; /* Defaults */
 		xf->fill_pattern_idx =
-			excel_map_pattern_index_from_excel(data & 0x001f);
+			excel_map_pattern_index_from_excel (data & 0x001f);
 
 		data = GSF_LE_GET_GUINT8 (q->data + 10);
-		xf->border_type[STYLE_BOTTOM] = biff_xf_map_border(data & 0x07);
+		xf->border_type[STYLE_BOTTOM] = biff_xf_map_border (data & 0x07);
 		subdata = data >> 3;
 		xf->border_color[STYLE_BOTTOM] = (subdata==24) ? 64 : subdata;
 		data = GSF_LE_GET_GUINT8 (q->data + 8);
-		xf->border_type[STYLE_TOP] = biff_xf_map_border(data & 0x07);
+		xf->border_type[STYLE_TOP] = biff_xf_map_border (data & 0x07);
 		subdata = data >> 3;
 		xf->border_color[STYLE_TOP] = (subdata==24) ? 64 : subdata;
 		data = GSF_LE_GET_GUINT8 (q->data + 9);
-		xf->border_type[STYLE_LEFT] = biff_xf_map_border(data & 0x07);
+		xf->border_type[STYLE_LEFT] = biff_xf_map_border (data & 0x07);
 		subdata = data >> 3;
 		xf->border_color[STYLE_LEFT] = (subdata==24) ? 64 : subdata;
 		data = GSF_LE_GET_GUINT8 (q->data + 11);
@@ -3071,8 +3092,7 @@ excel_read_FORMULA (BiffQuery *q, ExcelReadSheet *esheet)
 		g_warning ("EXCEL: Multiple expressions for cell %s!%s",
 			   esheet->sheet->name_quoted, cell_name (cell));
 		gnm_cell_set_value (cell, val);
-		if (texpr)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 
 	/*
@@ -3080,7 +3100,7 @@ excel_read_FORMULA (BiffQuery *q, ExcelReadSheet *esheet)
 	 * 0x2 = CalcOnLoad
 	 */
 	if (options & 0x3)
-		cell_queue_recalc (cell);
+		gnm_cell_queue_recalc (cell);
 }
 
 XLSharedFormula *
@@ -3316,10 +3336,10 @@ static gint
 gnm_xl_get_codepage (char const *enc)
 {
 	/* These names must match charset_trans_array in go-charmap-sel.c */
-	static struct {
+	static const struct {
 		char const *name;
 		gint codepage;
-	}  charset_trans_array[] = {
+	} charset_trans_array[] = {
 		{"IBM864",                0},
 		{"IBM864i",               0},
 		{"ISO-8859-6",            0},
@@ -3584,9 +3604,7 @@ gnm_xl_importer_free (GnmXLImporter *importer)
 		/* NAME placeholders need removal, EXTERNNAME
 		 * placeholders will no be active */
 		if (expr_name_is_active (nexpr) &&
-		    expr_name_is_placeholder (nexpr) &&
-		    /* FIXME: Why do we need this? */
-		    nexpr->ref_count == 2) {
+		    expr_name_is_placeholder (nexpr)) {
 			d (1, g_printerr ("Removing name %s\n", expr_name_name (nexpr)););
 			expr_name_remove (nexpr);
 		}
@@ -3672,6 +3690,8 @@ excel_builtin_name (guint8 const *ptr)
 	return NULL;
 }
 
+// This has the same owning convensions as expr_name_add: if link_to_container,
+// then caller will not own the result, otherwise it will
 static GnmNamedExpr *
 excel_parse_name (GnmXLImporter *importer, Sheet *sheet, char *name,
 		  guint8 const *expr_data, unsigned expr_len,
@@ -3750,14 +3770,14 @@ excel_parse_name (GnmXLImporter *importer, Sheet *sheet, char *name,
 
 		/* Completely ignore Print_Area settings of #REF!  */
 		if (texpr == NULL || gnm_expr_top_is_err (texpr, GNM_ERROR_REF)) {
-			if (texpr) gnm_expr_top_unref (texpr);
+			gnm_expr_top_unref (texpr);
 			return NULL;
 		}
 	}
 
-	nexpr = expr_name_add (&pp, name,
-			       texpr,
-			       &err, link_to_container, stub);
+	nexpr = link_to_container
+		? expr_name_add (&pp, name, texpr, &err, stub)
+		: expr_name_add_unlinked (&pp, name, texpr, &err, stub);
 	if (nexpr == NULL) {
 		go_io_warning (importer->context, "%s", err);
 		g_free (err);
@@ -4054,8 +4074,9 @@ excel_read_NAME (BiffQuery *q, GnmXLImporter *importer, ExcelReadSheet *esheet)
 
 			/* Undocumented magic.
 			 * XL stores a hidden name with the details of an autofilter */
-			if (nexpr->is_hidden && !strcmp (expr_name_name (nexpr), "_FilterDatabase"))
+			if (nexpr->is_hidden && !strcmp (expr_name_name (nexpr), "_FilterDatabase")) {
 				excel_prepare_autofilter (importer, nexpr);
+			}
 			/* g_warning ("flags = %hx, state = %s\n", flags, global ? "global" : "sheet"); */
 
 			else if ((flags & 0xE) == 0xE) /* Function & VB-Proc & Proc */
@@ -4064,11 +4085,15 @@ excel_read_NAME (BiffQuery *q, GnmXLImporter *importer, ExcelReadSheet *esheet)
 		}
 	}
 
-	/* nexpr is potentially NULL if there was an error */
-	if (importer->num_name_records < importer->names->len)
-		g_ptr_array_index (importer->names, importer->num_name_records) = nexpr;
-	else if (importer->num_name_records == importer->names->len)
-		g_ptr_array_add (importer->names, nexpr);
+	// nexpr is potentially NULL if there was an error
+	if (importer->num_name_records >= importer->names->len)
+		g_ptr_array_set_size (importer->names, importer->num_name_records + 1);
+	else {
+		GnmNamedExpr *old_nexpr = g_ptr_array_index (importer->names, importer->num_name_records);
+		if (old_nexpr)
+			expr_name_unref (old_nexpr);
+	}
+	g_ptr_array_index (importer->names, importer->num_name_records) = nexpr;
 	importer->num_name_records++;
 
 	d (5, {
@@ -4175,13 +4200,15 @@ excel_read_XCT (BiffQuery *q, GnmXLImporter *importer)
 				v = value_new_float (GSF_LE_GET_DOUBLE (data));
 				data += 8;
 				break;
-			case  2:
+			case  2: {
+				guint32 byte_len;
 				XL_NEED_BYTES (1);
 				len = *data++;
 				v = value_new_string_nocopy (
-					excel_get_text (importer, data, len, NULL, NULL, q->data + q->length - data));
-				data += len;
+					excel_get_text (importer, data, len, &byte_len, NULL, q->data + q->length - data));
+				data += byte_len;
 				break;
+			}
 
 			case 4:
 				XL_NEED_BYTES (2);
@@ -4197,7 +4224,7 @@ excel_read_XCT (BiffQuery *q, GnmXLImporter *importer)
 				data += 8;
 				break;
 
-			default :
+			default:
 				g_warning ("Unknown oper type 0x%x in a CRN record", oper);
 				v = NULL;
 			}
@@ -4310,7 +4337,7 @@ excel_read_ROW (BiffQuery *q, ExcelReadSheet *esheet)
 	}
 
 	if ((unsigned)(flags & 0x17) > 0)
-		col_row_info_set_outline (sheet_row_fetch (esheet->sheet, row),
+		colrow_info_set_outline (sheet_row_fetch (esheet->sheet, row),
 				    (unsigned)(flags & 0x7), flags & 0x10);
 }
 
@@ -4423,7 +4450,7 @@ excel_read_COLINFO (BiffQuery *q, ExcelReadSheet *esheet)
 		sheet_col_set_size_pts (esheet->sheet, i, width,
 					customWidth && !bestFit);
 		if (outline_level > 0 || collapsed)
-			col_row_info_set_outline (sheet_col_fetch (esheet->sheet, i),
+			colrow_info_set_outline (sheet_col_fetch (esheet->sheet, i),
 					    outline_level, collapsed);
 	}
 
@@ -4451,7 +4478,7 @@ excel_read_os2bmp (BiffQuery *q, guint32 image_len)
 	loader = gdk_pixbuf_loader_new_with_type ("bmp", &err);
 	if (!loader)
 		return NULL;
-	excel_fill_bmp_header(bmphdr, q->data, image_len);
+	excel_fill_bmp_header (bmphdr, q->data, image_len);
 	ret = gdk_pixbuf_loader_write (loader, bmphdr, sizeof bmphdr, &err);
 	if (ret)
 		ret = gdk_pixbuf_loader_write (loader, q->data+8,
@@ -4736,10 +4763,10 @@ excel_read_SETUP (BiffQuery *q, ExcelReadSheet *esheet)
 		    pi->comment_placement == GNM_PRINT_COMMENTS_IN_PLACE)
 			pi->comment_placement = GNM_PRINT_COMMENTS_AT_END;
 		switch ((flags >> 10) & 3) {
-		case 0 : pi->error_display = GNM_PRINT_ERRORS_AS_DISPLAYED; break;
-		case 1 : pi->error_display = GNM_PRINT_ERRORS_AS_BLANK; break;
-		case 2 : pi->error_display = GNM_PRINT_ERRORS_AS_DASHES; break;
-		case 3 : pi->error_display = GNM_PRINT_ERRORS_AS_NA; break;
+		case 0: pi->error_display = GNM_PRINT_ERRORS_AS_DISPLAYED; break;
+		case 1: pi->error_display = GNM_PRINT_ERRORS_AS_BLANK; break;
+		case 2: pi->error_display = GNM_PRINT_ERRORS_AS_DASHES; break;
+		case 3: pi->error_display = GNM_PRINT_ERRORS_AS_NA; break;
 		}
 	}
 }
@@ -5228,7 +5255,7 @@ excel_read_CF (BiffQuery *q, ExcelReadSheet *esheet, GnmStyleConditions *sc,
 			g_printerr ("cond type = %d, op type = %d, flags = 0x%08x\n", (int)type, (int)op, flags);
 		});
 	switch (type) {
-	case 1 :
+	case 1:
 		switch (op) {
 		case 0x01: cop = GNM_STYLE_COND_BETWEEN; break;
 		case 0x02: cop = GNM_STYLE_COND_NOT_BETWEEN; break;
@@ -5367,7 +5394,7 @@ excel_read_CF (BiffQuery *q, ExcelReadSheet *esheet, GnmStyleConditions *sc,
 
 		if (0 == GSF_LE_GET_GUINT8 (data + 28)) {
 			switch (GSF_LE_GET_GUINT8  (data + 10)) {
-			default : g_printerr ("Unknown script %d\n", GSF_LE_GET_GUINT8 (data));
+			default: g_printerr ("Unknown script %d\n", GSF_LE_GET_GUINT8 (data));
 				/* fall through */
 			case 0: gnm_style_set_font_script (overlay, GO_FONT_SCRIPT_STANDARD); break;
 			case 1: gnm_style_set_font_script (overlay, GO_FONT_SCRIPT_SUPER); break;
@@ -5377,7 +5404,7 @@ excel_read_CF (BiffQuery *q, ExcelReadSheet *esheet, GnmStyleConditions *sc,
 		if (0 == GSF_LE_GET_GUINT8  (data + 32)) {
 			MsBiffFontUnderline mul;
 			switch (GSF_LE_GET_GUINT8  (data + 12)) {
-			default :
+			default:
 			case 0:
 				mul = XLS_ULINE_NONE;
 				break;
@@ -5659,24 +5686,24 @@ excel_read_DV (BiffQuery *q, ExcelReadSheet *esheet)
 	 * is easier to read.
 	 */
 	switch (options & 0x0f) {
-	case 0 : type = GNM_VALIDATION_TYPE_ANY;		break;
-	case 1 : type = GNM_VALIDATION_TYPE_AS_INT;		break;
-	case 2 : type = GNM_VALIDATION_TYPE_AS_NUMBER;	break;
-	case 3 : type = GNM_VALIDATION_TYPE_IN_LIST;	break;
-	case 4 : type = GNM_VALIDATION_TYPE_AS_DATE;	break;
-	case 5 : type = GNM_VALIDATION_TYPE_AS_TIME;	break;
-	case 6 : type = GNM_VALIDATION_TYPE_TEXT_LENGTH;	break;
-	case 7 : type = GNM_VALIDATION_TYPE_CUSTOM;		break;
-	default :
+	case 0: type = GNM_VALIDATION_TYPE_ANY;		break;
+	case 1: type = GNM_VALIDATION_TYPE_AS_INT;		break;
+	case 2: type = GNM_VALIDATION_TYPE_AS_NUMBER;	break;
+	case 3: type = GNM_VALIDATION_TYPE_IN_LIST;	break;
+	case 4: type = GNM_VALIDATION_TYPE_AS_DATE;	break;
+	case 5: type = GNM_VALIDATION_TYPE_AS_TIME;	break;
+	case 6: type = GNM_VALIDATION_TYPE_TEXT_LENGTH;	break;
+	case 7: type = GNM_VALIDATION_TYPE_CUSTOM;		break;
+	default:
 		g_warning ("EXCEL : Unknown constraint type %d", options & 0x0f);
 		return;
 	}
 
 	switch ((options >> 4) & 0x07) {
-	case 0 : style = GNM_VALIDATION_STYLE_STOP; break;
-	case 1 : style = GNM_VALIDATION_STYLE_WARNING; break;
-	case 2 : style = GNM_VALIDATION_STYLE_INFO; break;
-	default :
+	case 0: style = GNM_VALIDATION_STYLE_STOP; break;
+	case 1: style = GNM_VALIDATION_STYLE_WARNING; break;
+	case 2: style = GNM_VALIDATION_STYLE_INFO; break;
+	default:
 		g_warning ("EXCEL : Unknown validation style %d",
 			   (options >> 4) & 0x07);
 		return;
@@ -5696,7 +5723,7 @@ excel_read_DV (BiffQuery *q, ExcelReadSheet *esheet)
 		case 5:	op = GNM_VALIDATION_OP_LT;		break;
 		case 6:	op = GNM_VALIDATION_OP_GTE;		break;
 		case 7:	op = GNM_VALIDATION_OP_LTE;		break;
-		default :
+		default:
 			g_warning ("EXCEL : Unknown constraint operator %d",
 				   (options >> 20) & 0x0f);
 			return;
@@ -5819,13 +5846,16 @@ static guchar *
 read_utf16_str (int word_len, guint8 const *data)
 {
 	int i;
-	gunichar2 *uni_text = g_alloca (word_len * sizeof (gunichar2));
+	gunichar2 *uni_text = g_new (gunichar2, word_len);
+	guchar *res;
 
 	/* be wary about endianness */
 	for (i = 0 ; i < word_len ; i++, data += 2)
 		uni_text [i] = GSF_LE_GET_GUINT16 (data);
 
-	return (guchar *)g_utf16_to_utf8 (uni_text, word_len, NULL, NULL, NULL);
+	res = (guchar *)g_utf16_to_utf8 (uni_text, word_len, NULL, NULL, NULL);
+	g_free (uni_text);
+	return res;
 }
 
 /*
@@ -6027,7 +6057,7 @@ static GnmValue *
 read_DOPER (guint8 const *doper, gboolean is_equal,
 	    unsigned *str_len, GnmFilterOp *op)
 {
-	static GnmFilterOp const ops [] = {
+	static GnmFilterOp const ops[] = {
 		GNM_FILTER_OP_LT,
 		GNM_FILTER_OP_EQUAL,
 		GNM_FILTER_OP_LTE,
@@ -6240,7 +6270,7 @@ excel_read_EXTERNSHEET_v8 (BiffQuery const *q, GnmXLImporter *importer)
 		d (2, g_printerr ("ExternSheet: sup = %hd First sheet 0x%x, Last sheet 0x%x\n",
 				  sup_index, first, last););
 
-		v8 = &g_array_index(importer->v8.externsheet, ExcelExternSheetV8, i);
+		v8 = &g_array_index (importer->v8.externsheet, ExcelExternSheetV8, i);
 		v8->supbook = sup_index;
 		v8->first = supbook_get_sheet (importer, sup_index, first);
 		v8->last  = supbook_get_sheet (importer, sup_index, last);
@@ -6332,7 +6362,7 @@ excel_read_EXTERNSHEET_v7 (BiffQuery const *q, MSContainer *container)
 		sheet = XL_EXTERNSHEET_MAGIC_SELFREF;
 		break;
 
-	case 0x3a : /* undocumented magic.  seems to indicate the sheet for an
+	case 0x3a: /* undocumented magic.  seems to indicate the sheet for an
 		     * addin with functions.  01 3a
 		     * the same as SUPBOOK
 		     */
@@ -6372,7 +6402,7 @@ excel_read_FILEPASS (BiffQuery *q, GnmXLImporter *importer)
 {
 	/* files with workbook protection are encrypted using a
 	 * static password (why ?? ). */
-	if (ms_biff_query_set_decrypt(q, importer->ver, "VelvetSweatshop"))
+	if (ms_biff_query_set_decrypt (q, importer->ver, "VelvetSweatshop"))
 		return NULL;
 
 	while (TRUE) {
@@ -6708,7 +6738,7 @@ excel_read_sheet (BiffQuery *q, GnmXLImporter *importer,
 		case BIFF_FORMULA_v0:
 		case BIFF_FORMULA_v2:
 		case BIFF_FORMULA_v4:	excel_read_FORMULA (q, esheet);	break;
-			/* case STRING : is handled elsewhere since it always follows FORMULA */
+			/* case STRING: is handled elsewhere since it always follows FORMULA */
 		case BIFF_ROW_v0:
 		case BIFF_ROW_v2:	excel_read_ROW (q, esheet);	break;
 		case BIFF_EOF:		goto success;
@@ -6720,7 +6750,7 @@ excel_read_sheet (BiffQuery *q, GnmXLImporter *importer,
 		case BIFF_CALCCOUNT:	excel_read_CALCCOUNT (q, importer);	break;
 		case BIFF_CALCMODE:	excel_read_CALCMODE (q,importer);	break;
 
-		case BIFF_PRECISION :
+		case BIFF_PRECISION:
 #if 0
 			{
 				/* FIXME: implement in gnumeric */
@@ -6888,7 +6918,7 @@ excel_read_sheet (BiffQuery *q, GnmXLImporter *importer,
 			excel_read_DV (q, esheet);
 			break;
 
-		case BIFF_SXVIEWEX9 :
+		case BIFF_SXVIEWEX9:
 			/* Seems to contain pivot table autoformat indicies, plus ?? */
 			/* samples/excel/dbfuns.xls has as sample of this record
 			 * and I added code in OOo */
@@ -6906,7 +6936,7 @@ excel_read_sheet (BiffQuery *q, GnmXLImporter *importer,
 			 * jump to the chart handler which then starts parsing
 			 * at the NEXT record.
 			 */
-		case BIFF_CHART_units : {
+		case BIFF_CHART_units: {
 			SheetObject *obj = sheet_object_graph_new (NULL);
 			ms_excel_chart_read (q, sheet_container (esheet),
 					     obj, NULL);
@@ -6915,9 +6945,9 @@ excel_read_sheet (BiffQuery *q, GnmXLImporter *importer,
 			break;
 		}
 		case BIFF_SXVIEW: xls_read_SXVIEW (q, esheet); break;
-		case BIFF_SXVD : xls_read_SXVD (q, esheet); break;
-		case BIFF_SXVDEX : break; /* pulled in with SXVD */
-		case BIFF_SXVI : break; /* pulled in with SXVD */
+		case BIFF_SXVD: xls_read_SXVD (q, esheet); break;
+		case BIFF_SXVDEX: break; /* pulled in with SXVD */
+		case BIFF_SXVI: break; /* pulled in with SXVD */
 		case BIFF_SXIVD: xls_read_SXIVD (q, esheet); break;
 
 		default:
@@ -7270,7 +7300,7 @@ excel_read_workbook (GOIOContext *context, WorkbookView *wb_view,
 			excel_read_EXTERNSHEET (q, importer, ver);
 			break;
 
-		case BIFF_PRECISION : {
+		case BIFF_PRECISION: {
 #if 0
 			/* FIXME: implement in gnumeric */
 			/* state of 'Precision as Displayed' option */

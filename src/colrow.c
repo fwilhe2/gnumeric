@@ -45,6 +45,11 @@ col_row_info_fake_copy (ColRowInfo *cri)
 	return cri;
 }
 
+/**
+ * col_row_info_get_type:
+ *
+ * Returns: the #GType for #ColRowInfo.
+ **/
 GType
 col_row_info_get_type (void)
 {
@@ -58,23 +63,41 @@ col_row_info_get_type (void)
 	return t;
 }
 
+/**
+ * colrow_compute_pixel_scale:
+ * @sheet: #Sheet
+ * @horizontal: %TRUE for columns, %FALSE for rows
+ *
+ * Returns: the pixel scale for @sheet.
+ **/
 double
 colrow_compute_pixel_scale (Sheet const *sheet, gboolean horizontal)
 {
-	double scale = gnm_app_display_dpi_get (horizontal) / 72.0;
+	double scale;
 	if (sheet) {
-		scale *= sheet->last_zoom_factor_used;
+		scale = sheet->priv->pixels_per_pt * sheet->last_zoom_factor_used;
 	} else {
+		scale = 1;
 		g_error ("Why is sheet NULL here?\n");
 	}
 	return scale;
 }
 
+/**
+ * colrow_compute_pixels_from_pts:
+ * @cri: #ColRowInfo
+ * @sheet: #Sheet
+ * @horizontal: %TRUE for columns, %FALSE for rows
+ * @scale: scale factor, or -1 to use @sheet's default
+ *
+ * Computes @cri->size_pixels from @cri->size_pts.
+ **/
 void
 colrow_compute_pixels_from_pts (ColRowInfo *cri, Sheet const *sheet,
 				gboolean horizontal, double scale)
 {
 	int const margin = horizontal ? 2 * GNM_COL_MARGIN : 2 * GNM_ROW_MARGIN;
+	int pixels;
 
 	g_return_if_fail (IS_SHEET (sheet));
 
@@ -84,12 +107,20 @@ colrow_compute_pixels_from_pts (ColRowInfo *cri, Sheet const *sheet,
 	if (horizontal && sheet && sheet->display_formulas)
 		scale *= 2;
 
-	cri->size_pixels = (int)(cri->size_pts * scale + 0.5);
-
-	if (cri->size_pixels <= margin)
-		cri->size_pixels = margin + 1;
+	pixels = (int)(cri->size_pts * scale + 0.5);
+	pixels = MAX (pixels, margin + 1);
+	cri->size_pixels = pixels;
 }
 
+/**
+ * colrow_compute_pts_from_pixels:
+ * @cri: #ColRowInfo
+ * @sheet: #Sheet
+ * @horizontal: %TRUE for columns, %FALSE for rows
+ * @scale: scale factor, or -1 to use @sheet's default
+ *
+ * Computes @cri->size_pts from @cri->size_pixels.
+ **/
 void
 colrow_compute_pts_from_pixels (ColRowInfo *cri, Sheet const *sheet,
 				gboolean horizontal, double scale)
@@ -144,7 +175,7 @@ col_row_info_is_empty (ColRowInfo const *cri)
  * @a: First #ColRowInfo
  * @b: Second #ColRowInfo
  *
- * Returns %TRUE if the infos are equivalent.
+ * Returns: %TRUE if the infos are equivalent.
  **/
 gboolean
 col_row_info_equal (ColRowInfo const *a, ColRowInfo const *b)
@@ -162,32 +193,32 @@ col_row_info_equal (ColRowInfo const *a, ColRowInfo const *b)
 }
 
 /**
- * col_row_info_copy:
- * @dst: Destination #ColRowInfo
- * @src: Source #ColRowInfo
+ * col_row_info_new:
  *
- * Copy all content, except the position of @src to @dst.
- */
-void
-col_row_info_copy (ColRowInfo *dst, ColRowInfo const *src)
-{
-	dst->size_pts      = src->size_pts;
-	dst->size_pixels   = src->size_pixels;
-	dst->outline_level = src->outline_level;
-	dst->is_collapsed  = src->is_collapsed;
-	dst->hard_size     = src->hard_size;
-	dst->visible       = src->visible;
-}
-
+ * Returns: (transfer full): a new #ColRowInfo.
+ **/
 ColRowInfo *
 col_row_info_new (void)
 {
 	return g_slice_new (ColRowInfo);
 }
 
+/**
+ * colrow_free:
+ * @cri: (nullable) (transfer full): #ColRowInfo
+ *
+ * Frees @cri.
+ **/
 void
 colrow_free (ColRowInfo *cri)
 {
+	if (cri == NULL)
+		return;
+
+	if (cri->spans) {
+		g_hash_table_destroy (cri->spans);
+		cri->spans = NULL;
+	}
 	g_slice_free1 (sizeof (*cri), cri);
 }
 
@@ -233,6 +264,8 @@ colrow_state_list_foreach (ColRowStateList *list,
 		cri.is_collapsed = state->is_collapsed;
 		cri.hard_size = state->hard_size;
 		cri.visible = state->visible;
+		// This is a temporary ColRowInfo so we don't need to
+		// gnm_sheet_mark_colrow_changed
 		colrow_compute_pixels_from_pts (&cri, sheet, is_cols, scale);
 
 		for (l = 0; l < rle->length; l++) {
@@ -246,7 +279,7 @@ colrow_state_list_foreach (ColRowStateList *list,
 
 /*****************************************************************************/
 
-typedef struct _ColRowIndex {
+typedef struct ColRowIndex_ {
 	int first, last;
 } ColRowIndex;
 
@@ -260,6 +293,12 @@ cb_colrow_index_counter (gpointer data, gpointer user_data)
 		*count += index->last - index->first + 1;
 }
 
+/**
+ * colrow_vis_list_length:
+ * @list: (nullable): #ColRowVisList
+ *
+ * Returns: the total number of columns or rows in @list.
+ **/
 gint
 colrow_vis_list_length (ColRowVisList *list)
 {
@@ -290,15 +329,17 @@ colrow_index_compare (ColRowIndex const * a, ColRowIndex const * b)
 	return a->first - b->first;
 }
 
-/*
- * colrow_index_list_to_string: Convert an index list into a string.
- *                              The result must be freed by the caller.
- *                              It will be something like : A-B, F-G
+/**
+ * colrow_index_list_to_string:
+ * @list: #ColRowIndexList
+ * @is_cols: %TRUE for columns, %FALSE for rows
+ * @is_single: (out) (optional): %TRUE if there's only a single col/row involved
  *
- * @list: The list
- * @is_cols: %TRUE for columns, %FALSE for rows.
- * @is_single: If non-null this will be set to %TRUE if there's only a single col/row involved.
- */
+ * Convert an index list into a string.
+ * It will be something like : A-B, F-G
+ *
+ * Returns: (transfer full): the string representation of @list.
+ **/
 GString *
 colrow_index_list_to_string (ColRowIndexList *list, gboolean is_cols, gboolean *is_single)
 {
@@ -358,14 +399,15 @@ colrow_get_index_list (int first, int last, ColRowIndexList *list)
 
 	prev = list->data;
 	for (ptr = list->next ; ptr != NULL ; ) {
-		tmp = ptr->data;
+		ColRowIndex *tmp = ptr->data;
 
 		/* at the end of existing segment or contained */
-		if (prev->last+1 >= tmp->first) {
+		if (prev->last + 1 >= tmp->first) {
 			GList *next = ptr->next;
 			if (prev->last < tmp->last)
 				prev->last = tmp->last;
-			list = g_list_remove_link (list, ptr);
+			list = g_list_delete_link (list, ptr);
+			g_free (tmp);
 			ptr = next;
 		} else {
 			ptr = ptr->next;
@@ -412,14 +454,11 @@ colrow_set_single_state (ColRowState *state,
 /**
  * colrow_state_list_destroy:
  * @list: (transfer full): the list to destroy.
- *
- * Returns: (transfer none): %NULL.
  **/
-ColRowStateList *
+void
 colrow_state_list_destroy (ColRowStateList *list)
 {
 	g_slist_free_full (list, g_free);
-	return NULL;
 }
 
 /**
@@ -702,9 +741,12 @@ colrow_set_states (Sheet *sheet, gboolean is_cols,
 				if (segment != NULL) {
 					int const sub = COLROW_SUB_INDEX (i);
 					ColRowInfo *cri = segment->info[sub];
-					if (cri != NULL) {
+					if (cri != NULL && !col_row_info_is_default (cri)) {
 						segment->info[sub] = NULL;
 						colrow_free (cri);
+						// We may have created cells so NULL is
+						// not acceptable.
+						(void)sheet_colrow_fetch (sheet, i, is_cols);
 					}
 				}
 			} else {
@@ -712,12 +754,14 @@ colrow_set_states (Sheet *sheet, gboolean is_cols,
 				cri->hard_size = state->hard_size;
 				cri->size_pts = state->size_pts;
 				colrow_compute_pixels_from_pts (cri, sheet, is_cols, scale);
-				col_row_info_set_outline (cri, state->outline_level,
+				colrow_info_set_outline (cri, state->outline_level,
 					state->is_collapsed);
 			}
 		}
 		offset += rles->length;
 	}
+
+	gnm_sheet_mark_colrow_changed (sheet, first, is_cols);
 
 	/* Notify sheet of pending update */
 	sheet->priv->recompute_visibility = TRUE;
@@ -792,7 +836,7 @@ colrow_restore_state_group (Sheet *sheet, gboolean is_cols,
  * @range:  The range whose rows should be resized.
  * @shrink: If set to %FALSE, rows will never shrink!
  *
- * Use this function having changed the font size to auto-resize the row
+ * Use this function after changing the font size to auto-resize the row
  * heights to make the text fit nicely.
  **/
 void
@@ -802,14 +846,15 @@ rows_height_update (Sheet *sheet, GnmRange const *range, gboolean shrink)
 	 * just contents.  Empty cells will cause resize also */
 	colrow_autofit (sheet, range, FALSE, FALSE,
 			FALSE, !shrink,
-			NULL, NULL);
+			NULL, NULL,
+			TRUE);
 }
 
 /* ------------------------------------------------------------------------- */
 
 struct cb_autofit {
 	Sheet *sheet;
-	const GnmRange *range;
+	GnmRange range;
 	gboolean ignore_strings;
 	gboolean min_current;
 	gboolean min_default;
@@ -825,7 +870,8 @@ cb_autofit_col (GnmColRowIter const *iter, gpointer data_)
 		return FALSE;
 
 	size = sheet_col_size_fit_pixels (data->sheet, iter->pos,
-		 data->range->start.row, data->range->end.row,
+					  data->range.start.row,
+					  data->range.end.row,
 		 data->ignore_strings);
 	/* FIXME: better idea than this?  */
 	max = 50 * sheet_col_get_default_size_pixels (data->sheet);
@@ -853,7 +899,8 @@ cb_autofit_row (GnmColRowIter const *iter, gpointer data_)
 		return FALSE;
 
 	size = sheet_row_size_fit_pixels (data->sheet, iter->pos,
-		 data->range->start.col, data->range->end.col,
+					  data->range.start.col,
+					  data->range.end.col,
 		 data->ignore_strings);
 	max = 20 * sheet_row_get_default_size_pixels (data->sheet);
 	size = MIN (size, max);
@@ -870,48 +917,58 @@ cb_autofit_row (GnmColRowIter const *iter, gpointer data_)
 	return FALSE;
 }
 
-/*
+/**
  * colrow_autofit:
  * @sheet: the #Sheet to change
  * @range: the range to consider
- * @is_cols: %TRUE for columns, %FALSE for rows.
- * @ignore_strings: Don't consider cells with string values.
- * @min_current: Don't shrink below current size.
- * @min_default: Don't shrink below default size.
- * @indices: (out) (optional): indices appropriate for
- *     colrow_restore_state_group.
- * @sizes: (out) (optional): old sizes appropriate for
- *     colrow_restore_state_group.
+ * @is_cols: %TRUE for columns, %FALSE for rows
+ * @ignore_strings: Don't consider cells with string values
+ * @min_current: Don't shrink below current size
+ * @min_default: Don't shrink below default size
+ * @indices: (out) (optional): indices appropriate for colrow_restore_state_group
+ * @sizes: (out) (optional): old sizes appropriate for colrow_restore_state_group
+ * @reasonable_effort: if %TRUE, this function may skip some cells from really big ranges
  *
  * This function autofits columns or rows in @range as specified by
  * @is_cols.  Only cells in @range are considered for the sizing
  * and the size can be bounded below by current size and/or default
  * size.
- */
+ **/
 void
 colrow_autofit (Sheet *sheet, const GnmRange *range, gboolean is_cols,
 		gboolean ignore_strings,
 		gboolean min_current, gboolean min_default,
 		ColRowIndexList **indices,
-		ColRowStateGroup **sizes)
+		ColRowStateGroup **sizes,
+		gboolean reasonable_effort)
 {
 	struct cb_autofit data;
 	int a, b;
 	ColRowHandler handler;
 
 	data.sheet = sheet;
-	data.range = range;
+	data.range = *range;
 	data.ignore_strings = ignore_strings;
 	data.min_current = min_current;
 	data.min_default = min_default;
 
+	if (reasonable_effort) {
+		const int MAX_HEIGHT = 10000;
+		const int MAX_WIDTH = 1000;
+
+		if (range_height (&data.range) > MAX_HEIGHT)
+			data.range.end.row = data.range.start.row + MAX_HEIGHT - 1;
+		if (range_width (&data.range) > MAX_WIDTH)
+			data.range.end.col = data.range.start.col + MAX_WIDTH - 1;
+	}
+
 	if (is_cols) {
-		a = range->start.col;
-		b = range->end.col;
+		a = data.range.start.col;
+		b = data.range.end.col;
 		handler = cb_autofit_col;
 	} else {
-		a = range->start.row;
-		b = range->end.row;
+		a = data.range.start.row;
+		b = data.range.end.row;
 		handler = cb_autofit_row;
 	}
 
@@ -937,7 +994,7 @@ void
 colrow_autofit_col (Sheet *sheet, GnmRange *r)
 {
 	colrow_autofit (sheet, r, TRUE, TRUE,
-			TRUE, FALSE, NULL, NULL);
+			TRUE, FALSE, NULL, NULL, TRUE);
 	sheet_foreach_cell_in_region (sheet, CELL_ITER_IGNORE_BLANK,
 				      r->start.col, 0,
 				      r->end.col, -1,
@@ -954,7 +1011,7 @@ void
 colrow_autofit_row (Sheet *sheet, GnmRange *r)
 {
 	colrow_autofit (sheet, r, FALSE, FALSE,
-			TRUE, FALSE, NULL, NULL);
+			TRUE, FALSE, NULL, NULL, TRUE);
 }
 
 /*****************************************************************************/
@@ -993,7 +1050,7 @@ colrow_visibility (Sheet const *sheet, ColRowVisibility * const dat,
 		} else if ((visible != 0) == (cri->visible != 0))
 			continue;
 
-		/* Find the begining */
+		/* Find the beginning */
 		for (j = i; j >= first ; --j) {
 			cri = (*get) (sheet, j);
 			if (cri == NULL) {
@@ -1093,19 +1150,19 @@ colrow_get_visibility_toggle (SheetView *sv, gboolean is_cols,
  * @sheet: The #Sheet to change
  * @is_cols: %TRUE for columns, %FALSE for rows.
  * @visible: Should we unhide or hide the cols/rows.
+ * @list: #ColRowVisList
  *
  * This is the high level command that is wrapped by undo and redo.
  * It should not be called by other commands.
- */
+ **/
 void
 colrow_set_visibility_list (Sheet *sheet, gboolean is_cols,
 			    gboolean visible, ColRowVisList *list)
 {
 	ColRowVisList *ptr;
-	ColRowIndex *info;
 
 	for (ptr = list; ptr != NULL ; ptr = ptr->next) {
-		info = ptr->data;
+		ColRowIndex const *info = ptr->data;
 		colrow_set_visibility (sheet, is_cols, visible,
 				       info->first, info->last);
 	}
@@ -1120,7 +1177,7 @@ colrow_set_visibility_list (Sheet *sheet, gboolean is_cols,
 }
 
 /**
- * col_row_info_set_outline:
+ * colrow_info_set_outline:
  * @cri: #ColRowInfo to tweak
  * @outline_level:
  * @is_collapsed:
@@ -1128,7 +1185,7 @@ colrow_set_visibility_list (Sheet *sheet, gboolean is_cols,
  * Adjust the outline state of a col/row
  */
 void
-col_row_info_set_outline (ColRowInfo *cri, int outline_level, gboolean is_collapsed)
+colrow_info_set_outline (ColRowInfo *cri, int outline_level, gboolean is_collapsed)
 {
 	g_return_if_fail (outline_level >= 0);
 
@@ -1263,6 +1320,8 @@ colrow_set_visibility (Sheet *sheet, gboolean is_cols,
 		if (cri && prev_outline > cri->outline_level)
 			cri->is_collapsed = !visible;
 	}
+
+	gnm_sheet_mark_colrow_changed (sheet, first, is_cols);
 }
 
 /**
@@ -1274,7 +1333,7 @@ colrow_set_visibility (Sheet *sheet, gboolean is_cols,
  * @hide: (out): columns/rows that need to be hidden
  *
  * Collect the sets of visibility changes required to change the visibility of
- * all outlined columns/rows such that those depth less then  @depth are visible.
+ * all outlined columns/rows such that those depths less than  @depth are visible.
  **/
 void
 colrow_get_global_outline (Sheet const *sheet, gboolean is_cols, int depth,

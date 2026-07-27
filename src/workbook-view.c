@@ -123,7 +123,7 @@ wb_view_get_doc (WorkbookView const *wbv)
  * wb_view_get_index_in_wb:
  * @wbv: #WorkbookView
  *
- * Returns 0 based index of wbv within workbook, or -1 if there is no workbook.
+ * Returns: 0-based index of @wbv within workbook, or -1 if there is no workbook.
  **/
 int
 wb_view_get_index_in_wb (WorkbookView const *wbv)
@@ -164,6 +164,13 @@ wb_view_cur_sheet_view (WorkbookView const *wbv)
 	return wbv->current_sheet_view;
 }
 
+/**
+ * wb_view_sheet_focus:
+ * @wbv: #WorkbookView
+ * @sheet: (nullable): #Sheet
+ *
+ * Sets the focus to @sheet in @wbv.
+ **/
 void
 wb_view_sheet_focus (WorkbookView *wbv, Sheet *sheet)
 {
@@ -189,6 +196,13 @@ wb_view_sheet_focus (WorkbookView *wbv, Sheet *sheet)
 	}
 }
 
+/**
+ * wb_view_sheet_add:
+ * @wbv: #WorkbookView
+ * @new_sheet: #Sheet
+ *
+ * Adds a view for @new_sheet to @wbv.
+ **/
 void
 wb_view_sheet_add (WorkbookView *wbv, Sheet *new_sheet)
 {
@@ -207,6 +221,13 @@ wb_view_sheet_add (WorkbookView *wbv, Sheet *new_sheet)
 		wb_view_sheet_focus (wbv, new_sheet);
 }
 
+/**
+ * wb_view_is_protected:
+ * @wbv: #WorkbookView
+ * @check_sheet: whether to also check the current sheet's protection
+ *
+ * Returns: %TRUE if @wbv (or optionally the current sheet) is protected.
+ **/
 gboolean
 wb_view_is_protected (WorkbookView *wbv, gboolean check_sheet)
 {
@@ -216,6 +237,14 @@ wb_view_is_protected (WorkbookView *wbv, gboolean check_sheet)
 		wbv->current_sheet != NULL && wbv->current_sheet->is_protected);
 }
 
+/**
+ * wb_view_set_attribute:
+ * @wbv: #WorkbookView
+ * @name: attribute name
+ * @value: attribute value
+ *
+ * Sets a view attribute for @wbv.
+ **/
 void
 wb_view_set_attribute (WorkbookView *wbv, char const *name, char const *value)
 {
@@ -230,32 +259,40 @@ wb_view_set_attribute (WorkbookView *wbv, char const *name, char const *value)
 	obj = G_OBJECT (wbv);
 	res = !g_ascii_strcasecmp (value, "TRUE");
 
-	if (strncmp (name, "WorkbookView::", 14) == 0)
+	if (g_str_has_prefix (name, "WorkbookView::"))
 		tname = name + 14;
-	else if (strncmp (name, "Workbook::", 10) == 0)
+	else if (g_str_has_prefix (name, "Workbook::"))
 		/* Some old files have this.  */
 		tname = name + 10;
 	else
 		tname = "nope";
 
 	if (!strcmp (tname , "show_horizontal_scrollbar"))
-		g_object_set (obj, "show_horizontal_scrollbar", res, NULL);
+		g_object_set (obj, "show-horizontal-scrollbar", res, NULL);
 	else if (!strcmp (tname , "show_vertical_scrollbar"))
-		g_object_set (obj, "show_vertical_scrollbar", res, NULL);
+		g_object_set (obj, "show-vertical-scrollbar", res, NULL);
 	else if (!strcmp (tname , "show_notebook_tabs"))
-		g_object_set (obj, "show_notebook_tabs", res, NULL);
+		g_object_set (obj, "show-notebook-tabs", res, NULL);
 	else if (!strcmp (tname , "show_function_cell_markers"))
-		g_object_set (obj, "show_function_cell_markers", res, NULL);
+		g_object_set (obj, "show-function-cell-markers", res, NULL);
 	else if (!strcmp (tname , "show_extension_markers"))
-		g_object_set (obj, "show_extension_markers", res, NULL);
+		g_object_set (obj, "show-extension-markers", res, NULL);
 	else if (!strcmp (tname , "do_auto_completion"))
-		g_object_set (obj, "do_auto_completion", res, NULL);
+		g_object_set (obj, "do-auto-completion", res, NULL);
 	else if (!strcmp (tname , "is_protected"))
 		g_object_set (obj, "protected", res, NULL);
 	else
 		g_warning ("WorkbookView unknown arg '%s'", name);
 }
 
+/**
+ * wb_view_preferred_size:
+ * @wbv: #WorkbookView
+ * @w_pixels: preferred width in pixels
+ * @h_pixels: preferred height in pixels
+ *
+ * Sets the preferred size for @wbv.
+ **/
 void
 wb_view_preferred_size (WorkbookView *wbv, int w, int h)
 {
@@ -272,6 +309,12 @@ wb_view_preferred_size (WorkbookView *wbv, int w, int h)
 		      NULL);
 }
 
+/**
+ * wb_view_style_feedback:
+ * @wbv: #WorkbookView
+ *
+ * Updates style feedback for @wbv.
+ **/
 void
 wb_view_style_feedback (WorkbookView *wbv)
 {
@@ -334,7 +377,7 @@ wb_view_style_feedback (WorkbookView *wbv)
 
 	if (NULL != wbv->in_cell_combo)
 	{
-		const double a_offsets [4] = { 0., 0., 1., 1. };
+		const double a_offsets[4] = { 0., 0., 1., 1. };
 		SheetObjectAnchor  anchor;
 		GnmRange corner;
 		GnmRange const *r;
@@ -351,6 +394,12 @@ wb_view_style_feedback (WorkbookView *wbv)
 	}
 }
 
+/**
+ * wb_view_menus_update:
+ * @wbv: #WorkbookView
+ *
+ * Updates menu states for all controls associated with @wbv.
+ **/
 void
 wb_view_menus_update (WorkbookView *wbv)
 {
@@ -369,15 +418,13 @@ wb_view_menus_update (WorkbookView *wbv)
 
 /**
  * wb_view_selection_desc:
- * @wbv: The view
- * @use_pos:
- * @wbc: (allow-none): A #WorkbookControl
+ * @wbv: #WorkbookView
+ * @use_pos: whether to force use of position
+ * @wbc: (nullable): A #WorkbookControl
  *
- * Load the edit line with the value of the cell in sheet's edit_pos.
- *
- * Calculate what to display on the edit line then display it either in the
- * control @wbc, or if that is %NULL, in all controls.
- */
+ * Calculate what to display as selection description then display it either
+ * in the control @wbc, or if that is %NULL, in all controls.
+ **/
 void
 wb_view_selection_desc (WorkbookView *wbv, gboolean use_pos,
 			WorkbookControl *wbc)
@@ -388,7 +435,7 @@ wb_view_selection_desc (WorkbookView *wbv, gboolean use_pos,
 
 	sv = wbv->current_sheet_view;
 	if (sv != NULL) {
-		char buffer [10 + 2 * 4 * sizeof (int)];
+		char buffer[10 + 2 * 4 * sizeof (int)];
 		char const *sel_descr = buffer;
 		GnmRange const *r, *m;
 
@@ -432,14 +479,14 @@ wb_view_selection_desc (WorkbookView *wbv, gboolean use_pos,
 
 /**
  * wb_view_edit_line_set:
- * @wbv: The view
- * @wbc: (allow-none): A #WorkbookControl
+ * @wbv: #WorkbookView
+ * @wbc: (nullable): A #WorkbookControl
  *
- * Load the edit line with the value of the cell in @sheet's edit_pos.
+ * Load the edit line with the value of the cell in sheet's edit_pos.
  *
  * Calculate what to display on the edit line then display it either in the
  * control @wbc, or if that is %NULL, in all controls.
- */
+ **/
 void
 wb_view_edit_line_set (WorkbookView *wbv, WorkbookControl *wbc)
 {
@@ -523,6 +570,12 @@ accumulate_regions (SheetView *sv,  GnmRange const *r, gpointer closure)
 		gnm_expr_new_constant (value_new_cellrange_unsafe (&a, &b)));
 }
 
+/**
+ * wb_view_auto_expr_recalc:
+ * @wbv: #WorkbookView
+ *
+ * Recalculates the automatic expression for @wbv based on the current selection.
+ **/
 void
 wb_view_auto_expr_recalc (WorkbookView *wbv)
 {
@@ -575,6 +628,13 @@ wb_view_init_control (G_GNUC_UNUSED WorkbookControl *wbc)
 {
 }
 
+/**
+ * wb_view_attach_control:
+ * @wbv: #WorkbookView
+ * @wbc: #WorkbookControl
+ *
+ * Attaches @wbc to @wbv.
+ **/
 void
 wb_view_attach_control (WorkbookView *wbv, WorkbookControl *wbc)
 {
@@ -591,6 +651,12 @@ wb_view_attach_control (WorkbookView *wbv, WorkbookControl *wbc)
 		wb_view_init_control (wbc);
 }
 
+/**
+ * wb_view_detach_control:
+ * @wbc: #WorkbookControl
+ *
+ * Detaches @wbc from its associated view.
+ **/
 void
 wb_view_detach_control (WorkbookControl *wbc)
 {
@@ -817,6 +883,12 @@ wb_view_get_property (GObject *object, guint property_id,
 	}
 }
 
+/**
+ * wb_view_detach_from_workbook:
+ * @wbv: #WorkbookView
+ *
+ * Detaches @wbv from its associated workbook.
+ **/
 void
 wb_view_detach_from_workbook (WorkbookView *wbv)
 {
@@ -1067,9 +1139,10 @@ GSF_CLASS (WorkbookView, workbook_view,
 
 /**
  * workbook_view_new:
- * @wb: (allow-none) (transfer full): #Workbook
+ * @wb: (nullable) (transfer full): #Workbook
  *
- * Returns: A new #WorkbookView for @wb (or a fresh one if that is %NULL).
+ * Returns: (transfer full): A new #WorkbookView for @wb (or a fresh one
+ * if that is %NULL).
  **/
 WorkbookView *
 workbook_view_new (Workbook *wb)
@@ -1304,10 +1377,10 @@ workbook_view_save (WorkbookView *wbv, GOCmdContext *context)
 /**
  * workbook_view_new_from_input:
  * @input: #GsfInput to read data from.
- * @uri: (allow-none): URI
- * @file_opener: (allow-none): #GOFileOpener
- * @io_context: (allow-none): Context to display errors.
- * @encoding: (allow-none): Encoding for @file_opener that understand it
+ * @uri: (nullable): URI
+ * @file_opener: (nullable): #GOFileOpener
+ * @io_context: (nullable): Context to display errors.
+ * @encoding: (nullable): Encoding for @file_opener that understands it
  *
  * Reads @uri file using given file opener @file_opener, or probes for a valid
  * possibility if @file_opener is %NULL.  Reports problems to @io_context.
@@ -1430,9 +1503,9 @@ workbook_view_new_from_input (GsfInput *input,
 /**
  * workbook_view_new_from_uri:
  * @uri: URI for file
- * @file_opener: (allow-none): #GOFileOpener
+ * @file_opener: (nullable): #GOFileOpener
  * @io_context: Context to display errors.
- * @encoding: (allow-none): Encoding for @file_opener that understands it
+ * @encoding: (nullable): Encoding for @file_opener that understands it
  *
  * Reads @uri file using given file opener @file_opener, or probes for a valid
  * possibility if @file_opener is %NULL.  Reports problems to @io_context.

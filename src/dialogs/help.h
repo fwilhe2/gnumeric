@@ -12,8 +12,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef GNUMERIC_HELP_H
-#define GNUMERIC_HELP_H
+#ifndef GNM_HELP_H_
+#define GNM_HELP_H_
 
 /* ../sheet-object-widget.c    */
 #define GNUMERIC_HELP_LINK_SO_FRAME	 "sect-graphics-drawings"
@@ -80,7 +80,7 @@
 #define GNUMERIC_HELP_LINK_HYPERLINK "sect-data-link"
 
 /* dialog-insert-cells.c */
-#define GNUMERIC_HELP_LINK_INSERT_CELS "sect-data-insert"
+#define GNUMERIC_HELP_LINK_INSERT_CELLS "sect-data-insert"
 
 /* dialog-merge.c      */
 #define GNUMERIC_HELP_LINK_DATA_MERGE "sect-data-generate"
@@ -205,4 +205,4 @@
 /* dialog-paste-special.c */
 #define GNUMERIC_HELP_LINK_PASTE_SPECIAL "Edit-Menu"
 
-#endif /* GNUMERIC_HELP_H */
+#endif /* GNM_HELP_H_ */

@@ -2,6 +2,7 @@
  * dialog-autofilter.c:  A pair of dialogs for autofilter conditions
  *
  * (c) Copyright 2002 Jody Goldberg <jody@gnome.org>
+ * (C) Copyright 2024 Morten Welinder <terra@gnome.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -121,7 +122,7 @@ map_op (AutoFilterState *state, GnmFilterOp *op,
 	case 12: *op = (i == 12) ? GNM_FILTER_OP_NOT_EQUAL : GNM_FILTER_OP_EQUAL;
 		v = value_new_string_nocopy (g_strconcat ("*", txt, "*", NULL));
 		break;
-	default :
+	default:
 		g_warning ("huh?");
 		return NULL;
 	}
@@ -199,7 +200,7 @@ cb_top10_count_changed (GtkSpinButton *button,
 	gchar *label;
 	int cval = val, count;
 
-	count = range_height(&(state->filter->r)) - 1;
+	count = range_height (&(state->filter->r)) - 1;
 
 	if (cval > count)
 		cval = count;
@@ -208,21 +209,21 @@ cb_top10_count_changed (GtkSpinButton *button,
 	/* xgettext : %d gives the number of items in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf (ngettext ("Show the largest item",
-					   "Show the %3d largest items",
+					   "Show the %d largest items",
 					   cval),
 				 cval);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
+	g_free (label);
 
 	w = go_gtk_builder_get_widget (state->gui, type_group[1]);
 	/* xgettext : %d gives the number of items in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf (ngettext ("Show the smallest item",
-					   "Show the %3d smallest items",
+					   "Show the %d smallest items",
 					   cval),
 				 cval);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
+	g_free (label);
 
 	if (val > 100)
 		val = 100;
@@ -231,44 +232,42 @@ cb_top10_count_changed (GtkSpinButton *button,
 	/* xgettext : %d gives the percentage of the data range in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf
-		(ngettext ("Show the items in the top %3d%% of the data range",
-			   "Show the items in the top %3d%% of the data range", val),
+		(ngettext ("Show the items in the top %d%% of the data range",
+			   "Show the items in the top %d%% of the data range", val),
 		 val);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
+	g_free (label);
 
 	w = go_gtk_builder_get_widget (state->gui, type_group[3]);
 	/* xgettext : %d gives the percentage of the data range in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf
-		(ngettext ("Show the items in the bottom %3d%% of the data range",
-			   "Show the items in the bottom %3d%% of the data range", val),
+		(ngettext ("Show the items in the bottom %d%% of the data range",
+			   "Show the items in the bottom %d%% of the data range", val),
 		 val);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
+	g_free (label);
 
 
 	w = go_gtk_builder_get_widget (state->gui, type_group[4]);
 	/* xgettext : %d gives the percentage of item number in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf
-		(ngettext ("Show the top %3d%% of all items",
-			   "Show the top %3d%% of all items", val),
+		(ngettext ("Show the top %d%% of all items",
+			   "Show the top %d%% of all items", val),
 		 val);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
+	g_free (label);
 
 	w = go_gtk_builder_get_widget (state->gui, type_group[5]);
 	/* xgettext : %d gives the percentage of the item number in the autofilter. */
 	/* This is input to ngettext. */
 	label = g_strdup_printf
-		(ngettext ("Show the bottom %3d%% of all items",
-			   "Show the bottom %3d%% of all items", val),
+		(ngettext ("Show the bottom %d%% of all items",
+			   "Show the bottom %d%% of all items", val),
 		 val);
 	gtk_button_set_label (GTK_BUTTON (w),label);
-	g_free(label);
-
-
+	g_free (label);
 }
 
 static void
@@ -286,7 +285,7 @@ cb_top10_type_changed (G_GNUC_UNUSED GtkToggleButton *button,
 	} else {
 		gtk_spin_button_set_range
 			(GTK_SPIN_BUTTON (spin), 1.,
-			 range_height(&(state->filter->r)) - 1);
+			 range_height (&(state->filter->r)) - 1);
 		gtk_label_set_text (GTK_LABEL (label), _("Count:"));
 	}
 }
@@ -307,7 +306,7 @@ init_operator (AutoFilterState *state, GnmFilterOp op, GnmValue const *v,
 	case GNM_FILTER_OP_GTE:		i = 4; break;
 	case GNM_FILTER_OP_LTE:		i = 6; break;
 	case GNM_FILTER_OP_NOT_EQUAL:	i = 2; break;
-	default :
+	default:
 		return;
 	}
 
@@ -437,7 +436,7 @@ dialog_auto_filter_expression (WBCGtk *wbcg,
 					   state->wbcg,
 					   GNM_DIALOG_DESTROY_CURRENT_SHEET_REMOVED);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify)cb_autofilter_destroy);
 
@@ -535,7 +534,7 @@ dialog_auto_filter (WBCGtk *wbcg,
 		gtk_spin_button_set_value (GTK_SPIN_BUTTON (w), cond->count);
 	else
 		gtk_spin_button_set_value (GTK_SPIN_BUTTON (w),
-				   range_height(&(state->filter->r))/2);
+				   range_height (&(state->filter->r)) / 2);
 	cb_top10_count_changed (GTK_SPIN_BUTTON (w), state);
 	cb_top10_type_changed (NULL, state);
 
@@ -567,7 +566,7 @@ dialog_auto_filter (WBCGtk *wbcg,
 					   state->wbcg,
 					   GNM_DIALOG_DESTROY_CURRENT_SHEET_REMOVED);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify)cb_autofilter_destroy);
 

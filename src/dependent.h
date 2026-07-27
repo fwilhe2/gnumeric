@@ -1,12 +1,12 @@
-#ifndef _GNM_DEPENDENT_H_
-# define _GNM_DEPENDENT_H_
+#ifndef GNM_DEPENDENT_H_
+#define GNM_DEPENDENT_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
 
 G_BEGIN_DECLS
 
-struct _GnmDependent {
+struct GnmDependent_ {
 	guint	  flags;
 	Sheet	 *sheet;
 	GnmExprTop const *texpr;
@@ -16,11 +16,24 @@ struct _GnmDependent {
 };
 
 typedef struct {
+	// Evaluate the dep
 	void (*eval)	   (GnmDependent *dep);
+
+	// Change the expression held by the dep.
 	void (*set_expr)   (GnmDependent *dep, GnmExprTop const *new_texpr);
-	GSList* (*changed) (GnmDependent *dep);
+
+	// Perform actions required when dep changes.  Returns a list of
+	// further deps that should be considered changed.
+	void (*changed) (GnmDependent *dep, GPtrArray *extra);
+
+	// In what position in the sheet does the dep sit?  (Optional.)
 	GnmCellPos* (*pos) (GnmDependent const *dep);
+
+	// Append a name for debugging purposes
 	void (*debug_name) (GnmDependent const *dep, GString *target);
+
+	// Is evaluation supposed to happen in array context?
+	gboolean q_array_context;
 } GnmDependentClass;
 
 typedef enum {
@@ -58,7 +71,7 @@ typedef enum {
 #define dependent_needs_recalc(dep)	((dep)->flags & DEPENDENT_NEEDS_RECALC)
 #define dependent_is_linked(dep)	((dep)->flags & DEPENDENT_IS_LINKED)
 
-struct _GnmDepContainer {
+struct GnmDepContainer_ {
 	GnmDependent *head, *tail;
 
 	/* Large ranges hashed on 'range' to accelerate duplicate culling. This
@@ -92,6 +105,7 @@ void	 dependent_set_sheet	   (GnmDependent *dep, Sheet *sheet);
 void	 dependent_link		   (GnmDependent *dep);
 void	 dependent_unlink	   (GnmDependent *dep);
 void	 dependent_queue_recalc	   (GnmDependent *dep);
+void     dependent_queue_recalc_list (GPtrArray *deps);
 void	 dependent_add_dynamic_dep (GnmDependent *dep, GnmRangeRef const *rr);
 
 gboolean dependent_is_volatile     (GnmDependent *dep);
@@ -103,9 +117,9 @@ void dependent_move (GnmDependent *dep, int dx, int dy);
 GOUndo  *dependents_relocate	    (GnmExprRelocateInfo const *info);
 void	 dependents_link	    (GSList *deps);
 
-void	 gnm_cell_eval		    (GnmCell *cell);
-void	 cell_queue_recalc	    (GnmCell *cell);
-void	 cell_foreach_dep	    (GnmCell const *cell, GnmDepFunc func, gpointer user);
+void	 gnm_dep_cell_eval	    (GnmCell *cell);
+void     gnm_dep_deps_of_cellpos    (Sheet const *sheet, int col, int row, GPtrArray *deps);
+void     gnm_dep_deps_of_cell       (GnmCell const *cell, GPtrArray *deps);
 
 void sheet_region_queue_recalc	  (Sheet const *sheet, GnmRange const *range);
 void dependents_invalidate_sheet  (Sheet *sheet, gboolean destroy);
@@ -162,4 +176,4 @@ void dependent_debug_name (GnmDependent const *dep, GString *target);
 
 G_END_DECLS
 
-#endif /* _GNM_DEPENDENT_H_ */
+#endif /* GNM_DEPENDENT_H_ */

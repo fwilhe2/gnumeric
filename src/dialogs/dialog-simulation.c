@@ -42,6 +42,7 @@
 
 typedef GnmGenericToolState SimulationState;
 
+// Why globals?
 static GtkTextBuffer   *results_buffer;
 static int             results_sim_index;
 static simulation_t    *current_sim;
@@ -146,7 +147,7 @@ prepare_ranges (simulation_t *sim)
 static void
 update_log (SimulationState *state, simulation_t *sim)
 {
-	char const *txt [6] = {
+	char const *txt[6] = {
 		_("Simulations"), _("Iterations"), _("# Input variables"),
 		_("# Output variables"), _("Runtime"), _("Run on")
 	};
@@ -193,7 +194,7 @@ update_log (SimulationState *state, simulation_t *sim)
 
 		gtk_list_store_append (store, &iter);
 		gtk_list_store_set (store, &iter, 0, txt [i], 1, buf->str, -1);
-		g_string_free (buf, FALSE);
+		g_string_free (buf, TRUE);
 	}
 
 	path = gtk_tree_path_new_from_string ("0");
@@ -238,7 +239,7 @@ update_results_view (simulation_t *sim)
 				   sim->stats [results_sim_index]->max [i]);
 
 	gtk_text_buffer_set_text (results_buffer, buf->str, strlen (buf->str));
-	g_string_free (buf, FALSE);
+	g_string_free (buf, TRUE);
 }
 
 static void
@@ -292,7 +293,7 @@ static void
 simulation_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
 			  SimulationState *state)
 {
-	data_analysis_output_t  dao;
+	data_analysis_output_t  *dao;
 	GtkWidget               *w;
 	gchar const		*err;
 	static simulation_t     sim;
@@ -305,7 +306,7 @@ simulation_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
 	sim.outputs = gnm_expr_entry_parse_as_value
 		(state->input_entry_2, state->sheet);
 
-        parse_output ((GnmGenericToolState *) state, &dao);
+        dao = dao_parse_output ((GnmGenericToolState *) state);
 
 	if (prepare_ranges (&sim)) {
 		err = (gchar *) N_("Invalid variable range was given");
@@ -334,7 +335,7 @@ simulation_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
 	sim.max_time = gtk_spin_button_get_value (GTK_SPIN_BUTTON (w)) - 1;
 
 	sim.start = g_get_monotonic_time ();
-	err = simulation_tool (GNM_WBC (state->wbcg), &dao, &sim);
+	err = simulation_tool (GNM_WBC (state->wbcg), dao, &sim);
 	sim.end = g_get_monotonic_time ();
 
 	if (err == NULL) {
@@ -350,6 +351,7 @@ simulation_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
  out:
 	value_release (sim.inputs);
 	value_release (sim.outputs);
+	dao_free (dao);
 
 	if (err != NULL)
 		error_in_entry ((GnmGenericToolState *) state,
@@ -379,8 +381,12 @@ init_results_view (SimulationState *state)
 	GtkTextView     *view;
 	GtkTextTagTable *tag_table;
 
+	if (results_buffer)
+		g_object_unref (results_buffer);
+
 	tag_table      = gtk_text_tag_table_new ();
 	results_buffer = gtk_text_buffer_new (tag_table);
+	g_object_unref (tag_table);
 	view = GTK_TEXT_VIEW (go_gtk_builder_get_widget (state->gui,
 						    "results-view"));
 	gtk_text_view_set_buffer (view, results_buffer);

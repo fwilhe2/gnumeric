@@ -1,4 +1,3 @@
-
 /*
  * print.c: Printing routines for Gnumeric
  *
@@ -39,7 +38,6 @@
 #include <ranges.h>
 #include <parse-util.h>
 #include <style-font.h>
-#include <gnumeric-conf.h>
 #include <goffice/goffice.h>
 
 #include <gsf/gsf-meta-names.h>
@@ -105,6 +103,11 @@ typedef struct {
 } PaginationInfo;
 
 
+/**
+ * gnm_print_range_get_type:
+ *
+ * Returns: the GType for #PrintRange.
+ **/
 GType
 gnm_print_range_get_type (void)
 {
@@ -168,13 +171,23 @@ static void
 printing_instance_delete (PrintingInstance *pi)
 {
 	g_list_free_full (pi->gnmSheets, sheet_print_info_free);
-	gnm_print_hf_render_info_destroy (pi->hfi);
+	gnm_print_hf_render_info_free (pi->hfi);
 	if (pi->progress) {
 		gtk_widget_destroy (pi->progress);
 	}
 	g_free (pi);
 }
 
+/**
+ * gnm_print_sheet_objects:
+ * @cr: #cairo_t
+ * @sheet: #Sheet
+ * @range: (nullable): #GnmRange
+ * @base_x: base X coordinate
+ * @base_y: base Y coordinate
+ *
+ * Prints objects on @sheet within @range.
+ **/
 void
 gnm_print_sheet_objects (cairo_t *cr,
 			 Sheet const *sheet,
@@ -264,12 +277,11 @@ gnm_print_sheet_objects (cairo_t *cr,
 }
 
 static void
-print_page_cells (G_GNUC_UNUSED GtkPrintContext   *context,
-		  G_GNUC_UNUSED PrintingInstance * pi,
+print_page_cells (PangoContext *pcontext,
 		  cairo_t *cr, Sheet const *sheet, GnmRange *range,
 		  double base_x, double base_y)
 {
-	gnm_gtk_print_cell_range (cr, sheet, range,
+	gnm_gtk_print_cell_range (pcontext, cr, sheet, range,
 				  base_x, base_y,
 				  (GnmPrintInformation const *) sheet->print_info);
 	gnm_print_sheet_objects (cr, sheet, range, base_x, base_y);
@@ -456,7 +468,7 @@ print_hf_element (GtkPrintContext *context, cairo_t *cr,
 	pango_cairo_show_layout (cr, layout);
 
 	g_object_unref (layout);
-	g_free(text);
+	g_free (text);
 }
 
 /*
@@ -481,14 +493,16 @@ print_hf_line (GtkPrintContext   *context, cairo_t *cr, Sheet const *sheet,
 
 /**
  * print_page:
- * @pj:        printing context
- * @gsr:      the page information
+ * @operation: #GtkPrintOperation
+ * @context: #GtkPrintContext
+ * @pi: #PrintingInstance
+ * @gsr: the page information
  *
  * Excel prints repeated rows like this: Pages up to and including the page
  * where the first of the repeated rows "naturally" occurs are printed in
  * the normal way. On subsequent pages, repated rows are printed before the
  * regular flow.
- */
+ **/
 static gboolean
 print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 	    GtkPrintContext   *context,
@@ -511,6 +525,7 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 	gdouble rep_col_width = 0.;
 	gdouble dir = (sheet->text_is_rtl ? -1. : 1.);
 	GnmRange r_repeating_intersect;
+	PangoContext *pcontext;
 
 	px = pinfo->scaling.percentage.x / 100.;
 	py = pinfo->scaling.percentage.y / 100.;
@@ -519,6 +534,8 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 		px = 1.;
 	if (py <= 0.)
 		py = 1.;
+
+	pcontext = gtk_print_context_create_pango_context (context);
 
 	cr = gtk_print_context_get_cairo_context (context);
 	print_info_get_margins (pinfo, &header, &footer, &left, &right,
@@ -586,7 +603,6 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 			sheet_object_draw_cairo_sized (so, cr, width, height);
 		}
 	} else {
-
 		if (pinfo->center_horizontally == 1 || pinfo->center_vertically == 1) {
 			double shift_x = 0;
 			double shift_y = 0;
@@ -628,7 +644,7 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 /* printing repeated row/col intersect */
 
 		if ((gsr->n_rep_rows > 0) && (gsr->n_rep_cols > 0)) {
-			print_page_cells (context, pi, cr, sheet,
+			print_page_cells (pcontext, cr, sheet,
 					  &r_repeating_intersect,
 					  dir * GNM_COL_MARGIN, -GNM_ROW_MARGIN);
 		}
@@ -642,7 +658,7 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 			cairo_save (cr);
 			if (gsr->n_rep_cols > 0)
 				cairo_translate (cr, dir * rep_col_width, 0 );
-			print_page_cells (context, pi, cr, sheet, &r,
+			print_page_cells (pcontext, cr, sheet, &r,
 					  dir * GNM_COL_MARGIN, -GNM_ROW_MARGIN);
 			cairo_restore (cr);
 			cairo_translate (cr, 0, rep_row_height );
@@ -654,18 +670,20 @@ print_page (G_GNUC_UNUSED GtkPrintOperation *operation,
 			GnmRange r;
 			range_init (&r, gsr->first_rep_cols, gsr->range.start.row,
 				    gsr->first_rep_cols + gsr->n_rep_cols - 1, gsr->range.end.row);
-			print_page_cells (context, pi, cr, sheet, &r,
+			print_page_cells (pcontext, cr, sheet, &r,
 					  dir * GNM_COL_MARGIN, -GNM_ROW_MARGIN);
 			cairo_translate (cr, dir * rep_col_width, 0 );
 		}
 
 /* printing page content  */
 
-		print_page_cells (context, pi, cr, sheet, &gsr->range,
+		print_page_cells (pcontext, cr, sheet, &gsr->range,
 				  dir * GNM_COL_MARGIN, -GNM_ROW_MARGIN);
 	}
 
 	cairo_restore (cr);
+	g_object_unref (pcontext);
+
 	return 1;
 }
 
@@ -881,10 +899,10 @@ compute_sheet_pages_add_sheet (PrintingInstance * pi, Sheet const *sheet,
 {
 	SheetPrintInfo *spi = g_new0 (SheetPrintInfo, 1);
 
-	spi->sheet = (Sheet *) sheet;
+	spi->sheet = (Sheet *)sheet;
 	spi->selection = selection;
 	spi->ignore_printarea = ignore_printarea;
-	pi->gnmSheets = g_list_append(pi->gnmSheets, spi);
+	pi->gnmSheets = g_list_append (pi->gnmSheets, spi);
 }
 
 static Sheet *
@@ -1110,7 +1128,7 @@ compute_pages (G_GNUC_UNUSED GtkPrintOperation *operation,
 			Sheet *sheet = workbook_sheet_by_index (wb, i);
 			if (sheet->print_info->do_not_print)
 				continue;
-			if (!sheet_is_visible(sheet))
+			if (!sheet_is_visible (sheet))
 				continue;
 			compute_sheet_pages_add_sheet (pi, sheet,
 						       FALSE, FALSE);
@@ -1133,7 +1151,7 @@ compute_pages (G_GNUC_UNUSED GtkPrintOperation *operation,
 		ct = 0;
 		for (i = 0; i < n; i++){
 			Sheet *sheet = workbook_sheet_by_index (wb, i);
-			if (sheet_is_visible(sheet))
+			if (sheet_is_visible (sheet))
 				ct++;
 			else
 				continue;
@@ -1188,7 +1206,7 @@ static void
 print_job_info_destroy (PrintJobInfo *pj)
 {
 	g_object_unref (pj->gp_config);
-	gnm_print_hf_render_info_destroy (pj->render_info);
+	gnm_print_hf_render_info_free (pj->render_info);
 	if (pj->decoration_layout)
 		g_object_unref (pj->decoration_layout);
 	if (pj->print_context)
@@ -1397,7 +1415,6 @@ gnm_draw_page_cb (GtkPrintOperation *operation,
 		  gint               page_nr,
 		  gpointer           user_data)
 {
-
 	PrintingInstance * pi = (PrintingInstance *) user_data;
 	SheetPageRange * gsr;
 
@@ -1461,7 +1478,7 @@ workbook_visible_sheet_count (Workbook *wb)
 
 	for (i = 0; i < n; i++) {
 		Sheet *sheet = workbook_sheet_by_index (wb, i);
-		if (sheet_is_visible(sheet))
+		if (sheet_is_visible (sheet))
 			count++;
 	}
 	return count;
@@ -1723,9 +1740,7 @@ gnm_print_uri_change_extension (char const *uri, GtkPrintSettings* settings)
 		 GTK_PRINT_SETTINGS_OUTPUT_FILE_FORMAT);
 	gchar *base;
 	gchar *used_ext;
-	gint strip;
 	gchar *res;
-	gint uri_len = strlen(uri);
 
 	if (ext == NULL) {
 		ext = "pdf";
@@ -1737,14 +1752,26 @@ gnm_print_uri_change_extension (char const *uri, GtkPrintSettings* settings)
 	base     = g_path_get_basename (uri);
 	used_ext = strrchr (base, '.');
 	if (used_ext == NULL)
-		return g_strconcat (uri, ".", ext, NULL);
-	strip = strlen (base) - (used_ext - base);
-	res = g_strndup (uri, uri_len - strip + 1 + strlen (ext));
-	res[uri_len - strip] = '.';
-	strcpy (res + uri_len - strip + 1, ext);
+		res = g_strconcat (uri, ".", ext, NULL);
+	else {
+		int uri_len = strlen (uri);
+		int strip = strlen (base) - (used_ext - base);
+		res = g_strdup_printf ("%.*s.%s", uri_len - strip, uri, ext);
+	}
+	g_free (base);
 	return res;
 }
 
+/**
+ * gnm_print_sheet:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @preview: whether to preview
+ * @default_range: #PrintRange
+ * @export_dst: (nullable): #GsfOutput
+ *
+ * Prints @sheet.
+ **/
 void
 gnm_print_sheet (WorkbookControl *wbc, Sheet *sheet,
 		 gboolean preview, PrintRange default_range,
@@ -1760,10 +1787,12 @@ gnm_print_sheet (WorkbookControl *wbc, Sheet *sheet,
 	gchar *tmp_file_name = NULL;
 	int tmp_file_fd = -1;
 	gboolean preview_via_pdf = FALSE;
-	PrintRange pr_translator[] = {GNM_PRINT_ACTIVE_SHEET, GNM_PRINT_ALL_SHEETS,
-				      GNM_PRINT_ALL_SHEETS, GNM_PRINT_ACTIVE_SHEET,
-				      GNM_PRINT_SHEET_SELECTION, GNM_PRINT_ACTIVE_SHEET,
-				      GNM_PRINT_SHEET_SELECTION_IGNORE_PRINTAREA};
+	static const PrintRange pr_translator[] = {
+		GNM_PRINT_ACTIVE_SHEET, GNM_PRINT_ALL_SHEETS,
+		GNM_PRINT_ALL_SHEETS, GNM_PRINT_ACTIVE_SHEET,
+		GNM_PRINT_SHEET_SELECTION, GNM_PRINT_ACTIVE_SHEET,
+		GNM_PRINT_SHEET_SELECTION_IGNORE_PRINTAREA
+	};
 	GODoc *doc;
 	gchar *output_uri = NULL;
 	gchar const *saved_uri = NULL;
@@ -1976,7 +2005,6 @@ gnm_draw_so_page_cb (G_GNUC_UNUSED GtkPrintOperation *operation,
 		     G_GNUC_UNUSED gint               page_nr,
 		     gpointer                         user_data)
 {
-
 	SheetObject *so = (SheetObject *) user_data;
 	cairo_t *cr= gtk_print_context_get_cairo_context (context);
 	Sheet *sheet = sheet_object_get_sheet (so);
@@ -1989,10 +2017,12 @@ gnm_draw_so_page_cb (G_GNUC_UNUSED GtkPrintOperation *operation,
 
 /**
  * gnm_print_so:
- * @wbc:
- * @sos: (element-type SheetObject) (transfer none):
- * @export_dst:
- */
+ * @wbc: #WorkbookControl
+ * @sos: (element-type SheetObject) (transfer none): sheet objects to print
+ * @export_dst: (nullable): #GsfOutput
+ *
+ * Prints a list of sheet objects.
+ **/
 void
 gnm_print_so (WorkbookControl *wbc, GPtrArray *sos,
 	      GsfOutput *export_dst)

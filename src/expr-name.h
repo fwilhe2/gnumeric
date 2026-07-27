@@ -1,5 +1,5 @@
-#ifndef _GNM_EXPR_NAME_H_
-# define _GNM_EXPR_NAME_H_
+#ifndef GNM_EXPR_NAME_H_
+#define GNM_EXPR_NAME_H_
 
 #include <gnumeric.h>
 #include <position.h>
@@ -7,13 +7,12 @@
 
 G_BEGIN_DECLS
 
-struct _GnmNamedExpr {
+struct GnmNamedExpr_ {
 	int	    ref_count;
 	GOString   *name;
 	GnmParsePos    pos;
 	GHashTable *dependents;
 	GnmExprTop const *texpr;
-	gboolean    is_placeholder;
 	gboolean    is_hidden;
 	gboolean    is_permanent;
 	gboolean    is_editable;
@@ -25,10 +24,12 @@ gboolean expr_name_validate (const char *name);
 GType         gnm_named_expr_get_type (void);
 GnmNamedExpr *expr_name_new    (char const *name);
 GnmNamedExpr *expr_name_lookup (GnmParsePos const *pos, char const *name);
-GnmNamedExpr *expr_name_add    (GnmParsePos const *pp, char const *name,
+GnmNamedExpr *expr_name_add_unlinked (GnmParsePos const *pp, char const *name,
 				GnmExprTop const *texpr, char **error_msg,
-				gboolean link_to_container,
 				GnmNamedExpr *stub);
+GnmNamedExpr *expr_name_add (GnmParsePos const *pp, char const *name,
+			     GnmExprTop const *texpr, char **error_msg,
+			     GnmNamedExpr *stub);
 void expr_name_perm_add        (Sheet *sheet,
 				char const *name,
 				GnmExprTop const *texpr,
@@ -44,11 +45,11 @@ const char *expr_name_name    (GnmNamedExpr const *nexpr);
 gboolean expr_name_set_name   (GnmNamedExpr *nexpr, const char *new_name);
 
 gboolean expr_name_is_placeholder (GnmNamedExpr const *ne);
-void expr_name_set_is_placeholder (GnmNamedExpr *nexpr, gboolean is_placeholder);
 
 char    *expr_name_as_string  (GnmNamedExpr const *nexpr, GnmParsePos const *pp,
 			       GnmConventions const *fmt);
-char    *expr_name_set_pos    (GnmNamedExpr *nexpr, GnmParsePos const *pp);
+gboolean expr_name_set_pos    (GnmNamedExpr *nexpr, GnmParsePos const *pp,
+			       char **why);
 void	 expr_name_set_expr   (GnmNamedExpr *nexpr, GnmExprTop const *texpr);
 void	 expr_name_add_dep    (GnmNamedExpr *nexpr, GnmDependent *dep);
 void	 expr_name_remove_dep (GnmNamedExpr *nexpr, GnmDependent *dep);
@@ -84,4 +85,4 @@ gboolean gnm_named_expr_collection_sanity_check (GnmNamedExprCollection *names,
 
 G_END_DECLS
 
-#endif /* _GNM_EXPR_NAME_H_ */
+#endif /* GNM_EXPR_NAME_H_ */

@@ -64,7 +64,9 @@ gnumeric_varp (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_var_pop,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -93,7 +95,9 @@ gnumeric_var (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_var_est,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -120,7 +124,9 @@ gnumeric_stdev (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_stddev_est,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -146,7 +152,9 @@ gnumeric_stdevp (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_stddev_pop,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -170,20 +178,16 @@ static GnmFuncHelp const help_rank[] = {
 static GnmValue *
 gnumeric_rank (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float *xs;
 	int i, r, n;
 	GnmValue *result = NULL;
-	gnm_float x;
-	gboolean increasing;
-
-	x = value_get_as_float (argv[0]);
-	xs = collect_floats_value (argv[1], ei->pos,
-				   COLLECT_IGNORE_STRINGS |
-				   COLLECT_IGNORE_BOOLS |
-				   COLLECT_IGNORE_BLANKS |
-				   COLLECT_ORDER_IRRELEVANT,
-				   &n, &result);
-	increasing = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
+	gnm_float x = value_get_as_float (argv[0]);
+	gnm_float *xs = collect_floats_value (argv[1], ei->pos,
+					      COLLECT_IGNORE_STRINGS |
+					      COLLECT_IGNORE_BOOLS |
+					      COLLECT_IGNORE_BLANKS |
+					      COLLECT_ORDER_IRRELEVANT,
+					      &n, &result);
+	gboolean increasing = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
 
 	if (result)
 		goto out;
@@ -222,20 +226,16 @@ static GnmFuncHelp const help_rank_avg[] = {
 static GnmValue *
 gnumeric_rank_avg (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float *xs;
 	int i, r, n, t;
 	GnmValue *result = NULL;
-	gnm_float x;
-	gboolean increasing;
-
-	x = value_get_as_float (argv[0]);
-	xs = collect_floats_value (argv[1], ei->pos,
-				   COLLECT_IGNORE_STRINGS |
-				   COLLECT_IGNORE_BOOLS |
-				   COLLECT_IGNORE_BLANKS |
-				   COLLECT_ORDER_IRRELEVANT,
-				   &n, &result);
-	increasing = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
+	gnm_float x = value_get_as_float (argv[0]);
+	gnm_float *xs = collect_floats_value (argv[1], ei->pos,
+					      COLLECT_IGNORE_STRINGS |
+					      COLLECT_IGNORE_BOOLS |
+					      COLLECT_IGNORE_BLANKS |
+					      COLLECT_ORDER_IRRELEVANT,
+					      &n, &result);
+	gboolean increasing = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
 
 	if (result)
 		goto out;
@@ -315,7 +315,7 @@ gnumeric_trimmean (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_covar[] = {
 	{ GNM_FUNC_HELP_NAME, F_("COVAR:covariance of two data sets")},
 	{ GNM_FUNC_HELP_ARG, F_("array1:first data set")},
-	{ GNM_FUNC_HELP_ARG, F_("array2:set data set")},
+	{ GNM_FUNC_HELP_ARG, F_("array2:second data set")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("Strings and empty cells are simply ignored.") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, F_("Let us assume that the cells A1, A2, ..., A5 contain numbers "
@@ -345,7 +345,7 @@ gnumeric_covar (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_covariance_s[] = {
 	{ GNM_FUNC_HELP_NAME, F_("COVARIANCE.S:sample covariance of two data sets")},
 	{ GNM_FUNC_HELP_ARG, F_("array1:first data set")},
-	{ GNM_FUNC_HELP_ARG, F_("array2:set data set")},
+	{ GNM_FUNC_HELP_ARG, F_("array2:second data set")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("Strings and empty cells are simply ignored.") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, F_("Let us assume that the cells A1, A2, ..., A5 contain numbers "
@@ -449,6 +449,26 @@ gnumeric_normsdist (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float x = value_get_as_float (argv[0]);
 
 	return value_new_float (pnorm (x, 0, 1, TRUE, FALSE));
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_gauss[] = {
+	{ GNM_FUNC_HELP_NAME, F_("GAUSS:standard normal distribution area")},
+	{ GNM_FUNC_HELP_ARG, F_("x:observation")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("GAUSS(@{x}) returns the probability that a member of a standard normal population will fall between the mean and @{x} standard deviations from the mean.")},
+	{ GNM_FUNC_HELP_NOTE, F_("GAUSS(@{x}) is equivalent to NORMSDIST(@{x}) - 0.5.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXAMPLES, "=GAUSS(2)" },
+	{ GNM_FUNC_HELP_SEEALSO, "NORMDIST,NORMSDIST"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_gauss (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	gnm_float x = value_get_as_float (argv[0]);
+	return value_new_float (gnm_erf (x / M_SQRT2gnum) / 2);
 }
 
 /***************************************************************************/
@@ -569,11 +589,9 @@ static GnmFuncHelp const help_loginv[] = {
 static GnmValue *
 gnumeric_loginv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float p, mean, stddev;
-
-	p = value_get_as_float (argv[0]);
-	mean = value_get_as_float (argv[1]);
-	stddev = value_get_as_float (argv[2]);
+	gnm_float p = value_get_as_float (argv[0]);
+	gnm_float mean = value_get_as_float (argv[1]);
+	gnm_float stddev = value_get_as_float (argv[2]);
 
 	if (p < 0 || p > 1 || stddev <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -618,6 +636,8 @@ static GnmFuncHelp const help_mode[] = {
 static GnmValue *
 gnumeric_mode (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
+	// MODE appears to be special in that it does not coerce
+	// direct string args
 	return float_range_function (argc, argv, ei,
 				     gnm_range_mode,
 				     COLLECT_IGNORE_STRINGS |
@@ -746,7 +766,9 @@ gnumeric_harmean (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_harmonic_mean,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_NUM);
 }
@@ -772,7 +794,9 @@ gnumeric_geomean (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_geometric_mean,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_NUM);
 }
@@ -797,7 +821,9 @@ gnumeric_count (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 				     gnm_range_count,
 				     COLLECT_IGNORE_ERRORS |
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO3 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -847,7 +873,9 @@ gnumeric_average (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_average,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -880,7 +908,9 @@ gnumeric_min (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_min0,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS |
 				     COLLECT_ORDER_IRRELEVANT,
 				     GNM_ERROR_VALUE);
@@ -914,7 +944,9 @@ gnumeric_max (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_max0,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS |
 				     COLLECT_ORDER_IRRELEVANT,
 				     GNM_ERROR_VALUE);
@@ -943,7 +975,9 @@ gnumeric_skew (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_skew_est,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -967,6 +1001,7 @@ gnumeric_skewp (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_skew_pop,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
@@ -996,7 +1031,7 @@ gnumeric_expondist (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float y = value_get_as_float (argv[1]);
 	gboolean cuml = value_get_as_checked_bool (argv[2]);
 
-	if (x < 0.0 || y <= 0.0)
+	if (x < 0 || y <= 0)
 		return value_new_error_NUM (ei->pos);
 
 	if (cuml)
@@ -1092,11 +1127,9 @@ static GnmFuncHelp const help_gammainv[] = {
 static GnmValue *
 gnumeric_gammainv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float p, alpha, beta;
-
-	p = value_get_as_float (argv[0]);
-	alpha = value_get_as_float (argv[1]);
-	beta = value_get_as_float (argv[2]);
+	gnm_float p = value_get_as_float (argv[0]);
+	gnm_float alpha = value_get_as_float (argv[1]);
+	gnm_float beta = value_get_as_float (argv[2]);
 
 	if (p < 0 || p > 1 || alpha <= 0 || beta <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -1304,15 +1337,12 @@ static GnmFuncHelp const help_beta_dist[] = {
 static GnmValue *
 gnumeric_beta_dist (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float x, alpha, beta, a, b;
-	gboolean cuml;
-
-	x = value_get_as_float (argv[0]);
-	alpha = value_get_as_float (argv[1]);
-	beta = value_get_as_float (argv[2]);
-	cuml = value_get_as_checked_bool (argv[3]);
-	a = argv[4] ? value_get_as_float (argv[4]) : 0;
-	b = argv[5] ? value_get_as_float (argv[5]) : 1;
+	gnm_float x = value_get_as_float (argv[0]);
+	gnm_float alpha = value_get_as_float (argv[1]);
+	gnm_float beta = value_get_as_float (argv[2]);
+	gboolean cuml = value_get_as_checked_bool (argv[3]);
+	gnm_float a = argv[4] ? value_get_as_float (argv[4]) : 0;
+	gnm_float b = argv[5] ? value_get_as_float (argv[5]) : 1;
 
 	if (x < a || x > b || a >= b || alpha <= 0 || beta <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -1345,13 +1375,11 @@ static GnmFuncHelp const help_betainv[] = {
 static GnmValue *
 gnumeric_betainv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float p, alpha, beta, a, b;
-
-	p = value_get_as_float (argv[0]);
-	alpha = value_get_as_float (argv[1]);
-	beta = value_get_as_float (argv[2]);
-	a = argv[3] ? value_get_as_float (argv[3]) : 0;
-	b = argv[4] ? value_get_as_float (argv[4]) : 1;
+	gnm_float p = value_get_as_float (argv[0]);
+	gnm_float alpha = value_get_as_float (argv[1]);
+	gnm_float beta = value_get_as_float (argv[2]);
+	gnm_float a = argv[3] ? value_get_as_float (argv[3]) : 0;
+	gnm_float b = argv[4] ? value_get_as_float (argv[4]) : 1;
 
 	if (p < 0 || p > 1 || a >= b || alpha <= 0 || beta <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -1496,68 +1524,107 @@ static gnm_float
 random_landau_pdf (gnm_float x)
 {
 	static const gnm_float P1[5] = {
-		0.4259894875E0, -0.1249762550E0, 0.3984243700E-1,
-		-0.6298287635E-2, 0.1511162253E-2
+		GNM_const(0.4259894875E0),
+		GNM_const(-0.1249762550E0),
+		GNM_const(0.3984243700E-1),
+		GNM_const(-0.6298287635E-2),
+		GNM_const(0.1511162253E-2)
 	};
 	static const gnm_float P2[5] = {
-		0.1788541609E0, 0.1173957403E0, 0.1488850518E-1,
-		-0.1394989411E-2, 0.1283617211E-3
+		GNM_const(0.1788541609E0),
+		GNM_const(0.1173957403E0),
+		GNM_const(0.1488850518E-1),
+		GNM_const(-0.1394989411E-2),
+		GNM_const(0.1283617211E-3)
 	};
 	static const gnm_float P3[5] = {
-		0.1788544503E0, 0.9359161662E-1, 0.6325387654E-2,
-		0.6611667319E-4, -0.2031049101E-5
+		GNM_const(0.1788544503E0),
+		GNM_const(0.9359161662E-1),
+		GNM_const(0.6325387654E-2),
+		GNM_const(0.6611667319E-4),
+		GNM_const(-0.2031049101E-5)
 	};
 	static const gnm_float P4[5] = {
-		0.9874054407E0, 0.1186723273E3, 0.8492794360E3,
-		-0.7437792444E3, 0.4270262186E3
+		GNM_const(0.9874054407E0),
+		GNM_const(0.1186723273E3),
+		GNM_const(0.8492794360E3),
+		GNM_const(-0.7437792444E3),
+		GNM_const(0.4270262186E3)
 	};
 	static const gnm_float P5[5] = {
-		0.1003675074E1, 0.1675702434E3, 0.4789711289E4,
-		0.2121786767E5, -0.2232494910E5
+		GNM_const(0.1003675074E1),
+		GNM_const(0.1675702434E3),
+		GNM_const(0.4789711289E4),
+		GNM_const(0.2121786767E5),
+		GNM_const(-0.2232494910E5)
 	};
 	static const gnm_float P6[5] = {
-		0.1000827619E1, 0.6649143136E3, 0.6297292665E5,
-		0.4755546998E6, -0.5743609109E7
+		GNM_const(0.1000827619E1),
+		GNM_const(0.6649143136E3),
+		GNM_const(0.6297292665E5),
+		GNM_const(0.4755546998E6),
+		GNM_const(-0.5743609109E7)
 	};
 
 	static const gnm_float Q1[5] = {
-		1.0, -0.3388260629E0, 0.9594393323E-1,
-		-0.1608042283E-1, 0.3778942063E-2
+		GNM_const(1.0),
+		GNM_const(-0.3388260629E0),
+		GNM_const(0.9594393323E-1),
+		GNM_const(-0.1608042283E-1),
+		GNM_const(0.3778942063E-2)
 	};
 	static const gnm_float Q2[5] = {
-		1.0, 0.7428795082E0, 0.3153932961E0,
-		0.6694219548E-1, 0.8790609714E-2
+		GNM_const(1.0),
+		GNM_const(0.7428795082E0),
+		GNM_const(0.3153932961E0),
+		GNM_const(0.6694219548E-1),
+		GNM_const(0.8790609714E-2)
 	};
 	static const gnm_float Q3[5] = {
-		1.0, 0.6097809921E0, 0.2560616665E0,
-		0.4746722384E-1, 0.6957301675E-2
+		GNM_const(1.0),
+		GNM_const(0.6097809921E0),
+		GNM_const(0.2560616665E0),
+		GNM_const(0.4746722384E-1),
+		GNM_const(0.6957301675E-2)
 	};
 	static const gnm_float Q4[5] = {
-		1.0, 0.1068615961E3, 0.3376496214E3,
-		0.2016712389E4, 0.1597063511E4
+		GNM_const(1.0),
+		GNM_const(0.1068615961E3),
+		GNM_const(0.3376496214E3),
+		GNM_const(0.2016712389E4),
+		GNM_const(0.1597063511E4)
 	};
 	static const gnm_float Q5[5] = {
-		1.0, 0.1569424537E3, 0.3745310488E4,
-		0.9834698876E4, 0.6692428357E5
+		GNM_const(1.0),
+		GNM_const(0.1569424537E3),
+		GNM_const(0.3745310488E4),
+		GNM_const(0.9834698876E4),
+		GNM_const(0.6692428357E5)
 	};
 	static const gnm_float Q6[5] = {
-		1.0, 0.6514101098E3, 0.5697473333E5,
-		0.1659174725E6, -0.2815759939E7
+		GNM_const(1.0),
+		GNM_const(0.6514101098E3),
+		GNM_const(0.5697473333E5),
+		GNM_const(0.1659174725E6),
+		GNM_const(-0.2815759939E7)
 	};
 
 	static const gnm_float A1[3] = {
-		0.4166666667E-1, -0.1996527778E-1, 0.2709538966E-1
+		GNM_const(0.4166666667E-1),
+		GNM_const(-0.1996527778E-1),
+		GNM_const(0.2709538966E-1)
 	};
 	static const gnm_float A2[2] = {
-		-0.1845568670E1, -0.4284640743E1
+		GNM_const(-0.1845568670E1),
+		GNM_const(-0.4284640743E1)
 	};
 
 	gnm_float U, V, DENLAN;
 
 	V = x;
-	if (V < -5.5) {
-		U      = gnm_exp (V + 1.0);
-		DENLAN = 0.3989422803 * (gnm_exp ( -1 / U) / gnm_sqrt (U)) *
+	if (V < GNM_const(-5.5)) {
+		U      = gnm_exp (V + 1);
+		DENLAN = GNM_const(0.3989422803) * (gnm_exp ( -1 / U) / gnm_sqrt (U)) *
 			(1 + (A1[0] + (A1[1] + A1[2] * U) * U) * U);
 	} else if (V < -1) {
 		U = gnm_exp (-V - 1);
@@ -1598,7 +1665,7 @@ random_landau_pdf (gnm_float x)
 			(Q6[0] + (Q6[1] + (Q6[2] + (Q6[3] + Q6[4] * U) * U)
 				  * U) * U);
 	} else {
-		U = 1 / (V - V * log(V) / (V + 1));
+		U = 1 / (V - V * gnm_log(V) / (V + 1));
 		DENLAN = U * U * (1 + (A2[0] + A2[1] * U) * U);
 	}
 
@@ -1692,6 +1759,7 @@ static GnmFuncHelp const help_binom_dist_range[] = {
 	{ GNM_FUNC_HELP_NOTE, F_("If @{p} < 0 or @{p} > 1 this function returns a #NUM! error.")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{start} > @{end} this function returns 0.")},
 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=BINOM.DIST.RANGE(5,0.8,3,4)" },
 	{ GNM_FUNC_HELP_SEEALSO, "BINOMDIST,R.PBINOM"},
 	{ GNM_FUNC_HELP_END }
@@ -1769,6 +1837,25 @@ gnumeric_critbinom (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (qbinom (alpha, trials, p, TRUE, FALSE));
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_phi[] = {
+	{ GNM_FUNC_HELP_NAME, F_("PHI:standard normal distribution density")},
+	{ GNM_FUNC_HELP_ARG, F_("x:observation")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("PHI(@{x}) returns the density of the standard normal distribution at @{x}.")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXAMPLES, "=PHI(0.75)" },
+	{ GNM_FUNC_HELP_SEEALSO, "NORMDIST,NORMSDIST"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_phi (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	gnm_float x = value_get_as_float (argv[0]);
+	return value_new_float (dnorm (x, 0, 1, FALSE));
 }
 
 /***************************************************************************/
@@ -1857,7 +1944,7 @@ gnumeric_confidence (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float stddev = value_get_as_float (argv[1]);
 	gnm_float size = gnm_fake_floor (value_get_as_float (argv[2]));
 
-	if (size == 0.)
+	if (size == 0)
 		return value_new_error_DIV0 (ei->pos);
 	if (size <= 0 || stddev <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -1890,7 +1977,7 @@ gnumeric_confidence_t (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float stddev = value_get_as_float (argv[1]);
 	gnm_float size = gnm_fake_floor (value_get_as_float (argv[2]));
 
-	if (size == 1.)
+	if (size == 1)
 		return value_new_error_DIV0 (ei->pos);
 	if (size <= 1 || stddev <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -2047,7 +2134,9 @@ gnumeric_kurt (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_kurtosis_m3_est,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -2072,6 +2161,7 @@ gnumeric_kurtp (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_kurtosis_m3_pop,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
@@ -2095,7 +2185,9 @@ gnumeric_avedev (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_avedev,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_NUM);
 }
@@ -2119,7 +2211,9 @@ gnumeric_devsq (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_devsq,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
 }
@@ -2142,7 +2236,7 @@ gnumeric_fisher (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float x = value_get_as_float (argv[0]);
 
-	if (x <= -1.0 || x >= 1.0)
+	if (x <= -1 || x >= 1)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_atanh (x));
@@ -2248,7 +2342,9 @@ gnumeric_median (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_median_inter_sorted,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS |
 				     COLLECT_SORT,
 				     GNM_ERROR_NUM);
@@ -2302,7 +2398,7 @@ gnumeric_ssmedian_calc (gnm_float const *sorted_data, int len,
 		sorted_data++;
 	}
 
-	return L_lower + (len / 2e0 - f_below) * interval / f_within;
+	return L_lower + (len / GNM_const(2.) - f_below) * interval / f_within;
 }
 
 static GnmValue *
@@ -2321,7 +2417,7 @@ gnumeric_ssmedian (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 				     &n, &result);
 	if (result)
 		goto done;
-	interval = argv[1] ? value_get_as_float (argv[1]) : 1.0;
+	interval = argv[1] ? value_get_as_float (argv[1]) : 1;
 
 	if (interval <= 0 || n == 0) {
 		result = value_new_error_NUM (ei->pos);
@@ -2483,11 +2579,9 @@ gnumeric_prob (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmValue *error = NULL;
 	int i, prob_n, x_n;
 	gnm_float *prob_vals = NULL, *x_vals = NULL;
-	gnm_float lower_limit, upper_limit;
 	gnm_float total_sum = 0, sum = 0;
-
-	lower_limit = value_get_as_float (argv[2]);
-	upper_limit = argv[3] ? value_get_as_float (argv[3]) : lower_limit;
+	gnm_float lower_limit = value_get_as_float (argv[2]);
+	gnm_float upper_limit = argv[3] ? value_get_as_float (argv[3]) : lower_limit;
 
 	x_vals = collect_floats_value
 		(argv[0], ei->pos,
@@ -2680,6 +2774,7 @@ gnumeric_averagea (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_average,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
@@ -2704,6 +2799,7 @@ gnumeric_maxa (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_max0,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS |
 				     COLLECT_ORDER_IRRELEVANT,
@@ -2729,6 +2825,7 @@ gnumeric_mina (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_min0,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS |
 				     COLLECT_ORDER_IRRELEVANT,
@@ -2759,6 +2856,7 @@ gnumeric_vara (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_var_est,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -2784,6 +2882,7 @@ gnumeric_varpa (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_var_pop,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -2812,6 +2911,7 @@ gnumeric_stdeva (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_stddev_est,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -2837,6 +2937,7 @@ gnumeric_stdevpa (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_stddev_pop,
 				     COLLECT_ZERO_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_ZEROONE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -3137,7 +3238,7 @@ gnumeric_percentile_exc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /***************************************************************************/
 
 static GnmFuncHelp const help_quartile[] = {
-	{ GNM_FUNC_HELP_NAME, F_("QUARTILE:the @{k}-th quartile of the data points (Hyndman-Fan method 7: N-1 basis)")},
+	{ GNM_FUNC_HELP_NAME, F_("QUARTILE:the @{quart}-th quartile of the data points (Hyndman-Fan method 7: N-1 basis)")},
 	{ GNM_FUNC_HELP_ARG, F_("array:data points")},
 	{ GNM_FUNC_HELP_ARG, F_("quart:a number from 0 to 4, indicating which quartile to calculate")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{array} is empty, this function returns a #NUM! error.") },
@@ -3167,7 +3268,7 @@ gnumeric_quartile (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		gnm_float q = gnm_fake_floor (value_get_as_float (argv[1]));
 		gnm_float res;
 
-		if (gnm_range_fractile_inter_sorted (data, n, &res, q / 4.0))
+		if (gnm_range_fractile_inter_sorted (data, n, &res, q / 4))
 			result = value_new_error_NUM (ei->pos);
 		else
 			result = value_new_float (res);
@@ -3180,7 +3281,7 @@ gnumeric_quartile (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /***************************************************************************/
 
 static GnmFuncHelp const help_quartile_exc[] = {
-	{ GNM_FUNC_HELP_NAME, F_("QUARTILE.EXC:the @{k}-th quartile of the data points (Hyndman-Fan method 6: N+1 basis)")},
+	{ GNM_FUNC_HELP_NAME, F_("QUARTILE.EXC:the @{quart}-th quartile of the data points (Hyndman-Fan method 6: N+1 basis)")},
 	{ GNM_FUNC_HELP_ARG, F_("array:data points")},
 	{ GNM_FUNC_HELP_ARG, F_("quart:a number from 1 to 3, indicating which quartile to calculate")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{array} is empty, this function returns a #NUM! error.") },
@@ -3210,7 +3311,7 @@ gnumeric_quartile_exc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		if (n > 1) {
 			gnm_float q = gnm_fake_floor (value_get_as_float (argv[1]));
 			gnm_float res;
-			gnm_float fr = ((q / 4.0) * (n + 1) - 1)/(n-1);
+			gnm_float fr = ((q / 4) * (n + 1) - 1)/(n-1);
 
 			if (gnm_range_fractile_inter_sorted (data, n, &res, fr))
 				result = value_new_error_NUM (ei->pos);
@@ -3244,12 +3345,12 @@ gnumeric_ftest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	CollectFlags flags = COLLECT_IGNORE_STRINGS | COLLECT_IGNORE_BOOLS |
 		COLLECT_IGNORE_BLANKS;
-	gnm_float *xs = NULL, *ys = NULL;
+	gnm_float *ys = NULL;
 	int nx, ny;
 	GnmValue *res = NULL;
 	gnm_float p, varx, vary;
 
-	xs = collect_floats_value (argv[0], ei->pos, flags, &nx, &res);
+	gnm_float *xs = collect_floats_value (argv[0], ei->pos, flags, &nx, &res);
 	if (res)
 		goto out;
 
@@ -3265,7 +3366,7 @@ gnumeric_ftest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	}
 
 	p = pf (varx / vary, nx - 1, ny - 1, FALSE, FALSE);
-	if (p > 0.5) {
+	if (p > GNM_const(0.5)) {
 		/*
 		 * We need the other tail and 1-p might not be very accurate.
 		 */
@@ -3410,7 +3511,7 @@ ttest_equal_unequal (GnmFuncEvalInfo *ei,
 		gnm_float S = (vx / nx + vy / ny);
 		gnm_float c = (vx / nx) / S;
 		gnm_float cC = (vy / ny) / S;
-		dof = 1.0 / (c * c / (nx - 1) + cC * cC / (ny - 1));
+		dof = 1 / (c * c / (nx - 1) + cC * cC / (ny - 1));
 		t = gnm_abs (mx - my) / gnm_sqrt (S);
 	} else {
 		dof = nx + ny - 2;
@@ -3478,10 +3579,10 @@ gnumeric_frequency (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmValue *error = NULL, *res;
 	int *counts;
 	int i, nvalues, nbins;
-	gnm_float *values = NULL, *bins = NULL;
+	gnm_float *bins = NULL;
 
-	values = collect_floats_value (argv[0], ei->pos, flags,
-				       &nvalues, &error);
+	gnm_float *values = collect_floats_value (argv[0], ei->pos, flags,
+						  &nvalues, &error);
 	if (error) {
 		res = error;
 		goto out;
@@ -3512,7 +3613,6 @@ gnumeric_frequency (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	}
 
 	res = value_new_array_non_init (1, nbins + 1);
-	res->v_array.vals[0] = g_new (GnmValue *, nbins + 1);
 	for (i = 0; i < nbins + 1; i++)
 		res->v_array.vals[0][i] = value_new_float (counts[i]);
 	g_free (counts);
@@ -3563,7 +3663,6 @@ gnumeric_leverage (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 		res = value_new_array_non_init (x_cols, x_rows);
 		for (c = 0; c < x_cols; c++) {
-			res->v_array.vals[c] = g_new (GnmValue *, x_rows);
 			for (r = 0; r < x_rows; r++)
 				res->v_array.vals[c][r] =
 					value_new_float (x[r]);
@@ -3573,7 +3672,7 @@ gnumeric_leverage (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	g_free (x);
 
 out:
-	if (A) gnm_matrix_unref (A);
+	gnm_matrix_unref (A);
 	return res;
 }
 
@@ -3764,18 +3863,16 @@ gnumeric_linest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmRegData data;
 	gnm_regression_stat_t *extra_stat = NULL;
 	GORegressionResult regres;
-	GnmValue *result;
 	gnm_float *linres = NULL;
-	gboolean affine, withstat;
 	int i, dim;
 
-	result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
+	GnmValue *result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
 	if (result)
 		return result;
 	dim = data.dim;
 
-	affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
-	withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
+	gboolean affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
+	gboolean withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
 
 	linres = g_new (gnm_float, dim + 1);
 	extra_stat = gnm_regression_stat_new ();
@@ -3889,18 +3986,16 @@ gnumeric_logreg (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmRegData data;
 	gnm_regression_stat_t *extra_stat = NULL;
 	GORegressionResult regres;
-	GnmValue *result;
 	gnm_float *logres = NULL;
-	gboolean affine, withstat;
 	int i, dim;
 
-	result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
+	GnmValue *result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
 	if (result)
 		return result;
 	dim = data.dim;
 
-	affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
-	withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
+	gboolean affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
+	gboolean withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
 
 	logres = g_new (gnm_float, dim + 1);
 	extra_stat = gnm_regression_stat_new ();
@@ -4229,18 +4324,16 @@ gnumeric_logest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmRegData data;
 	gnm_regression_stat_t *extra_stat = NULL;
 	GORegressionResult regres;
-	GnmValue *result;
 	gnm_float *expres = NULL;
-	gboolean affine, withstat;
 	int i, dim;
 
-	result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
+	GnmValue *result = gnm_reg_data_collect (argv[0], argv[1], &data, ei->pos);
 	if (result)
 		return result;
 	dim = data.dim;
 
-	affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
-	withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
+	gboolean affine = argv[2] ? value_get_as_checked_bool (argv[2]) : TRUE;
+	gboolean withstat = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
 
 	expres = g_new (gnm_float, dim + 1);
 	extra_stat = gnm_regression_stat_new ();
@@ -4666,8 +4759,7 @@ free_values (GnmValue **values, int top)
 	int i;
 
 	for (i = 0; i < top; i++)
-		if (values [i])
-			value_release (values [i]);
+		value_release (values[i]);
 	g_free (values);
 }
 
@@ -4886,7 +4978,7 @@ random_rayleigh_tail_pdf (gnm_float x, gnm_float a, gnm_float sigma)
 		gnm_float u = x / sigma ;
 		gnm_float v = a / sigma ;
 
-		return (u / sigma) * gnm_exp ((v + u) * (v - u) / 2.0) ;
+		return (u / sigma) * gnm_exp ((v + u) * (v - u) / 2) ;
 	}
 }
 
@@ -5010,8 +5102,8 @@ gnumeric_lkstest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float *xs;
 	int n;
 	GnmValue *result = NULL;
-	gnm_float mu = 0.;
-	gnm_float sigma = 1.;
+	gnm_float mu = 0;
+	gnm_float sigma = 1;
 
 	xs = collect_floats_value (argv[0], ei->pos,
 				   COLLECT_IGNORE_STRINGS |
@@ -5044,7 +5136,7 @@ gnumeric_lkstest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		ys = gnm_range_sort (xs, n);
 
 		val = pnorm (ys[0], mu, sigma, TRUE, FALSE);
-		dplus = 1./(gnm_float)n - val;
+		dplus = 1 / (gnm_float)n - val;
 		dminus = val;
 
 		for (i = 1; i < n; i++) {
@@ -5067,39 +5159,40 @@ gnumeric_lkstest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		g_free (ys);
 
 		if (n > 100) {
-			stat = stat * gnm_pow (n/100., 0.49);
-			nd = 100.;
+			stat = stat * gnm_pow (n / GNM_const(100.), GNM_const(0.49));
+			nd = 100;
 		} else
 			nd = n;
 
-		p = gnm_exp (-7.01256 * stat * stat * (nd + 2.78019) + 2.99587 * stat * gnm_sqrt (nd + 2.78019)
-			     - 0.122119 + 0.974598/gnm_sqrt(nd) + 1.67997/nd);
+		p = gnm_exp (GNM_const(-7.01256) * stat * stat * (nd + GNM_const(2.78019)) +
+			     GNM_const(2.99587) * stat * gnm_sqrt (nd + GNM_const(2.78019))
+			     - GNM_const(0.122119) + GNM_const(0.974598) / gnm_sqrt(nd) + GNM_const(1.67997)/nd);
 
-		if (p > 0.1) {
-			stat = (gnm_sqrt (nd) - 0.01 + 0.85/gnm_sqrt (nd)) * stat;
-			if (stat <= 0.302)
-				p = 1.;
-			else if (stat <= 0.5)
-				p = 2.76773 - 19.828315 * stat
-					+ 80.709644 * stat * stat
-					- 138.55152 * stat * stat * stat
-					+ 81.218052 * stat * stat * stat * stat;
-			else if (stat <= 0.9)
-				p = -4.901232 + 40.662806 * stat
-					- 97.490286 * stat * stat
-					+ 94.029866 * stat * stat * stat
-					- 32.355711 * stat * stat * stat * stat;
-			else if (stat <= 1.31)
-				p = 6.198765 - 19.558097 * stat
-					+ 23.186922 * stat * stat
-					- 12.234627 * stat * stat * stat
-					+ 2.423045 * stat * stat * stat * stat;
+		if (p > GNM_const(0.1)) {
+			stat = (gnm_sqrt (nd) - GNM_const(0.01) +
+				GNM_const(0.85) / gnm_sqrt (nd)) * stat;
+			if (stat <= GNM_const(0.302))
+				p = 1;
+			else if (stat <= GNM_const(0.5))
+				p = GNM_const(2.76773) - GNM_const(19.828315) * stat
+					+ GNM_const(80.709644) * stat * stat
+					- GNM_const(138.55152) * stat * stat * stat
+					+ GNM_const(81.218052) * stat * stat * stat * stat;
+			else if (stat <= GNM_const(0.9))
+				p = GNM_const(-4.901232) + GNM_const(40.662806) * stat
+					- GNM_const(97.490286) * stat * stat
+					+ GNM_const(94.029866) * stat * stat * stat
+					- GNM_const(32.355711) * stat * stat * stat * stat;
+			else if (stat <= GNM_const(1.31))
+				p = GNM_const(6.198765) - GNM_const(19.558097) * stat
+					+ GNM_const(23.186922) * stat * stat
+					- GNM_const(12.234627) * stat * stat * stat
+					+ GNM_const(2.423045) * stat * stat * stat * stat;
 			else
-				p = 0.;
+				p = 0;
 		}
 
-		value_array_set (result, 0, 0,
-				 value_new_float (p));
+		value_array_set (result, 0, 0, value_new_float (p));
 	}
 
  out:
@@ -5156,7 +5249,8 @@ gnumeric_sftest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		zs = g_new (gnm_float, n);
 
 		for (i = 0; i < n; i++)
-			zs[i] = qnorm ((((gnm_float)(i+1))-3./8.)/(n+0.25), 0., 1., TRUE, FALSE);
+			zs[i] = qnorm ((((gnm_float)(i + 1)) - GNM_const(3.) / 8) /
+				       (n + GNM_const(0.25)), 0., 1., TRUE, FALSE);
 
 		if (gnm_range_correl_pop (ys, zs, n, &stat_)) {
 			value_array_set (result, 0, 0,
@@ -5174,8 +5268,8 @@ gnumeric_sftest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 			u = gnm_log (n);
 			v = gnm_log (u);
-			mu = -1.2725 + 1.0521 * (v - u);
-			sig = 1.0308 - 0.26758 * (v + 2./u);
+			mu = GNM_const(-1.2725) + GNM_const(1.0521) * (v - u);
+			sig = GNM_const(1.0308) - GNM_const(0.26758) * (v + 2 / u);
 
 			p = pnorm (gnm_log1p (-stat_), mu, sig, FALSE, FALSE);
 
@@ -5211,8 +5305,8 @@ gnumeric_cvmtest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float *xs;
 	int n;
 	GnmValue *result = NULL;
-	gnm_float mu = 0.;
-	gnm_float sigma = 1.;
+	gnm_float mu = 0;
+	gnm_float sigma = 1;
 
 	xs = collect_floats_value (argv[0], ei->pos,
 				   COLLECT_IGNORE_STRINGS |
@@ -5236,7 +5330,7 @@ gnumeric_cvmtest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 				 value_new_error_VALUE (ei->pos));
 	} else {
 		int i;
-		gnm_float total = 0.;
+		gnm_float total = 0;
 		gnm_float p;
 		gnm_float *ys;
 
@@ -5245,7 +5339,7 @@ gnumeric_cvmtest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		for (i = 0; i < n; i++) {
 			gnm_float val = pnorm (ys[i], mu, sigma, TRUE, FALSE);
 			gnm_float delta;
-			delta = val - (2*i+1)/(2. * n);
+			delta = val - (2 * i + 1) / (gnm_float)(2 * n);
 			total += (delta * delta);
 		}
 
@@ -5255,20 +5349,19 @@ gnumeric_cvmtest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 		g_free (ys);
 
-		total *= (1 + 0.5 / n);
-		if (total < 0.0275)
-			p = 1. - gnm_exp (-13.953 + 775.5 * total - 12542.61 * total * total);
-		else if (total < 0.051)
-			p = 1. - gnm_exp (-5.903 + 179.546 * total - 1515.29 * total * total);
-		else if (total < 0.092)
-			p = gnm_exp (0.886 - 31.62  * total - 10.897 * total * total);
-		else if (total < 1.)
-			p = gnm_exp (1.111 - 34.242 * total + 12.832 * total * total);
+		total *= (1 + GNM_const(0.5) / n);
+		if (total < GNM_const(0.0275))
+			p = 1 - gnm_exp (GNM_const(-13.953) + GNM_const(775.5) * total - GNM_const(12542.61) * total * total);
+		else if (total < GNM_const(0.051))
+			p = 1 - gnm_exp (GNM_const(-5.903) + GNM_const(179.546) * total - GNM_const(1515.29) * total * total);
+		else if (total < GNM_const(0.092))
+			p = gnm_exp (GNM_const(0.886) - GNM_const(31.62)  * total - GNM_const(10.897) * total * total);
+		else if (total < 1)
+			p = gnm_exp (GNM_const(1.111) - GNM_const(34.242) * total + GNM_const(12.832) * total * total);
 		else
-			p = 0.;
+			p = 0;
 
-		value_array_set (result, 0, 0,
-				 value_new_float (p));
+		value_array_set (result, 0, 0, value_new_float (p));
 	}
 
  out:
@@ -5296,8 +5389,8 @@ gnumeric_adtest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float *xs;
 	int n;
 	GnmValue *result = NULL;
-	gnm_float statistics = 0.;
-	gnm_float p = 0.;
+	gnm_float statistics = 0;
+	gnm_float p = 0;
 
 	xs = collect_floats_value (argv[0], ei->pos,
 				   COLLECT_IGNORE_STRINGS |
@@ -5381,7 +5474,7 @@ GnmFuncDescriptor const stat_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "binom.dist.range",    "fff|f",
 	  help_binom_dist_range, gnumeric_binom_dist_range, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 
 	{ "cauchy", "ffb",    help_cauchy,
 	  gnumeric_cauchy, NULL,
@@ -5455,6 +5548,10 @@ GnmFuncDescriptor const stat_functions[] = {
 	{ "gammainv",     "fff",
 	  help_gammainv, gnumeric_gammainv, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "gauss",      "f",   help_gauss,
+	  gnumeric_gauss, NULL,
+	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "geomean", NULL,
 	  help_geomean, NULL, gnumeric_geomean,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_FIRST,
@@ -5567,6 +5664,10 @@ GnmFuncDescriptor const stat_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE},
 	{ "permut",       "ff",
 	  help_permut, gnumeric_permut, NULL,
+	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "phi",      "f",   help_phi,
+	  gnumeric_phi, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
 	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "poisson",      "ffb",

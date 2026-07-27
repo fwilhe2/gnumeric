@@ -1,4 +1,3 @@
-
 /*
  * item-grid.c : A canvas item that is responsible for drawing gridlines and
  *     cell content.  One item per sheet displays all the cells.
@@ -57,7 +56,7 @@ typedef enum {
 	GNM_ITEM_GRID_SELECTING_FORMULA_RANGE
 } ItemGridSelectionType;
 
-struct _GnmItemGrid {
+struct GnmItemGrid_ {
 	GocItem canvas_item;
 
 	SheetControlGUI *scg;
@@ -228,7 +227,7 @@ item_grid_realize (GocItem *item)
 	ig->cursor_link  = gdk_cursor_new_for_display (display, GDK_HAND2);
 	cursor_cross =
 		gtk_icon_theme_load_surface (gtk_icon_theme_get_for_screen (gtk_widget_get_screen (widget)),
-					     "cursor-cross", 32,
+					     "gnumeric-cursor-cross", 32,
 					     gtk_widget_get_scale_factor (widget),
 					     gtk_widget_get_window (widget),
 					     0, NULL);
@@ -252,8 +251,8 @@ item_grid_update_bounds (GocItem *item)
 {
 	item->x0 = 0;
 	item->y0 = 0;
-	item->x1 = G_MAXINT64/2;
-	item->y1 = G_MAXINT64/2;
+	item->x1 = GNM_CANVAS_INF;
+	item->y1 = GNM_CANVAS_INF;
 }
 
 static void
@@ -613,9 +612,14 @@ item_grid_draw_region (GocItem const *item, cairo_t *cr,
 					break;
 				}
 			} else {
-				for (col = start_col ; col <= end_col; ++col)
-					next_sr.vertical [col] =
-					next_sr.bottom [col] = none;
+				GnmBorder const *vert =
+					next_sr.row == gnm_sheet_get_max_rows (sheet)
+					? NULL
+					: none;
+				for (col = start_col ; col <= end_col; ++col) {
+					next_sr.vertical[col] = vert;
+					next_sr.bottom[col] = none;
+				}
 				break;
 			}
 		}
@@ -714,22 +718,22 @@ item_grid_draw_region (GocItem const *item, cairo_t *cr,
 
 					if (first < start_col) {
 						first = start_col;
-						sr.vertical [first] = NULL;
+						sr.vertical[first] = NULL;
 					}
 					if (last > end_col) {
 						last = end_col;
-						sr.vertical [last+1] = NULL;
+						sr.vertical[last+1] = NULL;
 					}
 					clear_top = (r->start.row != row);
 
 					/* Clear the borders */
 					for (i = first ; i <= last ; i++) {
 						if (clear_top)
-							sr.top [i] = NULL;
+							sr.top[i] = NULL;
 						if (clear_bottom)
-							sr.bottom [i] = NULL;
+							sr.bottom[i] = NULL;
 						if (i > first)
-							sr.vertical [i] = NULL;
+							sr.vertical[i] = NULL;
 					}
 					continue;
 				}
@@ -738,7 +742,7 @@ item_grid_draw_region (GocItem const *item, cairo_t *cr,
 plain_draw : /* a quick hack to deal with 142267 */
 			if (dir < 0)
 				x -= ci->size_pixels;
-			style = sr.styles [col];
+			style = sr.styles[col];
 			item_grid_draw_background (cr, ig,
 				style, col, row, x, y,
 				ci->size_pixels, ri->size_pixels,
@@ -807,7 +811,7 @@ plain_draw : /* a quick hack to deal with 142267 */
 					tmp_width += offset;
 					if (dir > 0)
 						real_x -= offset;
-					sr.vertical [col] = NULL;
+					sr.vertical[col] = NULL;
 				}
 				if (end_span_col != col) {
 					offset = scg_colrow_distance_get (
@@ -827,7 +831,7 @@ plain_draw : /* a quick hack to deal with 142267 */
 					   ri->size_pixels, center_offset,
 					   show_extension_markers, &ig->cell_draw_style);
 			} else if (col != span->left)
-				sr.vertical [col] = NULL;
+				sr.vertical[col] = NULL;
 
 			if (dir > 0)
 				x += ci->size_pixels;
@@ -860,6 +864,13 @@ plain_draw : /* a quick hack to deal with 142267 */
 		styles = sr.styles; sr.styles = next_sr.styles; next_sr.styles = styles;
 
 		y += ri->size_pixels;
+	}
+
+	if (row == gnm_sheet_get_max_rows (sheet) && ri) {
+		// Make sure we get the grid below the last row
+		gnm_style_borders_row_draw (prev_vert, &sr,
+					    cr, start_x, y, y + ri->size_pixels,
+					    colwidths, TRUE, dir);
 	}
 
 	if (ig->bound.start.row > 0 && start_y < 1)
@@ -952,7 +963,7 @@ item_grid_button_pressed (GocItem *item, int button, double x_, double y_)
 	 * ends the edit.  */
 	if (scg->selected_objects == NULL)
 		wbcg_focus_cur_scg (wbcg);
-	else if (wbc_gtk_get_guru (wbcg) == NULL)
+	else if (wbcg_get_guru (wbcg) == NULL)
 		scg_mode_edit (scg);
 
 	/* If we were already selecting a range of cells for a formula,
@@ -981,7 +992,7 @@ item_grid_button_pressed (GocItem *item, int button, double x_, double y_)
 	}
 
 	/* While a guru is up ignore clicks */
-	if (wbc_gtk_get_guru (wbcg) != NULL)
+	if (wbcg_get_guru (wbcg) != NULL)
 		return TRUE;
 
 	/* This was a regular click on a cell on the spreadsheet.  Select it.
@@ -1172,10 +1183,7 @@ item_grid_button_released (GocItem *item, int button, G_GNUC_UNUSED double x_, G
 		return TRUE;
 
 	case GNM_ITEM_GRID_SELECTING_FORMULA_RANGE:
-/*  Removal of this code (2 lines)                                                */
-/*  should fix http://bugzilla.gnome.org/show_bug.cgi?id=63485                    */
-/*			sheet_make_cell_visible (sheet,                           */
-/*				sheet->edit_pos.col, sheet->edit_pos.row, FALSE); */
+		// This used to do its own thing, see bugzilla 63485.
 		/* Fall through */
 	case GNM_ITEM_GRID_SELECTING_CELL_RANGE:
 		sv_selection_simplify (scg_view (scg));

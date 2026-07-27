@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_FILTER_H_
-# define _GNM_SHEET_FILTER_H_
+#ifndef GNM_SHEET_FILTER_H_
+#define GNM_SHEET_FILTER_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
@@ -48,14 +48,14 @@ typedef enum {
 	GNM_FILTER_OP_TYPE_MASK		= 0x70
 } GnmFilterOp;
 
-struct _GnmFilterCondition {
+struct GnmFilterCondition_ {
 	GnmFilterOp  op[2];
 	GnmValue    *value[2];
 	gboolean is_and;
 	double	 count;
 };
 
-struct _GnmFilter {
+struct GnmFilter_ {
 	int ref_count;
 	Sheet *sheet;
 	GnmRange  r;
@@ -105,4 +105,4 @@ void gnm_sheet_filter_insdel_colrow (Sheet *sheet,
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_FILTER_H_ */
+#endif /* GNM_SHEET_FILTER_H_ */

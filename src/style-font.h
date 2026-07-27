@@ -1,5 +1,5 @@
-#ifndef _GNM_STYLE_FONT_H_
-# define _GNM_STYLE_FONT_H_
+#ifndef GNM_STYLE_FONT_H_
+#define GNM_STYLE_FONT_H_
 
 #include <gnumeric.h>
 #include <libgnumeric.h>
@@ -7,11 +7,11 @@
 
 G_BEGIN_DECLS
 
-struct _GnmFont {
+struct GnmFont_ {
 	int	 ref_count;
 	char	*font_name;
 	double	 size_pts;
-	struct _GnmGOFont {
+	struct GnmGOFont_ {
 		GOFont const *font;
 		GOFontMetrics *metrics;
 	} go;
@@ -45,4 +45,4 @@ PangoContext *gnm_pango_context_get (void);
 
 G_END_DECLS
 
-#endif /* _GNM_STYLE_FONT_H_ */
+#endif /* GNM_STYLE_FONT_H_ */

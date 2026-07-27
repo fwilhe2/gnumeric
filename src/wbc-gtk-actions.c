@@ -1,4 +1,3 @@
-
 /*
  * wbc-gtk-actions.c: Callbacks and tables for all the menus and stock toolbars
  *
@@ -105,7 +104,7 @@ static GNM_ACTION_DEF (cb_file_open)	{ gui_file_open (wbcg, GNM_FILE_OPEN_STYLE_
 static GNM_ACTION_DEF (cb_file_save)	{ gui_file_save (wbcg, wb_control_view (GNM_WBC (wbcg))); }
 static GNM_ACTION_DEF (cb_file_save_as)	{ gui_file_save_as
 		(wbcg, wb_control_view (GNM_WBC (wbcg)),
-		 GNM_FILE_SAVE_AS_STYLE_SAVE, NULL); }
+		 GNM_FILE_SAVE_AS_STYLE_SAVE, NULL, FALSE); }
 
 static GNM_ACTION_DEF (cb_file_sendto) {
 	WorkbookControl *wbc = GNM_WBC (wbcg);
@@ -373,7 +372,7 @@ static GNM_ACTION_DEF (cb_edit_delete_links)
 
 			styles = sheet_style_collect_hlinks (sheet, r);
 			n_links += g_slist_length (styles);
-			style_list_free (styles);
+			sheet_style_list_free (styles);
 		}
 		format = ngettext ("Remove %d Link", "Remove %d Links", n_links);
 		name = g_strdup_printf (format, n_links);
@@ -664,12 +663,6 @@ static GNM_ACTION_DEF (cb_edit_recalc)
 static GNM_ACTION_DEF (cb_repeat)	{ command_repeat (GNM_WBC (wbcg)); }
 
 /****************************************************************************/
-
-static GNM_ACTION_DEF (cb_direction)
-{
-	Sheet *sheet = wb_control_cur_sheet (GNM_WBC (wbcg));
-	cmd_toggle_rtl (GNM_WBC (wbcg), sheet);
-}
 
 static GNM_ACTION_DEF (cb_view_zoom_in)
 {
@@ -970,13 +963,17 @@ static GNM_ACTION_DEF (cb_data_slicer_refresh)	{ cmd_slicer_refresh (GNM_WBC (wb
 static GNM_ACTION_DEF (cb_data_slicer_edit)	{ dialog_data_slicer (wbcg, FALSE); }
 static GNM_ACTION_DEF (cb_data_export)	        { gui_file_save_as
 		(wbcg, wb_control_view (GNM_WBC (wbcg)),
-		 GNM_FILE_SAVE_AS_STYLE_EXPORT, NULL); }
+		 GNM_FILE_SAVE_AS_STYLE_EXPORT, NULL, FALSE); }
 static GNM_ACTION_DEF (cb_data_export_text)	        { gui_file_save_as
 		(wbcg, wb_control_view (GNM_WBC (wbcg)),
-		 GNM_FILE_SAVE_AS_STYLE_EXPORT, "Gnumeric_stf:stf_assistant"); }
+		 GNM_FILE_SAVE_AS_STYLE_EXPORT,
+		 "Gnumeric_stf:stf_assistant",
+		 FALSE); }
 static GNM_ACTION_DEF (cb_data_export_csv)	        { gui_file_save_as
 		(wbcg, wb_control_view (GNM_WBC (wbcg)),
-		 GNM_FILE_SAVE_AS_STYLE_EXPORT, "Gnumeric_stf:stf_csv"); }
+		 GNM_FILE_SAVE_AS_STYLE_EXPORT,
+		 "Gnumeric_stf:stf_csv",
+		 FALSE); }
 static GNM_ACTION_DEF (cb_data_export_repeat)	{ gui_file_export_repeat (wbcg); }
 
 static void
@@ -1137,7 +1134,7 @@ static GNM_ACTION_DEF (cb_autosum)
 
 	entry = wbcg_get_entry (wbcg);
 	txt = gtk_entry_get_text (entry);
-	if (strncmp (txt, "=sum(", 5)) {
+	if (!g_str_has_prefix (txt, "=sum(")) {
 		if (!wbcg_edit_start (wbcg, TRUE, TRUE))
 			return; /* attempt to edit failed */
 		gtk_entry_set_text (entry, "=sum()");
@@ -1245,7 +1242,7 @@ sort_by_rows (WBCGtk *wbcg, gboolean descending)
 	}
 
 	if (not_acceptable) {
-		GError *msg = g_error_new (go_error_invalid(), 0,
+		GError *msg = g_error_new (go_error_invalid (), 0,
 					   _("%s does not support multiple ranges"),
 					   _("Sort"));
 		go_cmd_context_error (GO_CMD_CONTEXT (wbcg), msg);
@@ -1300,9 +1297,9 @@ sort_by_rows (WBCGtk *wbcg, gboolean descending)
 		}
 	}
 
-	data = g_new (GnmSortData, 1);
+	data = gnm_sort_data_new ();
 	data->sheet = sv_sheet (sv);
-	data->range = sel;
+	data->range = *sel;
 	data->num_clause = numclause;
 	data->clauses = clause;
 	data->locale = NULL;
@@ -1320,10 +1317,11 @@ sort_by_rows (WBCGtk *wbcg, gboolean descending)
 	/* to column sorting */
 	data->top = top_to_bottom;
 
-	if (sheet_range_has_heading (data->sheet, data->range, data->top, FALSE))
-		data->range->start.row += 1;
+	if (sheet_range_has_heading (data->sheet, &data->range, data->top, FALSE))
+		data->range.start.row += 1;
 
-	cmd_sort (GNM_WBC (wbcg), data);
+	if (cmd_sort (GNM_WBC (wbcg), data))
+		g_object_unref (data);
 }
 static GNM_ACTION_DEF (cb_sort_ascending)  { sort_by_rows (wbcg, FALSE); }
 static GNM_ACTION_DEF (cb_sort_descending) { sort_by_rows (wbcg, TRUE); }
@@ -1432,23 +1430,23 @@ create_object (WBCGtk *wbcg, GType t,
 }
 
 static GNM_ACTION_DEF (cmd_create_frame)
-	{ create_object (wbcg, sheet_widget_frame_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_frame_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_button)
-	{ create_object (wbcg, sheet_widget_button_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_button_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_radiobutton)
-	{ create_object (wbcg, sheet_widget_radio_button_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_radio_button_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_scrollbar)
-	{ create_object (wbcg, sheet_widget_scrollbar_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_scrollbar_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_slider)
-	{ create_object (wbcg, sheet_widget_slider_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_slider_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_spinbutton)
-	{ create_object (wbcg, sheet_widget_spinbutton_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_spinbutton_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_checkbox)
-	{ create_object (wbcg, sheet_widget_checkbox_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_checkbox_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_list)
-	{ create_object (wbcg, sheet_widget_list_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_list_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_combo)
-	{ create_object (wbcg, sheet_widget_combo_get_type(), NULL); }
+	{ create_object (wbcg, sheet_widget_combo_get_type (), NULL); }
 static GNM_ACTION_DEF (cmd_create_line)
 	{ create_object (wbcg, GNM_SO_LINE_TYPE, NULL); }
 static GNM_ACTION_DEF (cmd_create_arrow) {
@@ -1730,7 +1728,7 @@ static GNM_ACTION_DEF (cb_format_as_date)
 static void
 mutate_borders (WBCGtk *wbcg, gboolean add)
 {
-	GnmBorder *borders [GNM_STYLE_BORDER_EDGE_MAX];
+	GnmBorder *borders[GNM_STYLE_BORDER_EDGE_MAX];
 	int i;
 
 	for (i = GNM_STYLE_BORDER_TOP; i < GNM_STYLE_BORDER_EDGE_MAX; ++i)
@@ -1951,27 +1949,28 @@ static GNM_ACTION_DEF (cb_insert_menu)
 	gtk_action_set_sensitive (action, go_components_get_mime_types () != NULL && scg && scg_sheet (scg)->sheet_type == GNM_SHEET_DATA);
 }
 
-#define TOGGLE_HANDLER(flag,property)					\
+#define TOGGLE_HANDLER(flag, property, desc)				\
 static GNM_ACTION_DEF (cb_sheet_pref_ ## flag )				\
 {									\
-	g_return_if_fail (GNM_IS_WBC_GTK (wbcg));		\
+	g_return_if_fail (GNM_IS_WBC_GTK (wbcg));			\
 									\
 	if (!wbcg->updating_ui) {					\
 		Sheet *sheet = wbcg_cur_sheet (wbcg);			\
-		go_object_toggle (sheet, property);			\
-		sheet_update (sheet);					\
+		cmd_toggle_sheet_property (GNM_WBC (wbcg), sheet,	\
+					   property, _(desc));		\
 	}								\
 }
 
-TOGGLE_HANDLER (display_formulas, "display-formulas")
-TOGGLE_HANDLER (hide_zero, "display-zeros")
-TOGGLE_HANDLER (hide_grid, "display-grid")
-TOGGLE_HANDLER (hide_col_header, "display-column-header")
-TOGGLE_HANDLER (hide_row_header, "display-row-header")
-TOGGLE_HANDLER (display_outlines, "display-outlines")
-TOGGLE_HANDLER (outline_symbols_below, "display-outlines-below")
-TOGGLE_HANDLER (outline_symbols_right, "display-outlines-right")
-TOGGLE_HANDLER (use_r1c1, "use-r1c1")
+TOGGLE_HANDLER (display_formulas, "display-formulas", N_("Toggle displaying formul\303\246"))
+TOGGLE_HANDLER (hide_zero, "display-zeros", N_("Toggle showing zeros"))
+TOGGLE_HANDLER (hide_grid, "display-grid", N_("Toggle showing gridlines"))
+TOGGLE_HANDLER (hide_col_header, "display-column-header", N_("Toggle showing column headers"))
+TOGGLE_HANDLER (hide_row_header, "display-row-header", N_("Toggle showing row headers"))
+TOGGLE_HANDLER (display_outlines, "display-outlines", N_("Toggle showing outlines"))
+TOGGLE_HANDLER (outline_symbols_below, "display-outlines-below", N_("Toggle where to show outlines vertically"))
+TOGGLE_HANDLER (outline_symbols_right, "display-outlines-right", N_("Toggle where to show outlines horizontally"))
+TOGGLE_HANDLER (use_r1c1, "use-r1c1", N_("Toggle whether to show r1c1-style references"))
+TOGGLE_HANDLER (text_is_rtl, "text-is-rtl", N_("Toggle sheet text direction"))
 
 /* Actions that are always sensitive */
 static GnmActionEntry const permanent_actions[] = {
@@ -2242,7 +2241,7 @@ static GnmActionEntry const permanent_actions[] = {
 	{ .name = "HelpIRC",
 	  .label = N_("_Live Assistance"),
 	  .tooltip = N_("See if anyone is available to answer questions"),
-	  .callback = G_CALLBACK (cb_help_irc)
+	  .callback = G_CALLBACK (cb_help_irc),
 	},
 	{ .name = "HelpBug",
 	  .label = N_("Report a _Problem"),
@@ -2786,7 +2785,7 @@ static GnmActionEntry const actions[] = {
 	  .icon = "format-text-direction-ltr",
 	  .label = N_("Direction"),
 	  .tooltip = N_("Toggle sheet direction, left-to-right vs right-to-left"),
-	  .callback = G_CALLBACK (cb_direction)
+	  .callback = G_CALLBACK (cb_sheet_pref_text_is_rtl)
 	},
 
 /* Format -> Cells */
@@ -3784,7 +3783,7 @@ wbc_gtk_init_alignments (WBCGtk *wbcg)
 static void
 cb_custom_color_created (GOActionComboColor *caction, GtkWidget *dialog, WBCGtk *wbcg)
 {
-	wbc_gtk_attach_guru (wbcg, dialog);
+	wbcg_attach_guru (wbcg, dialog);
 	wbcg_set_transient (wbcg, GTK_WINDOW (dialog));
 }
 
@@ -3913,55 +3912,55 @@ cb_border_activated (GOActionComboPixmaps *a, WorkbookControl *wbc)
 		borders[i] = NULL;
 
 	switch (index) {
-	case 11 : /* left */
+	case 11: /* left */
 		borders[GNM_STYLE_BORDER_LEFT] = gnm_style_border_fetch (GNM_STYLE_BORDER_THIN,
 			 sheet_style_get_auto_pattern_color (sheet),
 			 gnm_style_border_get_orientation (GNM_STYLE_BORDER_LEFT));
 		break;
 
-	case 12 : /* none */
+	case 12: /* none */
 		for (i = GNM_STYLE_BORDER_TOP; i < GNM_STYLE_BORDER_EDGE_MAX; i++)
 			borders[i] = gnm_style_border_ref (gnm_style_border_none ());
 		break;
 
-	case 13 : /* right */
+	case 13: /* right */
 		borders[GNM_STYLE_BORDER_RIGHT] = gnm_style_border_fetch (GNM_STYLE_BORDER_THIN,
 			 sheet_style_get_auto_pattern_color (sheet),
 			 gnm_style_border_get_orientation (GNM_STYLE_BORDER_RIGHT));
 		break;
 
-	case 21 : /* all */
+	case 21: /* all */
 		for (i = GNM_STYLE_BORDER_HORIZ; i <= GNM_STYLE_BORDER_VERT; ++i)
 			borders[i] = gnm_style_border_fetch (GNM_STYLE_BORDER_THIN,
 				sheet_style_get_auto_pattern_color (sheet),
 				gnm_style_border_get_orientation (i));
 		/* fall through */
 
-	case 22 : /* outside */
+	case 22: /* outside */
 		for (i = GNM_STYLE_BORDER_TOP; i <= GNM_STYLE_BORDER_RIGHT; ++i)
 			borders[i] = gnm_style_border_fetch (GNM_STYLE_BORDER_THIN,
 				sheet_style_get_auto_pattern_color (sheet),
 				gnm_style_border_get_orientation (i));
 		break;
 
-	case 23 : /* thick_outside */
+	case 23: /* thick_outside */
 		for (i = GNM_STYLE_BORDER_TOP; i <= GNM_STYLE_BORDER_RIGHT; ++i)
 			borders[i] = gnm_style_border_fetch (GNM_STYLE_BORDER_THICK,
 				sheet_style_get_auto_pattern_color (sheet),
 				gnm_style_border_get_orientation (i));
 		break;
 
-	case 41 : /* top_n_bottom */
-	case 42 : /* top_n_double_bottom */
-	case 43 : /* top_n_thick_bottom */
+	case 41: /* top_n_bottom */
+	case 42: /* top_n_double_bottom */
+	case 43: /* top_n_thick_bottom */
 		borders[GNM_STYLE_BORDER_TOP] = gnm_style_border_fetch (GNM_STYLE_BORDER_THIN,
 			sheet_style_get_auto_pattern_color (sheet),
 			gnm_style_border_get_orientation (GNM_STYLE_BORDER_TOP));
 	    /* Fall through */
 
-	case 31 : /* bottom */
-	case 32 : /* double_bottom */
-	case 33 : /* thick_bottom */
+	case 31: /* bottom */
+	case 32: /* double_bottom */
+	case 33: /* thick_bottom */
 	{
 		int const tmp = index % 10;
 		GnmStyleBorderType const t =
@@ -4133,7 +4132,7 @@ static void
 wbc_gtk_init_zoom (WBCGtk *wbcg)
 {
 #warning TODO : Add zoom to selection
-	static char const * const preset_zoom [] = {
+	static char const * const preset_zoom[] = {
 		"200%",
 		"150%",
 		"100%",
@@ -4291,7 +4290,7 @@ gnm_font_action_create_tool_item (GtkAction *action)
 		(GTK_TYPE_TOOL_ITEM,
 		 NULL);
 	GtkWidget *but = g_object_new
-		(gnm_font_button_get_type(),
+		(gnm_font_button_get_type (),
 		 "name", "font",
 		 "dialog-type", GO_TYPE_FONT_SEL_DIALOG,
 		 "show-preview-entry", TRUE,
@@ -4330,7 +4329,7 @@ GSF_CLASS (GnmFontAction, gnm_font_action,
 #if 0
 	;
 #endif
-#define GNM_FONT_ACTION(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), gnm_font_action_get_type(), GnmFontAction))
+#define GNM_FONT_ACTION(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), gnm_font_action_get_type (), GnmFontAction))
 
 static void
 cb_font_changed (GtkAction *act, WBCGtk *gtk)
@@ -4511,6 +4510,12 @@ wbc_gtk_init_actions (WBCGtk *wbcg)
 		GtkAction *act = wbcg_find_action (wbcg, toggles[i].name);
 		G_STRUCT_MEMBER (GtkToggleAction *, wbcg, toggles[i].offset) =
 			(GtkToggleAction*) (act);
+	}
+
+	// Disable this until and unless we have a place to direct it.
+	{
+		GtkAction *a = wbcg_find_action (wbcg, "HelpIRC");
+		gtk_action_set_sensitive (a, FALSE);
 	}
 
 	if (gnm_debug_flag ("actions")) {

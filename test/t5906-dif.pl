@@ -8,5 +8,7 @@ use GnumericTest;
 # See test_importer comments for mode definitions.
 my $mode = ((shift @ARGV) || "check");
 
+my $args = { 'mode' => $mode, 'nofont' => 1 };
+
 &message ("Check the dif importer.");
-&test_importer ("$samples/dif/sample.dif", "fa0db068f86d909e2a7c9ec6464118b8f3c9a1f4", $mode);
+&test_importer ("$samples/dif/sample.dif", "49d24c9f2b92869dfa5e9e2d91aa5ef9a3515b57", $args);

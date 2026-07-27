@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_VIEW_H_
-# define _GNM_SHEET_VIEW_H_
+#ifndef GNM_SHEET_VIEW_H_
+#define GNM_SHEET_VIEW_H_
 
 #include <gnumeric.h>
 #include <glib-object.h>
@@ -12,7 +12,7 @@ typedef enum {
 	GNM_SHEET_VIEW_LAYOUT_MODE
 } GnmSheetViewMode;
 
-struct _SheetView {
+struct SheetView_ {
 	GObject  base;
 
 	Sheet		*sheet;
@@ -106,9 +106,9 @@ gboolean gnm_sheet_view_selection_cut	(SheetView *sv, WorkbookControl *wbc);
 void	 gnm_sheet_view_make_cell_visible	(SheetView *sv, int col, int row,
 				 gboolean couple_panes);
 void	 gnm_sheet_view_redraw_range	(SheetView *sv, GnmRange const *r);
-void	 gnm_sheet_view_redraw_headers	(SheetView const *sheet,
-				 gboolean col, gboolean row,
-				 GnmRange const* r);
+void	 gnm_sheet_view_redraw_headers	(SheetView const *sv,
+					 gboolean col, gboolean row,
+					 GnmRange const* r);
 void     gnm_sheet_view_resize		(SheetView *sv, gboolean force_scroll);
 void     gnm_sheet_view_cursor_set		(SheetView *sv,
 				 GnmCellPos const *edit,
@@ -137,4 +137,4 @@ do {								\
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_VIEW_H_ */
+#endif /* GNM_SHEET_VIEW_H_ */

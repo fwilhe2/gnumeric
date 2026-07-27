@@ -553,6 +553,63 @@
 }
 
 {
+   Pango/FcFontSetSort
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:FcFontSetSort
+}
+
+{
+   Pango/FcFontRenderPrepare
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:FcFontRenderPrepare
+}
+
+{
+   Pango/pango_fc_font_map_load_fontset
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:pango_fc_font_map_load_fontset
+}
+
+{
+   Pango/pango_fc_font_map_load_font
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:pango_fc_font_map_load_font
+}
+
+{
+   Pango/pango_itemize_with_font
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:pango_itemize_with_font
+}
+
+{
+   Pango/pango_layout_get_size
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:pango_layout_get_size
+}
+
+{
+   Pango/unknown1
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   ...
+   fun:style_font_new_simple
+}
+
+{
    Leak/FT_Open_Face1
    Memcheck:Leak
    fun:malloc
@@ -864,6 +921,16 @@
    fun:malloc
    fun:strdup
    fun:FcValueSave
+   fun:FcConfigEvaluate
+   fun:FcConfigValues
+}
+
+{
+   FONTCONFIG/CONFIGVALUES_LEAK2
+   Memcheck:Leak
+   fun:malloc
+   fun:strdup
+   fun:UnknownInlinedFun
    fun:FcConfigEvaluate
    fun:FcConfigValues
 }

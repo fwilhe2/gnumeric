@@ -161,7 +161,7 @@ dialog_formula_guru_update_this_parent (GtkTreeIter *parent, FormulaGuruState *s
 			gtk_tree_model_get (GTK_TREE_MODEL(state->model), &iter,
 					    FUN_ARG_ENTRY, &argument,
 					    -1);
-			if ((argument == NULL  || g_utf8_strlen (argument, -1) == 0) && arg_num > arg_min) {
+			if ((argument == NULL  || *argument == 0) && arg_num > arg_min) {
 				g_free (argument);
 				break;
 			}
@@ -182,7 +182,7 @@ dialog_formula_guru_update_this_parent (GtkTreeIter *parent, FormulaGuruState *s
 				}
 				gtk_tree_path_free (b);
 			}
-			if (argument && strlen (argument) > 0) {
+			if (argument && *argument) {
 				GnmExprTop const *texpr = gnm_expr_parse_str
 					(argument, state->pos,
 					 GNM_EXPR_PARSE_DEFAULT,
@@ -275,7 +275,6 @@ dialog_formula_guru_adjust_children (GtkTreeIter *parent, GnmFunc *fd,
 	gboolean is_non_fun;
 	GtkTreeIter iter;
 	gint min_arg, max_arg, args = 0, i;
-	char *arg_name;
 
 	if (fd == NULL) {
 		gtk_tree_model_get (GTK_TREE_MODEL(state->model), parent,
@@ -306,6 +305,9 @@ dialog_formula_guru_adjust_children (GtkTreeIter *parent, GnmFunc *fd,
 					       &iter, parent, args))
 		gtk_tree_store_remove (state->model, &iter);
 	for (i = 0; i < args; i++) {
+		char const *arg_name = gnm_func_get_arg_name (fd, i);
+		char *mod_name = NULL;
+
 		if (!gtk_tree_model_iter_nth_child (GTK_TREE_MODEL(state->model),
 						    &iter, parent, i)) {
 			gtk_tree_store_append (state->model, &iter, parent);
@@ -317,19 +319,15 @@ dialog_formula_guru_adjust_children (GtkTreeIter *parent, GnmFunc *fd,
 					    MAX_ARG, 0,
 					    -1);
 		}
-		arg_name = gnm_func_get_arg_name (fd, i);
-		if (i >= min_arg && arg_name != NULL) {
-			char *mod_name = g_strdup_printf (_("[%s]"), arg_name);
-			g_free (arg_name);
-			arg_name = mod_name;
-		}
+		if (i >= min_arg && arg_name != NULL)
+			arg_name = mod_name = g_strdup_printf (_("[%s]"), arg_name);
 
 		gtk_tree_store_set (state->model, &iter,
 				    ARG_NAME, arg_name,
 				    ARG_TOOLTIP, gnm_func_get_arg_description (fd, i),
 				    ARG_TYPE, gnm_func_get_arg_type_string (fd, i),
 				    -1);
-		g_free (arg_name);
+		g_free (mod_name);
 	}
 
 	dialog_formula_guru_update_this_parent (parent, state, NULL, 0, 0);
@@ -729,7 +727,7 @@ cb_dialog_formula_guru_edited (G_GNUC_UNUSED GtkCellRendererText *cell,
 		return;
 	gtk_tree_store_set (state->model, &iter, FUN_ARG_ENTRY, new_text, -1);
 
-	if (g_utf8_strlen (new_text, -1) > 0)
+	if (*new_text)
 		dialog_formula_guru_adjust_varargs (&iter, state);
 
 
@@ -819,8 +817,11 @@ cb_dialog_formula_guru_query_tooltip (G_GNUC_UNUSED GtkWidget  *widget,
 
 		gtk_tree_model_get (GTK_TREE_MODEL (state->model), &iter,
 				    ARG_TOOLTIP, &arg_desc, -1);
-		if (arg_desc == NULL || arg_desc[0]=='\0')
+		if (arg_desc == NULL || arg_desc[0] == '\0') {
+			gtk_tree_path_free (path);
+			g_free (arg_desc);
 			return FALSE;
+		}
 		if (!state->tooltip_widget) {
 			state->tooltip_label = gtk_label_new ("");
 			state->tooltip_widget
@@ -964,7 +965,7 @@ dialog_formula_guru_init (FormulaGuruState *state)
 		go_gtk_builder_get_widget (state->gui, "help_button"),
 		GNUMERIC_HELP_LINK_FORMULA_GURU);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_dialog_formula_guru_destroy);
 

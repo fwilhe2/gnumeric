@@ -1,8 +1,8 @@
-
 /*
  * sheet-filter.c: support for 'auto-filters'
  *
  * Copyright (C) 2002-2006 Jody Goldberg (jody@gnome.org)
+ * Copyright (C) 2024 Morten Welinder <terra@gnome.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -68,10 +68,11 @@ gnm_filter_op_needs_value (GnmFilterOp op)
 /**
  * gnm_filter_condition_new_single:
  * @op: #GnmFilterOp
- * @v: #GnmValue
+ * @v: (transfer full) (nullable): #GnmValue
  *
- * Create a new condition with 1 value.
- * Absorbs the reference to @v.
+ * Create a new condition with one value.
+ *
+ * Returns: (transfer full): a new #GnmFilterCondition.
  **/
 GnmFilterCondition *
 gnm_filter_condition_new_single (GnmFilterOp op, GnmValue *v)
@@ -90,13 +91,14 @@ gnm_filter_condition_new_single (GnmFilterOp op, GnmValue *v)
 /**
  * gnm_filter_condition_new_double:
  * @op0: #GnmFilterOp
- * @v0: #GnmValue
+ * @v0: (transfer full) (nullable): #GnmValue
  * @join_with_and:
  * @op1: #GnmFilterOp
- * @v1: #GnmValue
+ * @v1: (transfer full) (nullable): #GnmValue
  *
- * Create a new condition with 2 value.
- * Absorbs the reference to @v0 and @v1.
+ * Create a new condition with two values.
+ *
+ * Returns: (transfer full): a new #GnmFilterCondition.
  **/
 GnmFilterCondition *
 gnm_filter_condition_new_double (GnmFilterOp op0, GnmValue *v0,
@@ -117,6 +119,21 @@ gnm_filter_condition_new_double (GnmFilterOp op0, GnmValue *v0,
 	return res;
 }
 
+// Absolute    RelRange      Result
+// T           -             TOP_N
+// F           T             TOP_N_PERCENT
+// F           F             TOP_N_PERCENT_N
+/**
+ * gnm_filter_condition_new_bucket:
+ * @top: if %TRUE, find the top elements, else the bottom.
+ * @absolute: if %TRUE, @n is the number of elements, else a percentage.
+ * @rel_range: if %TRUE, the percentage is relative to the range of values, else the number of elements.
+ * @n: number of elements or percentage.
+ *
+ * Create a new condition for top/bottom N/N%.
+ *
+ * Returns: (transfer full): a new #GnmFilterCondition.
+ **/
 GnmFilterCondition *
 gnm_filter_condition_new_bucket (gboolean top, gboolean absolute,
 				 gboolean rel_range, double n)
@@ -125,10 +142,24 @@ gnm_filter_condition_new_bucket (gboolean top, gboolean absolute,
 	res->op[0] = GNM_FILTER_OP_TOP_N | (top ? 0 : 1) |
 		(absolute ? 0 : (rel_range ? 2 : 4));
 	res->op[1] = GNM_FILTER_UNUSED;
+
+	if (absolute)
+		n = CLAMP (floor (n), 0, 1000000000);
+	else
+		n = CLAMP (n, 0, 100);
+
 	res->count = n;
 	return res;
 }
 
+/**
+ * gnm_filter_condition_dup:
+ * @src: (nullable): #GnmFilterCondition
+ *
+ * Duplicate a #GnmFilterCondition.
+ *
+ * Returns: (transfer full) (nullable): a new #GnmFilterCondition.
+ **/
 GnmFilterCondition *
 gnm_filter_condition_dup (GnmFilterCondition const *src)
 {
@@ -147,6 +178,12 @@ gnm_filter_condition_dup (GnmFilterCondition const *src)
 	return dst;
 }
 
+/**
+ * gnm_filter_condition_free:
+ * @cond: (nullable): #GnmFilterCondition
+ *
+ * Free a #GnmFilterCondition.
+ **/
 void
 gnm_filter_condition_free (GnmFilterCondition *cond)
 {
@@ -158,6 +195,11 @@ gnm_filter_condition_free (GnmFilterCondition *cond)
 	g_free (cond);
 }
 
+/**
+ * gnm_filter_condition_get_type:
+ *
+ * Returns: the #GType for #GnmFilterCondition.
+ **/
 GType
 gnm_filter_condition_get_type (void)
 {
@@ -269,12 +311,12 @@ filter_expr_eval (GnmFilterOp op, GnmValue const *src, GORegexp const *regexp,
 	value_release (fake_val);
 
 	switch (op) {
-	case GNM_FILTER_OP_EQUAL     : return cmp == IS_EQUAL;
-	case GNM_FILTER_OP_NOT_EQUAL : return cmp != IS_EQUAL;
-	case GNM_FILTER_OP_GTE	: if (cmp == IS_EQUAL) return TRUE; /* fall */
-	case GNM_FILTER_OP_GT	: return cmp == IS_GREATER;
-	case GNM_FILTER_OP_LTE	: if (cmp == IS_EQUAL) return TRUE; /* fall */
-	case GNM_FILTER_OP_LT	: return cmp == IS_LESS;
+	case GNM_FILTER_OP_EQUAL: return cmp == IS_EQUAL;
+	case GNM_FILTER_OP_NOT_EQUAL: return cmp != IS_EQUAL;
+	case GNM_FILTER_OP_GTE: if (cmp == IS_EQUAL) return TRUE; /* fall */
+	case GNM_FILTER_OP_GT: return cmp == IS_GREATER;
+	case GNM_FILTER_OP_LTE: if (cmp == IS_EQUAL) return TRUE; /* fall */
+	case GNM_FILTER_OP_LT: return cmp == IS_LESS;
 	default:
 		g_warning ("Huh?");
 		return FALSE;
@@ -336,101 +378,62 @@ cb_filter_blanks (GnmCellIter const *iter, Sheet *target_sheet)
 /*****************************************************************************/
 
 typedef struct {
-	unsigned count;
-	unsigned elements;
 	gboolean find_max;
-	GnmValue const **vals;
-	Sheet	*target_sheet;
+	Sheet *target_sheet;
+
+	unsigned elements;
+	GPtrArray *vals;
 } FilterItems;
 
 static GnmValue *
-cb_filter_find_items (GnmCellIter const *iter, FilterItems *data)
+cb_collect_values (GnmCellIter const *iter, FilterItems *data)
 {
-	GnmValue const *v = iter->cell->value;
-	if (data->elements >= data->count) {
-		unsigned j, i = data->elements;
-		GnmValDiff const cond = data->find_max ? IS_GREATER : IS_LESS;
-		while (i-- > 0)
-			if (value_compare (v, data->vals[i], TRUE) == cond) {
-				for (j = 0; j < i ; j++)
-					data->vals[j] = data->vals[j+1];
-				data->vals[i] = v;
-				break;
-			}
-	} else {
-		data->vals [data->elements++] = v;
-		if (data->elements == data->count) {
-			qsort (data->vals, data->elements,
-			       sizeof (GnmValue *),
-			       data->find_max ? value_cmp : value_cmp_reverse);
-		}
-	}
+	GnmValue *v = iter->cell->value;
+	g_ptr_array_add (data->vals, v);
 	return NULL;
+}
+
+static void
+collect_values (FilterItems *data, Sheet *sheet, GnmRange const *range)
+{
+	CellIterFlags flags = CELL_ITER_IGNORE_HIDDEN | CELL_ITER_IGNORE_BLANK;
+	data->vals = g_ptr_array_new ();
+	sheet_foreach_cell_in_range (sheet, flags, range,
+				     (CellIterFunc)cb_collect_values, data);
+	g_ptr_array_sort (data->vals,
+			  data->find_max ? value_cmp_reverse : value_cmp);
 }
 
 static GnmValue *
-cb_hide_unwanted_items (GnmCellIter const *iter, FilterItems const *data)
+cb_hide_unwanted_rows (GnmCellIter const *iter, FilterItems const *data)
 {
-	if (iter->cell != NULL) {
-		int i = data->elements;
-		GnmValue const *v = iter->cell->value;
+	if (iter->cell &&
+	    g_ptr_array_find (data->vals, iter->cell->value, NULL))
+		return NULL;
 
-		while (i-- > 0)
-			if (data->vals[i] == v)
-				return NULL;
-	}
 	colrow_set_visibility (data->target_sheet, FALSE, FALSE,
-		iter->pp.eval.row, iter->pp.eval.row);
+			       iter->pp.eval.row, iter->pp.eval.row);
 	return NULL;
 }
+
+static void
+hide_unwanted_rows (FilterItems *data, Sheet *sheet, GnmRange const *range)
+{
+	CellIterFlags flags = CELL_ITER_IGNORE_HIDDEN;
+	data->target_sheet = sheet;
+	sheet_foreach_cell_in_range (sheet, flags, range,
+				     (CellIterFunc) cb_hide_unwanted_rows, data);
+}
+
 
 /*****************************************************************************/
 
-typedef struct {
-	gboolean	 initialized, find_max;
-	gnm_float	 low, high;
-	Sheet		*target_sheet;
-} FilterPercentage;
-
-static GnmValue *
-cb_filter_find_percentage (GnmCellIter const *iter, FilterPercentage *data)
-{
-	if (VALUE_IS_NUMBER (iter->cell->value)) {
-		gnm_float const v = value_get_as_float (iter->cell->value);
-
-		if (data->initialized) {
-			if (data->low > v)
-				data->low = v;
-			else if (data->high < v)
-				data->high = v;
-		} else {
-			data->initialized = TRUE;
-			data->low = data->high = v;
-		}
-	}
-	return NULL;
-}
-
-static GnmValue *
-cb_hide_unwanted_percentage (GnmCellIter const *iter,
-			     FilterPercentage const *data)
-{
-	if (iter->cell != NULL && VALUE_IS_NUMBER (iter->cell->value)) {
-		gnm_float const v = value_get_as_float (iter->cell->value);
-		if (data->find_max) {
-			if (v >= data->high)
-				return NULL;
-		} else {
-			if (v <= data->low)
-				return NULL;
-		}
-	}
-	colrow_set_visibility (data->target_sheet, FALSE, FALSE,
-		iter->pp.eval.row, iter->pp.eval.row);
-	return NULL;
-}
-/*****************************************************************************/
-
+/**
+ * gnm_filter_combo_index:
+ * @fcombo: #GnmFilterCombo
+ *
+ * Returns: the 0-based index of @fcombo in its filter.
+ **/
 int
 gnm_filter_combo_index (GnmFilterCombo *fcombo)
 {
@@ -454,6 +457,7 @@ gnm_filter_combo_apply (GnmFilterCombo *fcombo, Sheet *target_sheet)
 	GnmFilterCondition const *cond;
 	int col, start_row, end_row;
 	CellIterFlags iter_flags = CELL_ITER_IGNORE_HIDDEN;
+	GnmRange r;
 
 	g_return_if_fail (GNM_IS_FILTER_COMBO (fcombo));
 
@@ -462,6 +466,7 @@ gnm_filter_combo_apply (GnmFilterCombo *fcombo, Sheet *target_sheet)
 	col = sheet_object_get_range (GNM_SO (fcombo))->start.col;
 	start_row = filter->r.start.row + 1;
 	end_row = filter->r.end.row;
+	range_init (&r, col, start_row, col, end_row);
 
 	if (start_row > end_row ||
 	    cond == NULL ||
@@ -484,81 +489,70 @@ gnm_filter_combo_apply (GnmFilterCombo *fcombo, Sheet *target_sheet)
 		if (cond->op[1] != GNM_FILTER_UNUSED)
 			filter_expr_init (&data, 1, cond, filter);
 
-		sheet_foreach_cell_in_region (filter->sheet,
-			iter_flags,
-			col, start_row, col, end_row,
-			(CellIterFunc) cb_filter_expr, &data);
+		sheet_foreach_cell_in_range (filter->sheet, iter_flags, &r,
+					     (CellIterFunc) cb_filter_expr, &data);
 
 		filter_expr_release (&data, 0);
 		if (cond->op[1] != GNM_FILTER_UNUSED)
 			filter_expr_release (&data, 1);
 	} else if (cond->op[0] == GNM_FILTER_OP_BLANKS)
-		sheet_foreach_cell_in_region (filter->sheet,
-			CELL_ITER_IGNORE_HIDDEN,
-			col, start_row, col, end_row,
-			(CellIterFunc) cb_filter_blanks, target_sheet);
+		sheet_foreach_cell_in_range (filter->sheet,
+					     CELL_ITER_IGNORE_HIDDEN,
+					     &r,
+					     (CellIterFunc) cb_filter_blanks, target_sheet);
 	else if (cond->op[0] == GNM_FILTER_OP_NON_BLANKS)
-		sheet_foreach_cell_in_region (filter->sheet,
-			CELL_ITER_IGNORE_HIDDEN,
-			col, start_row, col, end_row,
-			(CellIterFunc) cb_filter_non_blanks, target_sheet);
+		sheet_foreach_cell_in_range (filter->sheet,
+					     CELL_ITER_IGNORE_HIDDEN,
+					     &r,
+					     (CellIterFunc) cb_filter_non_blanks, target_sheet);
 	else if (0x30 == (cond->op[0] & GNM_FILTER_OP_TYPE_MASK)) {
+		FilterItems data;
+		data.find_max = (cond->op[0] & 0x1) ? FALSE : TRUE;
+		collect_values (&data, filter->sheet, &r);
+
 		if (cond->op[0] & GNM_FILTER_OP_PERCENT_MASK) { /* relative */
 			if (cond->op[0] & GNM_FILTER_OP_REL_N_MASK) {
-				FilterItems data;
-				data.find_max = (cond->op[0] & 0x1) ? FALSE : TRUE;
-				data.elements    = 0;
-				data.count  = 0.5 + cond->count * (end_row - start_row + 1) /100.;
-				if (data.count < 1)
-					data.count = 1;
-				data.vals   = g_new (GnmValue const *, data.count);
-				sheet_foreach_cell_in_region (filter->sheet,
-							     CELL_ITER_IGNORE_HIDDEN | CELL_ITER_IGNORE_BLANK,
-							     col, start_row, col, end_row,
-							     (CellIterFunc) cb_filter_find_items, &data);
-				data.target_sheet = target_sheet;
-				sheet_foreach_cell_in_region (filter->sheet,
-							     CELL_ITER_IGNORE_HIDDEN,
-							     col, start_row, col, end_row,
-							     (CellIterFunc) cb_hide_unwanted_items, &data);
-				g_free (data.vals);
+				double n = 0.5 + data.vals->len * CLAMP (cond->count, 0.0, 100.0) / 100.0;
+				g_ptr_array_set_size (data.vals, MAX (1, n));
 			} else {
-				FilterPercentage data;
-				gnm_float	 offset;
+				gnm_float low = 0, high = 0, cutoff;
+				gboolean first = TRUE;
+				unsigned ui;
 
-				data.find_max = (cond->op[0] & 0x1) ? FALSE : TRUE;
-				data.initialized = FALSE;
-				sheet_foreach_cell_in_region (filter->sheet,
-							     CELL_ITER_IGNORE_HIDDEN | CELL_ITER_IGNORE_BLANK,
-							     col, start_row, col, end_row,
-							     (CellIterFunc) cb_filter_find_percentage, &data);
-				offset = (data.high - data.low) * cond->count / 100.;
-				data.high -= offset;
-				data.low  += offset;
-				data.target_sheet = target_sheet;
-				sheet_foreach_cell_in_region (filter->sheet,
-							     CELL_ITER_IGNORE_HIDDEN,
-							     col, start_row, col, end_row,
-							     (CellIterFunc) cb_hide_unwanted_percentage, &data);
+				// Find range of values
+				for (ui = 0; ui < data.vals->len; ui++) {
+					GnmValue const *v = g_ptr_array_index (data.vals, ui);
+					gnm_float x;
+					if (!VALUE_IS_NUMBER (v))
+						continue;
+					x = value_get_as_float (v);
+					if (first || x < low) low = x;
+					if (first || x > high) high = x;
+					first = FALSE;
+				}
+
+				cutoff = data.find_max
+					? high - (high - low) * (gnm_float)(cond->count / 100.0)
+					: low + (high - low) * (gnm_float)(cond->count / 100.0);
+
+				// Eliminate values beyond cutoff (as well as anything not a number)
+				for (ui = 0; ui < data.vals->len; ui++) {
+					GnmValue const *v = g_ptr_array_index (data.vals, ui);
+					if (VALUE_IS_NUMBER (v)) {
+						gnm_float x = value_get_as_float (v);
+						if (data.find_max ? x >= cutoff : x <= cutoff)
+							continue;
+					}
+					g_ptr_array_remove_index_fast (data.vals, ui);
+					ui--;
+				}
 			}
 		} else { /* absolute */
-			FilterItems data;
-			data.find_max = (cond->op[0] & 0x1) ? FALSE : TRUE;
-			data.elements    = 0;
-			data.count  = cond->count;
-			data.vals   = g_new (GnmValue const *, data.count);
-
-			sheet_foreach_cell_in_region (filter->sheet,
-				CELL_ITER_IGNORE_HIDDEN | CELL_ITER_IGNORE_BLANK,
-				col, start_row, col, end_row,
-				(CellIterFunc) cb_filter_find_items, &data);
-			data.target_sheet = target_sheet;
-			sheet_foreach_cell_in_region (filter->sheet,
-				CELL_ITER_IGNORE_HIDDEN,
-				col, start_row, col, end_row,
-				(CellIterFunc) cb_hide_unwanted_items, &data);
-			g_free (data.vals);
+			size_t n = CLAMP (cond->count, 0, data.vals->len);
+			g_ptr_array_set_size (data.vals, n);
 		}
+		hide_unwanted_rows (&data, target_sheet, &r);
+		g_ptr_array_free (data.vals, TRUE);
 	} else
 		g_warning ("Invalid operator %d", cond->op[0]);
 }
@@ -568,7 +562,7 @@ enum {
 	LAST_SIGNAL
 };
 
-static guint signals [LAST_SIGNAL] = { 0 };
+static guint signals[LAST_SIGNAL] = { 0 };
 
 typedef struct {
 	SheetObjectClass parent;
@@ -647,14 +641,17 @@ gnm_filter_add_field (GnmFilter *filter, int i)
 	sheet_object_set_anchor (GNM_SO (fcombo), &anchor);
 	sheet_object_set_sheet (GNM_SO (fcombo), filter->sheet);
 
-#ifdef HAVE_G_PTR_ARRAY_INSERT
 	g_ptr_array_insert (filter->fields, i, fcombo);
-#else
-	go_ptr_array_insert (filter->fields, fcombo, i);
-#endif
 	/* We hold a reference to fcombo */
 }
 
+/**
+ * gnm_filter_attach:
+ * @filter: #GnmFilter
+ * @sheet: #Sheet
+ *
+ * Attach @filter to @sheet.
+ **/
 void
 gnm_filter_attach (GnmFilter *filter, Sheet *sheet)
 {
@@ -686,7 +683,7 @@ gnm_filter_attach (GnmFilter *filter, Sheet *sheet)
 GnmFilter *
 gnm_filter_new (Sheet *sheet, GnmRange const *r, gboolean attach)
 {
-	GnmFilter	*filter;
+	GnmFilter *filter;
 
 	g_return_val_if_fail (IS_SHEET (sheet), NULL);
 	g_return_val_if_fail (r != NULL, NULL);
@@ -710,9 +707,11 @@ gnm_filter_new (Sheet *sheet, GnmRange const *r, gboolean attach)
 /**
  * gnm_filter_dup:
  * @src: #GnmFilter
- * @sheet: #Sheet
+ * @sheet: (transfer none): #Sheet
  *
  * Duplicate @src into @sheet
+ *
+ * Returns: (transfer full): the duplicated #GnmFilter.
  **/
 GnmFilter *
 gnm_filter_dup (GnmFilter const *src, Sheet *sheet)
@@ -743,6 +742,14 @@ gnm_filter_dup (GnmFilter const *src, Sheet *sheet)
 	return dst;
 }
 
+/**
+ * gnm_filter_ref:
+ * @filter: (transfer none): #GnmFilter
+ *
+ * Add a reference to @filter.
+ *
+ * Returns: (transfer full): @filter.
+ **/
 GnmFilter *
 gnm_filter_ref (GnmFilter *filter)
 {
@@ -751,6 +758,12 @@ gnm_filter_ref (GnmFilter *filter)
 	return filter;
 }
 
+/**
+ * gnm_filter_unref:
+ * @filter: (transfer full): #GnmFilter
+ *
+ * Remove a reference to @filter.
+ **/
 void
 gnm_filter_unref (GnmFilter *filter)
 {
@@ -764,6 +777,11 @@ gnm_filter_unref (GnmFilter *filter)
 	g_free (filter);
 }
 
+/**
+ * gnm_filter_get_type:
+ *
+ * Returns: the #GType for #GnmFilter.
+ **/
 GType
 gnm_filter_get_type (void)
 {
@@ -777,6 +795,12 @@ gnm_filter_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_filter_remove:
+ * @filter: (transfer none): #GnmFilter
+ *
+ * Remove @filter from its sheet.
+ **/
 void
 gnm_filter_remove (GnmFilter *filter)
 {
@@ -817,7 +841,7 @@ gnm_filter_remove (GnmFilter *filter)
  * @filter: #GnmFilter
  * @i: zero-based index
  *
- * Returns: (transfer none): the @i'th condition of @filter
+ * Returns: (transfer none) (nullable): the @i'th condition of @filter
  **/
 GnmFilterCondition const *
 gnm_filter_get_condition (GnmFilter const *filter, unsigned i)
@@ -878,13 +902,11 @@ gnm_filter_update_active (GnmFilter *filter)
  * gnm_filter_set_condition:
  * @filter:
  * @i:
- * @cond: #GnmFilterCondition
+ * @cond: (transfer full) (nullable): #GnmFilterCondition
  * @apply:
  *
  * Change the @i-th condition of @filter to @cond.  If @apply is
  * %TRUE, @filter is used to set the visibility of the rows in @filter::sheet
- *
- * Absorbs the reference to @cond.
  **/
 void
 gnm_filter_set_condition (GnmFilter *filter, unsigned i,
@@ -904,7 +926,7 @@ gnm_filter_set_condition (GnmFilter *filter, unsigned i,
 		gnm_filter_condition_free (fcombo->cond);
 	}
 	fcombo->cond = cond;
-	g_signal_emit (G_OBJECT (fcombo), signals [COND_CHANGED], 0);
+	g_signal_emit (G_OBJECT (fcombo), signals[COND_CHANGED], 0);
 
 	if (apply) {
 		/* if there was an existing cond then we need to do
@@ -992,8 +1014,11 @@ gnm_sheet_filter_intersect_rows (Sheet const *sheet, int from, int to)
 
 /**
  * gnm_sheet_filter_can_be_extended:
+ * @sheet: #Sheet
+ * @f: #GnmFilter
+ * @r: range
  *
- * Returns: (transfer full): #GnmRange
+ * Returns: (transfer full) (nullable): #GnmRange
  */
 GnmRange *
 gnm_sheet_filter_can_be_extended (G_GNUC_UNUSED Sheet const *sheet,

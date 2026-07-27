@@ -241,6 +241,12 @@ gnm_style_border_fetch (GnmStyleBorderType		 line_type,
 	return border;
 }
 
+/**
+ * gnm_style_border_visible_in_blank:
+ * @border: #GnmBorder
+ *
+ * Returns: %TRUE if the border should be visible in a blank cell.
+ **/
 gboolean
 gnm_style_border_visible_in_blank (GnmBorder const *border)
 {
@@ -249,6 +255,12 @@ gnm_style_border_visible_in_blank (GnmBorder const *border)
 	return border->line_type != GNM_STYLE_BORDER_NONE;
 }
 
+/**
+ * gnm_style_border_get_width:
+ * @line_type: border type
+ *
+ * Returns: the width of the border in pixels.
+ **/
 gint
 gnm_style_border_get_width (GnmStyleBorderType const line_type)
 {
@@ -258,9 +270,15 @@ gnm_style_border_get_width (GnmStyleBorderType const line_type)
 	if (line_type == GNM_STYLE_BORDER_NONE)
 		return 0;
 
-	return style_border_data [line_type].width;
+	return style_border_data[line_type].width;
 }
 
+/**
+ * gnm_style_border_get_orientation:
+ * @type: border location
+ *
+ * Returns: the orientation of the border.
+ **/
 GnmStyleBorderOrientation
 gnm_style_border_get_orientation (GnmStyleBorderLocation type)
 {
@@ -282,12 +300,11 @@ gnm_style_border_get_orientation (GnmStyleBorderLocation type)
  * gnm_style_border_ref:
  * @border: (nullable): #GnmBorder
  *
- * Returns: (transfer full): a reference to @border
+ * Returns: (transfer full) (nullable): a reference to @border
  */
 GnmBorder *
 gnm_style_border_ref (GnmBorder *border)
 {
-	/* NULL is ok */
 	if (border != NULL) {
 		++border->ref_count;
 		if (0) g_printerr ("style border ref: %p  [color=%p]\n", border, border->color);
@@ -379,79 +396,79 @@ gnm_border_get_type (void)
 static gboolean
 style_border_hmargins (GnmBorder const * const * prev_vert,
 		       GnmStyleRow const *sr, int col,
-		       int offsets [2][2], int dir)
+		       int offsets[2][2], int dir)
 {
-	GnmBorder const *border = sr->top [col];
-	GnmBorder const *t0 = prev_vert [col];
-	GnmBorder const *t1 = prev_vert [col+1];
-	GnmBorder const *b0 = sr->vertical [col];
-	GnmBorder const *b1 = sr->vertical [col+1];
+	GnmBorder const *border = sr->top[col];
+	GnmBorder const *t0 = prev_vert[col];
+	GnmBorder const *t1 = prev_vert[col+1];
+	GnmBorder const *b0 = sr->vertical[col];
+	GnmBorder const *b1 = sr->vertical[col+1];
 
 	if (border->line_type == GNM_STYLE_BORDER_DOUBLE) {
 		/* pull inwards or outwards */
 		if (!gnm_style_border_is_blank (t0)) {
 			if (t0->line_type == GNM_STYLE_BORDER_DOUBLE)
-				offsets [1][0] =  dir * t0->end_margin;
+				offsets[1][0] =  dir * t0->end_margin;
 			else
-				offsets [1][0] = -dir * t0->begin_margin;
+				offsets[1][0] = -dir * t0->begin_margin;
 		} else if (!gnm_style_border_is_blank (b0))
-			offsets [1][0] = -dir * b0->begin_margin;
+			offsets[1][0] = -dir * b0->begin_margin;
 		else
-			offsets [1][0] = 0;
+			offsets[1][0] = 0;
 
 		if (!gnm_style_border_is_blank (t1)) {
 			if (t1->line_type == GNM_STYLE_BORDER_DOUBLE)
-				offsets [1][1] = -dir * t1->begin_margin;
+				offsets[1][1] = -dir * t1->begin_margin;
 			else
-				offsets [1][1] =  dir * t1->end_margin;
+				offsets[1][1] =  dir * t1->end_margin;
 		} else if (!gnm_style_border_is_blank (b1))
-			offsets [1][1] =  dir * b1->end_margin;
+			offsets[1][1] =  dir * b1->end_margin;
 		else
-			offsets [1][1] = 0;
+			offsets[1][1] = 0;
 
 		if (!gnm_style_border_is_blank (b0)) {
 			if (b0->line_type == GNM_STYLE_BORDER_DOUBLE)
-				offsets [0][0] =  dir * b0->end_margin;
+				offsets[0][0] =  dir * b0->end_margin;
 			else
-				offsets [0][0]= -dir * b0->begin_margin;
+				offsets[0][0]= -dir * b0->begin_margin;
 		} else if (!gnm_style_border_is_blank (t0))
-			offsets [0][0]= -dir * t0->begin_margin;
+			offsets[0][0]= -dir * t0->begin_margin;
 		else
-			offsets [0][0]= 0;
+			offsets[0][0]= 0;
 
 		if (!gnm_style_border_is_blank (b1)) {
 			if (b1->line_type == GNM_STYLE_BORDER_DOUBLE)
-				offsets [0][1] = -dir * b1->begin_margin;
+				offsets[0][1] = -dir * b1->begin_margin;
 			else
-				offsets [0][1] =  dir * b1->end_margin;
+				offsets[0][1] =  dir * b1->end_margin;
 		} else if (!gnm_style_border_is_blank (t1))
-			offsets [0][1] =  dir * t1->end_margin;
+			offsets[0][1] =  dir * t1->end_margin;
 		else
-			offsets [0][1] = 0;
+			offsets[0][1] = 0;
 		return TRUE;
 	}
 
-	offsets [0][0] = offsets [0][1] = 0;
+	offsets[0][0] = offsets[0][1] = 0;
 	if (border->line_type == GNM_STYLE_BORDER_NONE) {
 		/* No need to check for show grid.  That is done when the
 		 * borders are loaded.  Do not over write background patterns
 		 */
 		if (!gnm_style_border_is_blank (b0))
-			offsets [0][0] = dir *(1 + b0->end_margin);
+			offsets[0][0] = dir *(1 + b0->end_margin);
 		else if (!gnm_style_border_is_blank (t0))
-			offsets [0][0] = dir *(1 + t0->end_margin);
-		else if (sr->top [col-1] == NULL)
-			offsets [0][0] = dir;
+			offsets[0][0] = dir *(1 + t0->end_margin);
+		else if (sr->top[col-1] == NULL)
+			offsets[0][0] = dir;
 
 		if (!gnm_style_border_is_blank (b1))
-			offsets [0][1] = -dir * (1 - b1->begin_margin);
+			offsets[0][1] = -dir * (1 - b1->begin_margin);
 		else if (!gnm_style_border_is_blank (t1))
-			offsets [0][1] = -dir * (1 - t1->begin_margin);
-		else if (sr->top [col+1] == NULL)
-			offsets [0][1] = -dir;
+			offsets[0][1] = -dir * (1 - t1->begin_margin);
+		else if (sr->top[col+1] == NULL)
+			offsets[0][1] = -dir;
 	} else {
 		/* pull outwards */
-		if (gnm_style_border_is_blank (sr->top [col-1])) {
+		if (gnm_style_border_is_blank (sr->top[col-1])) {
 			int offset = 0;
 			if (!gnm_style_border_is_blank (b0))
 				offset = b0->begin_margin;
@@ -460,10 +477,10 @@ style_border_hmargins (GnmBorder const * const * prev_vert,
 				if (offset < tmp)
 					offset = tmp;
 			}
-			offsets [0][0] = -dir * offset;
+			offsets[0][0] = -dir * offset;
 		}
 
-		if (gnm_style_border_is_blank (sr->top [col+1])) {
+		if (gnm_style_border_is_blank (sr->top[col+1])) {
 			int offset = 0;
 			if (!gnm_style_border_is_blank (b1))
 				offset = b1->end_margin;
@@ -472,7 +489,7 @@ style_border_hmargins (GnmBorder const * const * prev_vert,
 				if (offset < tmp)
 					offset = tmp;
 			}
-			offsets [0][1] = dir * offset;
+			offsets[0][1] = dir * offset;
 		}
 	}
 	return FALSE;
@@ -481,66 +498,66 @@ style_border_hmargins (GnmBorder const * const * prev_vert,
 static gboolean
 style_border_vmargins (GnmBorder const * const * prev_vert,
 		       GnmStyleRow const *sr, int col,
-		       int offsets [2][2])
+		       int offsets[2][2])
 {
-	GnmBorder const *border = sr->vertical [col];
-	GnmBorder const *l0 = sr->top [col-1];
-	GnmBorder const *r0 = sr->top [col];
-	GnmBorder const *l1 = sr->bottom [col-1];
-	GnmBorder const *r1 = sr->bottom [col];
+	GnmBorder const *border = sr->vertical[col];
+	GnmBorder const *l0 = sr->top[col-1];
+	GnmBorder const *r0 = sr->top[col];
+	GnmBorder const *l1 = sr->bottom[col-1];
+	GnmBorder const *r1 = sr->bottom[col];
 
 	if (border->line_type == GNM_STYLE_BORDER_DOUBLE) {
 		/* pull inwards or outwards */
 		if (!gnm_style_border_is_blank (l0))
-			offsets [1][0] =  l0->end_margin;
+			offsets[1][0] =  l0->end_margin;
 		else if (!gnm_style_border_is_blank (r0))
-			offsets [1][0] = -r0->begin_margin;
+			offsets[1][0] = -r0->begin_margin;
 		else
-			offsets [1][0] = 0;
+			offsets[1][0] = 0;
 
 		if (!gnm_style_border_is_blank (l1))
-			offsets [1][1] = -l1->begin_margin;
+			offsets[1][1] = -l1->begin_margin;
 		else if (!gnm_style_border_is_blank (r1))
-			offsets [1][1] =  r1->end_margin;
+			offsets[1][1] =  r1->end_margin;
 		else
-			offsets [1][1] = 0;
+			offsets[1][1] = 0;
 
 		if (!gnm_style_border_is_blank (r0))
-			offsets [0][0] = r0->end_margin;
+			offsets[0][0] = r0->end_margin;
 		else if (!gnm_style_border_is_blank (l0))
-			offsets [0][0] = -l0->begin_margin;
+			offsets[0][0] = -l0->begin_margin;
 		else
-			offsets [0][0] = 0;
+			offsets[0][0] = 0;
 
 		if (!gnm_style_border_is_blank (r1))
-			offsets [0][1] = -r1->begin_margin;
+			offsets[0][1] = -r1->begin_margin;
 		else if (!gnm_style_border_is_blank (l1))
-			offsets [0][1] =  l1->end_margin;
+			offsets[0][1] =  l1->end_margin;
 		else
-			offsets [0][1] = 0;
+			offsets[0][1] = 0;
 		return TRUE;
 	}
 
-	offsets [0][0] = offsets [0][1] = 0;
+	offsets[0][0] = offsets[0][1] = 0;
 	if (border->line_type == GNM_STYLE_BORDER_NONE) {
 		/* No need to check for show grid.  That is done when the
 		 * borders are loaded.
 		 */
 		if (!gnm_style_border_is_blank (r0))
-			offsets [0][0] = 1 + r0->end_margin;
+			offsets[0][0] = 1 + r0->end_margin;
 		else if (!gnm_style_border_is_blank (l0))
-			offsets [0][0] = 1 + l0->end_margin;
+			offsets[0][0] = 1 + l0->end_margin;
 		/* Do not over write background patterns */
-		else if (prev_vert [col] == NULL)
-			offsets [0][0] = 1;
+		else if (prev_vert[col] == NULL)
+			offsets[0][0] = 1;
 
 		if (!gnm_style_border_is_blank (r1))
-			offsets [0][1] = -1 - r1->begin_margin;
+			offsets[0][1] = -1 - r1->begin_margin;
 		else if (!gnm_style_border_is_blank (l1))
-			offsets [0][1] = -1 - l1->begin_margin;
+			offsets[0][1] = -1 - l1->begin_margin;
 		/* Do not over write background patterns */
-		else if (sr->vertical [col] == NULL)
-			offsets [0][1] = -1;
+		else if (sr->vertical[col] == NULL)
+			offsets[0][1] = -1;
 	} else {
 		/* pull inwards */
 		int offset = 0;
@@ -551,7 +568,7 @@ style_border_vmargins (GnmBorder const * const * prev_vert,
 			if (offset < tmp)
 				offset = tmp;
 		}
-		offsets [0][0] = offset;
+		offsets[0][0] = offset;
 
 		offset = 0;
 		if (!gnm_style_border_is_blank (r1))
@@ -561,11 +578,18 @@ style_border_vmargins (GnmBorder const * const * prev_vert,
 			if (offset < tmp)
 				offset = tmp;
 		}
-		offsets [0][1] = -offset;
+		offsets[0][1] = -offset;
 	}
 	return FALSE;
 }
 
+/**
+ * gnm_style_border_set_dash:
+ * @i: border type
+ * @context: #cairo_t
+ *
+ * Sets the dash style for @context based on @i.
+ **/
 void
 gnm_style_border_set_dash (GnmStyleBorderType const i,
 			   cairo_t *context)
@@ -631,10 +655,19 @@ print_vline_gtk (cairo_t *context,
 
 /**
  * gnm_style_borders_row_draw:
+ * @prev_vert: (array): the vertical borders of the previous row.
+ * @sr: #GnmStyleRow
+ * @cr: #cairo_t
+ * @x: x coordinate
+ * @y1: y1 coordinate
+ * @y2: y2 coordinate
+ * @colwidths: (array): widths of the columns
+ * @draw_vertical: if %TRUE, draw vertical borders.
+ * @dir: 1 for LTR, -1 for RTL.
  *
  * TODO : This is not the final resting place for this.
  * It will move into the gui layer eventually.
- */
+ **/
 void
 gnm_style_borders_row_draw (GnmBorder const * const * prev_vert,
 			    GnmStyleRow const *sr,
@@ -655,7 +688,7 @@ gnm_style_borders_row_draw (GnmBorder const * const * prev_vert,
 			continue;
 		next_x = x + dir * colwidths[col];
 
-		border = sr->top [col];
+		border = sr->top[col];
 
 		if (style_border_set_gtk (border, cr)) {
 			double y = y1;
@@ -675,7 +708,7 @@ gnm_style_borders_row_draw (GnmBorder const * const * prev_vert,
 			continue;
 
 
-		border = sr->vertical [col];
+		border = sr->vertical[col];
 		if (style_border_set_gtk (border, cr)) {
 			double x1 = x;
 			if (style_border_vmargins (prev_vert, sr, col, o)) {
@@ -689,7 +722,7 @@ gnm_style_borders_row_draw (GnmBorder const * const * prev_vert,
 		}
 	}
 	if (draw_vertical) {
-		border = sr->vertical [col];
+		border = sr->vertical[col];
 		if (style_border_set_gtk (border, cr)) {
 			double x1 = x;
 			if (style_border_vmargins (prev_vert, sr, col, o)) {
@@ -706,6 +739,17 @@ gnm_style_borders_row_draw (GnmBorder const * const * prev_vert,
 	cairo_restore (cr);
 }
 
+/**
+ * gnm_style_border_draw_diag:
+ * @style: #GnmStyle
+ * @cr: #cairo_t
+ * @x1: x1
+ * @y1: y1
+ * @x2: x2
+ * @y2: y2
+ *
+ * Draws diagonal borders for the cell with @style.
+ **/
 void
 gnm_style_border_draw_diag (GnmStyle const *style,
 			    cairo_t *cr,
@@ -750,6 +794,18 @@ gnm_style_border_draw_diag (GnmStyle const *style,
 	cairo_restore (cr);
 }
 
+/**
+ * gnm_style_borders_row_print_gtk:
+ * @prev_vert: (array): the vertical borders of the previous row.
+ * @sr: #GnmStyleRow
+ * @context: #cairo_t
+ * @x: x coordinate
+ * @y1: y1 coordinate
+ * @y2: y2 coordinate
+ * @sheet: #Sheet
+ * @draw_vertical: if %TRUE, draw vertical borders.
+ * @dir: 1 for LTR, -1 for RTL.
+ **/
 void
 gnm_style_borders_row_print_gtk (GnmBorder const * const * prev_vert,
 				 GnmStyleRow const *sr,
@@ -774,7 +830,7 @@ gnm_style_borders_row_print_gtk (GnmBorder const * const * prev_vert,
 			continue;
 		next_x = x + dir * cri->size_pts * hscale;
 
-		border = sr->top [col];
+		border = sr->top[col];
 
 		if (style_border_set_gtk (border, context)) {
 			double y = y1;
@@ -793,7 +849,7 @@ gnm_style_borders_row_print_gtk (GnmBorder const * const * prev_vert,
 			continue;
 
 
-		border = sr->vertical [col];
+		border = sr->vertical[col];
 		if (style_border_set_gtk (border, context)) {
 			double x1 = x;
 			if (style_border_vmargins (prev_vert, sr, col, o)) {
@@ -806,7 +862,7 @@ gnm_style_borders_row_print_gtk (GnmBorder const * const * prev_vert,
 		}
 	}
 	if (draw_vertical) {
-		border = sr->vertical [col];
+		border = sr->vertical[col];
 		if (style_border_set_gtk (border, context)) {
 			double x1 = x;
 			if (style_border_vmargins (prev_vert, sr, col, o)) {
@@ -823,6 +879,17 @@ gnm_style_borders_row_print_gtk (GnmBorder const * const * prev_vert,
 	cairo_restore (context);
 }
 
+/**
+ * gnm_style_border_print_diag_gtk:
+ * @style: #GnmStyle
+ * @context: #cairo_t
+ * @x1: x1
+ * @y1: y1
+ * @x2: x2
+ * @y2: y2
+ *
+ * Prints diagonal borders for the cell with @style.
+ **/
 void
 gnm_style_border_print_diag_gtk (GnmStyle const *style,
 				 cairo_t *context,

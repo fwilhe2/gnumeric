@@ -169,6 +169,7 @@ dialog_cell_comment (WBCGtk *wbcg, Sheet *sheet, GnmCellPos const *pos)
 		gtk_widget_hide (go_gtk_builder_get_widget (state->gui,
 						       "old-author-label"));
 	}
+	g_free (cell_name);
 	gtk_window_set_title (GTK_WINDOW (state->dialog), title);
 	g_free (title);
 
@@ -192,7 +193,7 @@ dialog_cell_comment (WBCGtk *wbcg, Sheet *sheet, GnmCellPos const *pos)
 		go_gtk_builder_get_widget (state->gui, "help_button"),
 		GNUMERIC_HELP_LINK_CELL_COMMENT);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_dialog_cell_comment_destroy);
 

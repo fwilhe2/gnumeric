@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_CONTROL_GUI_PRIV_H_
-# define _GNM_SHEET_CONTROL_GUI_PRIV_H_
+#ifndef GNM_SHEET_CONTROL_GUI_PRIV_H_
+#define GNM_SHEET_CONTROL_GUI_PRIV_H_
 
 #include <sheet-control-gui.h>
 #include <sheet-control-priv.h>
@@ -8,7 +8,7 @@
 G_BEGIN_DECLS
 
 #define	SCG_NUM_PANES		4
-struct _SheetControlGUI {
+struct SheetControlGUI_ {
 	SheetControl sheet_control;
 
 	/* Cached SheetControl attribute to reduce casting. */
@@ -89,4 +89,4 @@ void scg_mode_edit		(SheetControlGUI *scg);
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_CONTROL_GUI_PRIV_H_ */
+#endif /* GNM_SHEET_CONTROL_GUI_PRIV_H_ */

@@ -84,12 +84,85 @@ static GnmFuncHelp const help_date[] = {
 	{ GNM_FUNC_HELP_END }
 };
 
+static gboolean
+datetime_intl_weekend (GnmValue const *v, GnmEvalPos const *pos,
+		       int *n_non_weekend, char weekends[7])
+{
+	*n_non_weekend = 0;
+	for (int i = 0; i < 7; i++)
+		weekends[i] = 0;
+
+	if (!v) {
+		/* Default: Saturday and Sunday */
+		weekends[0] = weekends[6] = 1;
+		*n_non_weekend = 5;
+		return TRUE;
+	}
+
+	if (VALUE_IS_NUMBER (v)) {
+		int id = (int)value_get_as_float (v);
+		switch (id) {
+		case 1:  weekends[6] = weekends[0] = 1; break; /* Sat, Sun */
+		case 2:  weekends[0] = weekends[1] = 1; break; /* Sun, Mon */
+		case 3:  weekends[1] = weekends[2] = 1; break; /* Mon, Tue */
+		case 4:  weekends[2] = weekends[3] = 1; break; /* Tue, Wed */
+		case 5:  weekends[3] = weekends[4] = 1; break; /* Wed, Thu */
+		case 6:  weekends[4] = weekends[5] = 1; break; /* Thu, Fri */
+		case 7:  weekends[5] = weekends[6] = 1; break; /* Fri, Sat */
+		case 11: weekends[0] = 1; break; /* Sun only */
+		case 12: weekends[1] = 1; break; /* Mon only */
+		case 13: weekends[2] = 1; break; /* Tue only */
+		case 14: weekends[3] = 1; break; /* Wed only */
+		case 15: weekends[4] = 1; break; /* Thu only */
+		case 16: weekends[5] = 1; break; /* Fri only */
+		case 17: weekends[6] = 1; break; /* Sat only */
+		default:
+			return FALSE;
+		}
+	} else if (VALUE_IS_STRING (v)) {
+		char const *s = value_peek_string (v);
+		if (strlen (s) != 7)
+			return FALSE;
+		for (int i = 0; i < 7; i++) {
+			if (s[i] == '1')
+				weekends[(i + 1) % 7] = 1;
+			else if (s[i] == '0')
+				weekends[(i + 1) % 7] = 0;
+			else
+				return FALSE;
+		}
+	} else {
+		/* Try Gnumeric/OpenFormula array style */
+		GnmValue *result = NULL;
+		int nw;
+		gnm_float *w = collect_floats_value (v, pos,
+						     COLLECT_COERCE_STRINGS |
+						     COLLECT_ZEROONE_BOOLS |
+						     COLLECT_IGNORE_BLANKS,
+						     &nw, &result);
+		if (result || nw != 7) {
+			value_release (result);
+			g_free (w);
+			return FALSE;
+		}
+		for (int i = 0; i < 7; i++)
+			weekends[i] = w[i] != 0;
+		g_free (w);
+	}
+
+	for (int i = 0; i < 7; i++)
+		if (weekends[i] == 0)
+			(*n_non_weekend)++;
+
+	return TRUE;
+}
+
 static GnmValue *
 gnumeric_date (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float year  = value_get_as_float (argv [0]);
-	gnm_float month = value_get_as_float (argv [1]);
-	gnm_float day   = value_get_as_float (argv [2]);
+	gnm_float year  = value_get_as_float (argv[0]);
+	gnm_float month = value_get_as_float (argv[1]);
+	gnm_float day   = value_get_as_float (argv[2]);
 	GDate date;
 	GODateConventions const *conv = DATE_CONV (ei->pos);
 
@@ -143,12 +216,12 @@ static GnmFuncHelp const help_unix2date[] = {
 static GnmValue *
 gnumeric_unix2date (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float futime = value_get_as_float (argv [0]);
+	gnm_float futime = value_get_as_float (argv[0]);
 	time_t    utime  = (time_t)futime;
 	gnm_float serial;
 
 	/* Check for overflow.  */
-	if (gnm_abs (futime - utime) >= 1.0)
+	if (gnm_abs (futime - utime) >= 1)
 		return value_new_error_VALUE (ei->pos);
 
 	serial = go_date_timet_to_serial_raw (utime, DATE_CONV (ei->pos));
@@ -173,12 +246,12 @@ static GnmFuncHelp const help_date2unix[] = {
 static GnmValue *
 gnumeric_date2unix (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float fserial = value_get_as_float (argv [0]);
+	gnm_float fserial = value_get_as_float (argv[0]);
 	int        serial  = (int)fserial;
 	time_t     utime   = go_date_serial_to_timet (serial, DATE_CONV (ei->pos));
 
 	/* Check for overflow.  */
-	if (gnm_abs (fserial - serial) >= 1.0 || utime == (time_t)-1)
+	if (gnm_abs (fserial - serial) >= 1 || utime == (time_t)-1)
 		return value_new_error_VALUE (ei->pos);
 
 	return value_new_int (utime +
@@ -210,10 +283,10 @@ static GnmFuncHelp const help_datedif[] = {
         { GNM_FUNC_HELP_ARG, F_("start_date:starting date serial value")},
         { GNM_FUNC_HELP_ARG, F_("end_date:ending date serial value")},
         { GNM_FUNC_HELP_ARG, F_("interval:counting unit")},
-	{ GNM_FUNC_HELP_DESCRIPTION, F_("DATEDIF returns the distance from @{start_date} to @{end_date} according to the unit specified by @{interval}.") },
-	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"y\", \"m\", or \"d\" then the distance is measured in complete years, months, or days respectively.") },
-	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"ym\" or \"yd\" then the distance is measured in complete months or days, respectively, but excluding any difference in years.") },
-	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"md\" then the distance is measured in complete days but excluding any difference in months.") },
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("DATEDIF returns the distance from @{start_date} to @{end_date} according to the unit specified by @{interval}.  This function exists primarly for compatibility reasons and the semantics is somewhat peculiar.  In particular, the concept of \"whole month\" is based on whether the ending day is larger than or equal to the beginning day and not on whether a whole calendar month in contained in the interval.  A similar treatment is given to \"whole year\".") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"y\", \"m\", or \"d\" then the distance is measured in whole years, months, or days respectively.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"ym\" or \"yd\" then the distance is measured in whole months or days, respectively, but excluding any difference covered by whole years.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{interval} is \"md\" then the distance is measured in days but excluding any difference covered by whole months.") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=DATEDIF(DATE(2003,2,3),DATE(2007,4,2),\"m\")" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=DATEDIF(DATE(2000,4,30),DATE(2003,8,4),\"d\")" },
@@ -308,14 +381,11 @@ datedif_opt_md (GDate *gdate1, GDate *gdate2, gboolean excel_compat)
 static GnmValue *
 gnumeric_datedif (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	int date1, date2;
-	char const *opt;
+	int date1 = gnm_floor (value_get_as_float (argv[0]));
+	int date2 = gnm_floor (value_get_as_float (argv[1]));
+	char const *opt = value_peek_string (argv[2]);
 	GDate d1, d2;
 	GODateConventions const *conv = DATE_CONV (ei->pos);
-
-	date1 = gnm_floor (value_get_as_float (argv [0]));
-	date2 = gnm_floor (value_get_as_float (argv [1]));
-	opt = value_peek_string (argv[2]);
 
 	if (date1 > date2)
 		return value_new_error_NUM (ei->pos);
@@ -411,8 +481,8 @@ static GnmValue *
 gnumeric_now (GnmFuncEvalInfo *ei, G_GNUC_UNUSED GnmValue const * const *argv)
 {
 	guint64 t = g_get_real_time ();
-	double r = go_date_timet_to_serial_raw (t / 1000000, DATE_CONV (ei->pos));
-	r += (t % 1000000) / (24 * 60 * 60 * 1000000.0);
+	gnm_float r = go_date_timet_to_serial_raw (t / 1000000, DATE_CONV (ei->pos));
+	r += (t % 1000000) / (24 * 60 * 60 * GNM_const(1000000.0));
 	return value_new_float (r);
 }
 
@@ -426,7 +496,7 @@ static GnmFuncHelp const help_time[] = {
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("The TIME function computes the fractional day after midnight at the time given by @{hour}, @{minute}, and @{second}.") },
 	{ GNM_FUNC_HELP_NOTE, F_("While the return value is automatically formatted to look like a time between 0:00 and 24:00, "
 				 "the underlying serial time value is a number between 0 and 1.")},
- 	{ GNM_FUNC_HELP_NOTE, F_("If any of @{hour}, @{minute}, and @{second} is negative, #NUM! is returned")},
+	{ GNM_FUNC_HELP_NOTE, F_("If the total time is negative, the result is the time wrapped around midnight.")},
         { GNM_FUNC_HELP_EXAMPLES, "=TIME(12,30,2)" },
         { GNM_FUNC_HELP_EXAMPLES, "=TIME(25,100,18)" },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
@@ -437,15 +507,10 @@ static GnmFuncHelp const help_time[] = {
 static GnmValue *
 gnumeric_time (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float hours, minutes, seconds;
+	gnm_float hours = value_get_as_float (argv[0]);
+	gnm_float minutes = value_get_as_float (argv[1]);
+	gnm_float seconds = value_get_as_float (argv[2]);
 	gnm_float time;
-
-	hours   = gnm_fmod (value_get_as_float (argv [0]), 24);
-	minutes = value_get_as_float (argv [1]);
-	seconds = value_get_as_float (argv [2]);
-
-	if (hours < 0 || minutes < 0 || seconds < 0)
-		return value_new_error_NUM (ei->pos);
 
 	time = (hours * 3600 + minutes * 60 + seconds) / DAY_SECONDS;
 	time -= gnm_fake_floor (time);
@@ -473,11 +538,9 @@ static GnmFuncHelp const help_odf_time[] = {
 static GnmValue *
 gnumeric_odf_time (G_GNUC_UNUSED GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float hours, minutes, seconds;
-
-	hours   = value_get_as_float (argv [0]);
-	minutes = value_get_as_float (argv [1]);
-	seconds = value_get_as_float (argv [2]);
+	gnm_float hours = value_get_as_float (argv[0]);
+	gnm_float minutes = value_get_as_float (argv[1]);
+	gnm_float seconds = value_get_as_float (argv[2]);
 
 	return make_date (value_new_float ((hours * 3600 + minutes * 60 + seconds) /
 					   DAY_SECONDS));
@@ -823,9 +886,8 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float days = value_get_as_float (argv[1]);
 	int idays;
 	gnm_float *holidays = NULL;
-	gnm_float *weekends = NULL;
-	gnm_float const default_weekends[] = {1.,0.,0.,0.,0.,0.,1.};
-	int nholidays, nweekends, n_non_weekend = 0;
+	char weekends[7];
+	int nholidays, n_non_weekend = 0;
 	GDateWeekday weekday;
 	int serial = 0;
 	int i;
@@ -838,32 +900,12 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		return value_new_error_NUM (ei->pos);
 	idays = (int)days;
 
-	if (argv[3]) {
-		GnmValue *result = NULL;
+	if (!datetime_intl_weekend (argv[3], ei->pos, &n_non_weekend, weekends))
+		goto bad;
 
-		weekends = collect_floats_value (argv[3], ei->pos,
-						 COLLECT_COERCE_STRINGS |
-						 COLLECT_ZEROONE_BOOLS |
-						 COLLECT_IGNORE_BLANKS,
-						 &nweekends, &result);
-		if (result)
-			return result;
-		if (nweekends != 7)
-			goto bad;
-
-	} else {
-		weekends = (gnm_float *)default_weekends;
-		nweekends = 7;
-	}
-
-	for (i = 0; i < 7; i++)
-		if (weekends[i] == 0)
-			n_non_weekend++;
 	if (n_non_weekend == 0 && idays != 0)
 		goto bad;
 	if (n_non_weekend == 0 && idays == 0) {
-		if (weekends != default_weekends)
-			g_free (weekends);
 		return make_date (value_new_int (go_date_g_to_serial (&date, conv)));
 	}
 
@@ -878,11 +920,8 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 						 COLLECT_IGNORE_BLANKS |
 						 COLLECT_SORT,
 						 &nholidays, &result);
-		if (result) {
-			if (weekends != default_weekends)
-				g_free (weekends);
+		if (result)
 			return result;
-		}
 
 		for (i = j = 0; i < nholidays; i++) {
 			gnm_float s = holidays[i];
@@ -895,7 +934,7 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			go_date_serial_to_g (&hol, hserial, conv);
 			if (!g_date_valid (&hol))
 				goto bad;
-			if (weekends[g_date_get_weekday (&hol) % 7] != 0.)
+			if (weekends[g_date_get_weekday (&hol) % 7] != 0)
 				continue;
 			holidays[j++] = hserial;
 		}
@@ -988,8 +1027,6 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		}
 	} else serial = go_date_g_to_serial (&date, conv);
 
-	if (weekends != default_weekends)
-		g_free (weekends);
 	g_free (holidays);
 
 	go_date_serial_to_g (&date, serial, conv);
@@ -1001,10 +1038,35 @@ gnumeric_workday (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	return make_date (value_new_int (go_date_g_to_serial (&date, conv)));
 
  bad:
-	if (weekends != default_weekends)
-		g_free (weekends);
 	g_free (holidays);
 	return value_new_error_VALUE (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_workday_intl[] = {
+        { GNM_FUNC_HELP_NAME, F_("WORKDAY.INTL:add working days") },
+        { GNM_FUNC_HELP_ARG, F_("date:date serial value")},
+        { GNM_FUNC_HELP_ARG, F_("days:number of days to add")},
+        { GNM_FUNC_HELP_ARG, F_("weekend:predefined weekend pattern (1-17) or 7-character string, defaults to 1")},
+        { GNM_FUNC_HELP_ARG, F_("holidays:array of holidays")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("WORKDAY.INTL adjusts @{date} by @{days} skipping over weekends and @{holidays} in the process.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+        { GNM_FUNC_HELP_EXAMPLES, "=WORKDAY.INTL(DATE(2001,12,14),2,11)" },
+        { GNM_FUNC_HELP_EXAMPLES, "=WORKDAY.INTL(DATE(2001,12,14),2,\"0000011\")" },
+        { GNM_FUNC_HELP_SEEALSO, "WORKDAY,NETWORKDAYS.INTL"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_workday_intl (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	GnmValue const * args[4];
+	args[0] = argv[0];
+	args[1] = argv[1];
+	args[2] = argv[3]; /* Holidays */
+	args[3] = argv[2]; /* Weekend */
+	return gnumeric_workday (ei, args);
 }
 
 /**************************************************************************
@@ -1053,7 +1115,7 @@ static GnmFuncHelp const help_networkdays[] = {
 
 static int
 networkdays_calc (GDate start_date, int start_serial, int end_serial,
-		  int n_non_weekend, gnm_float *weekends, int nholidays, gnm_float *holidays)
+		  int n_non_weekend, char weekends[7], int nholidays, gnm_float *holidays)
 {
 	int res = 0;
 	int old_start_serial = start_serial;
@@ -1099,9 +1161,8 @@ gnumeric_networkdays (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GDate start_date, trouble_mar, trouble_feb, end_date;
 	GODateConventions const *conv = DATE_CONV (ei->pos);
 	gnm_float *holidays = NULL;
-	gnm_float *weekends = NULL;
-	gnm_float const default_weekends[] = {1.,0.,0.,0.,0.,0.,1.};
-	int nholidays, nweekends, n_non_weekend = 0;
+	char weekends[7];
+	int nholidays, n_non_weekend = 0;
 	int i;
 	GDateWeekday weekday;
 	gboolean includes_bad_day = FALSE;
@@ -1137,34 +1198,12 @@ gnumeric_networkdays (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	/* get the weekend info */
 
-	if (argv[3]) {
-		GnmValue *result = NULL;
-
-		weekends = collect_floats_value (argv[3], ei->pos,
-						 COLLECT_COERCE_STRINGS |
-						 COLLECT_ZEROONE_BOOLS |
-						 COLLECT_IGNORE_BLANKS,
-						 &nweekends, &result);
-		if (result)
-			return result;
-		if (nweekends != 7)
-			goto bad;
-
-	} else {
-		weekends = (gnm_float *)default_weekends;
-		nweekends = 7;
-	}
+	if (!datetime_intl_weekend (argv[3], ei->pos, &n_non_weekend, weekends))
+		goto bad;
 
 	/* If everything is a weekend we know the answer already */
-
-	for (i = 0; i < 7; i++)
-		if (weekends[i] == 0)
-			n_non_weekend++;
-	if (n_non_weekend == 0) {
-		if (weekends != default_weekends)
-			g_free (weekends);
+	if (n_non_weekend == 0)
 		return value_new_int (0);
-	}
 
 	/* Now get the holiday info */
 
@@ -1179,11 +1218,8 @@ gnumeric_networkdays (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 						 COLLECT_IGNORE_BLANKS |
 						 COLLECT_SORT,
 						 &nholidays, &result);
-		if (result) {
-			if (weekends != default_weekends)
-				g_free (weekends);
+		if (result)
 			return result;
-		}
 
 		for (i = j = 0; i < nholidays; i++) {
 			gnm_float s = holidays[i];
@@ -1202,7 +1238,7 @@ gnumeric_networkdays (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			if (weekday == G_DATE_SUNDAY)
 				weekday = 0;
 			/* We skip holidays that are on the weekend */
-			if (weekends[weekday] != 0.)
+			if (weekends[weekday] != 0)
 				continue;
 			holidays[j++] = hserial;
 		}
@@ -1231,17 +1267,41 @@ gnumeric_networkdays (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			goto bad;
 	}
 
-	if (weekends != default_weekends)
-		g_free (weekends);
 	g_free (holidays);
 
 	return value_new_int (total_res);
 
  bad:
-	if (weekends != default_weekends)
-		g_free (weekends);
 	g_free (holidays);
 	return value_new_error_VALUE (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_networkdays_intl[] = {
+        { GNM_FUNC_HELP_NAME, F_("NETWORKDAYS.INTL:number of workdays in range") },
+        { GNM_FUNC_HELP_ARG, F_("start_date:starting date serial value")},
+        { GNM_FUNC_HELP_ARG, F_("end_date:ending date serial value")},
+        { GNM_FUNC_HELP_ARG, F_("weekend:predefined weekend pattern (1-17) or 7-character string, defaults to 1")},
+        { GNM_FUNC_HELP_ARG, F_("holidays:array of holidays")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("NETWORKDAYS.INTL calculates the number of days from @{start_date} to @{end_date} "
+					"skipping weekends and @{holidays} in the process.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+        { GNM_FUNC_HELP_EXAMPLES, "=NETWORKDAYS.INTL(DATE(2001,1,2),DATE(2001,2,15),11)" },
+        { GNM_FUNC_HELP_EXAMPLES, "=NETWORKDAYS.INTL(DATE(2001,1,2),DATE(2001,2,15),\"0000111\")" },
+        { GNM_FUNC_HELP_SEEALSO, "NETWORKDAYS,WORKDAY.INTL"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_networkdays_intl (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	GnmValue const * args[4];
+	args[0] = argv[0];
+	args[1] = argv[1];
+	args[2] = argv[3]; /* Holidays */
+	args[3] = argv[2]; /* Weekend */
+	return gnumeric_networkdays (ei, args);
 }
 
 /***************************************************************************/
@@ -1313,34 +1373,65 @@ static GnmFuncHelp const help_weeknum[] = {
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("WEEKNUM calculates the week number according to @{method} which defaults to 1.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 1, then weeks start on Sundays and January 1 is in week 1.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 2, then weeks start on Mondays and January 1 is in week 1.") },
-	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 150, then the ISO 8601 numbering is used.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 11, then weeks start on Mondays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 12, then weeks start on Tuesdays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 13, then weeks start on Wednesdays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 14, then weeks start on Thursdays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 15, then weeks start on Fridays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 16, then weeks start on Saturdays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 17, then weeks start on Sundays and January 1 is in week 1.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{method} is 21 or 150, then the ISO 8601 numbering is used.") },
         { GNM_FUNC_HELP_EXAMPLES, "=WEEKNUM(DATE(2000,1,1))" },
         { GNM_FUNC_HELP_EXAMPLES, "=WEEKNUM(DATE(2008,1,1))" },
         { GNM_FUNC_HELP_SEEALSO, "ISOWEEKNUM"},
 	{ GNM_FUNC_HELP_END }
 };
 
+static int
+gnm_weeknum (GDate const *date, int start_day)
+{
+	GDate jan1;
+	int diff, offset;
+
+	g_date_set_dmy (&jan1, 1, 1, g_date_get_year (date));
+
+	/* Calculate how many days back from Jan 1st the first start_day was. */
+	/* GDateWeekday: Monday=1 ... Sunday=7. We want Sunday=0 for this math. */
+	int jan1_wd = g_date_get_weekday (&jan1) % 7;
+	int start_wd = start_day % 7;
+
+	offset = jan1_wd - start_wd;
+	if (offset < 0) offset += 7;
+
+	/* diff is the number of days from that 'virtual' first start_day of the year */
+	diff = g_date_get_day_of_year (date) - 1 + offset;
+
+	return (diff / 7) + 1;
+}
+
 static GnmValue *
 gnumeric_weeknum (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	GDate date;
 	gnm_float method = argv[1] ? gnm_floor (value_get_as_float (argv[1])) : 1;
-	int m;
+	int start_day;
 
-	if (method == 1)
-		m = GO_WEEKNUM_METHOD_SUNDAY;
-	else if (method == 2)
-		m = GO_WEEKNUM_METHOD_MONDAY;
-	else if (method == 150 || method == 21)
-		m = GO_WEEKNUM_METHOD_ISO;
+	if (!datetime_value_to_g (&date, argv[0], DATE_CONV (ei->pos)))
+		return value_new_error_NUM (ei->pos);
+
+	if (method == 21 || method == 150)
+		return value_new_int (go_date_weeknum (&date, GO_WEEKNUM_METHOD_ISO));
+
+	if (method == 1 || method == 17)
+		start_day = 7;      /* Sunday */
+	else if (method == 2 || method == 11)
+		start_day = 1; /* Monday */
+	else if (method >= 12 && method <= 16)
+		start_day = (int)method - 10;
 	else
 		return value_new_error_VALUE (ei->pos);
 
-	datetime_value_to_g (&date, argv[0], DATE_CONV (ei->pos));
-	if (!g_date_valid (&date))
-                  return value_new_error_VALUE (ei->pos);
-
-	return value_new_int (go_date_weeknum (&date, m));
+	return value_new_int (gnm_weeknum (&date, start_day));
 }
 
 /***************************************************************************/
@@ -1395,8 +1486,8 @@ gnumeric_days (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GDate d1, d2;
 	GODateConventions const *conv = DATE_CONV (ei->pos);
 
-	date1 = gnm_floor (value_get_as_float (argv [0]));
-	date2 = gnm_floor (value_get_as_float (argv [1]));
+	date1 = gnm_floor (value_get_as_float (argv[0]));
+	date2 = gnm_floor (value_get_as_float (argv[1]));
 
 	go_date_serial_to_g (&d1, date1, conv);
 	go_date_serial_to_g (&d2, date2, conv);
@@ -1451,6 +1542,10 @@ GnmFuncDescriptor const datetime_functions[] = {
 	  help_networkdays, gnumeric_networkdays, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
 	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "networkdays.intl", "ff|?A",
+	  help_networkdays_intl, gnumeric_networkdays_intl, NULL,
+	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "now",         "", help_now,
 	  gnumeric_now, NULL,
 	  GNM_FUNC_VOLATILE + GNM_FUNC_AUTO_TIME,
@@ -1486,7 +1581,11 @@ GnmFuncDescriptor const datetime_functions[] = {
 	{ "workday",     "ff|?A",  help_workday,
 	  gnumeric_workday, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_DATE,
-	  GNM_FUNC_IMPL_STATUS_SUBSET, GNM_FUNC_TEST_STATUS_BASIC },
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "workday.intl", "ff|?A",
+	  help_workday_intl, gnumeric_workday_intl, NULL,
+	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_DATE,
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "year",        "f",     help_year,
 	  gnumeric_year, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
@@ -1507,7 +1606,7 @@ GnmFuncDescriptor const datetime_functions[] = {
 	{ "isoweeknum",  "f",     help_isoweeknum,
 	  gnumeric_isoweeknum, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
-	  GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "isoyear",     "f",     help_isoyear,
 	  gnumeric_isoyear, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
@@ -1515,6 +1614,6 @@ GnmFuncDescriptor const datetime_functions[] = {
 	{ "days", "ff",
 	  help_days, gnumeric_days, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_UNITLESS,
-	  GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
         {NULL}
 };

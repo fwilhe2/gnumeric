@@ -24,7 +24,7 @@
 static char const * const field_types = "CNLDMF?BGPYTI";
 
 #if XBASE_DEBUG > 0
-static char const * const field_type_descriptions [] = {
+static char const * const field_type_descriptions[] = {
 	"Character", "Number", "Logical", "Date", "Memo", "Floating point",
 	"Character name variable", "Binary", "General", "Picture", "Currency",
 	"DateTime", "Integer"
@@ -66,7 +66,7 @@ record_seek (XBrecord *record, int whence, gsf_off_t row)
 		offset = record->file->records + 1 - row;
 		break;
 	default:
-		g_warning("record_seek: invalid whence (%d)", whence);
+		g_warning ("record_seek: invalid whence (%d)", whence);
 		return FALSE;
 	}
 	if (offset < 1 || offset > (gsf_off_t)record->file->records)
@@ -99,7 +99,7 @@ record_get_field (XBrecord const *record, guint num)
 }
 
 gboolean
-record_deleted (XBrecord *record)
+record_deleted (XBrecord const *record)
 {
 	return record->data[0] == 0x2a;
 }
@@ -111,7 +111,7 @@ xbase_read_header (XBfile *x, GOErrorInfo **ret_error)
 		guint8 const id;
 		int    const codepage;
 		char const *const name;
-	} const codepages [] = {
+	} const codepages[] = {
 		{ 0x01, 437, "U.S. MS-DOS" },
 		{ 0x02, 850, "International MS-DOS" },
 		{ 0x03, 1252, "Windows ANSI" },
@@ -309,7 +309,7 @@ xbase_field_new (XBfile *file)
 	field = g_new (XBfield, 1);
 	field->len = buf[16];
 
-	strncpy(field->name, buf, 10);
+	strncpy (field->name, buf, 10);
 	field->name[10] = '\0';
 	if ((p = strchr (field_types, field->type = buf[11])) == NULL)
 		g_warning ("Unrecognised field type '%c'", field->type);
@@ -357,6 +357,16 @@ xbase_open (GsfInput *input, GOErrorInfo **ret_error)
 		XBfield *field = xbase_field_new (ans);
 		if (!field)
 			break;
+
+		/* Validation: ensure field fits within the record size */
+		if (field->pos + field->len >= ans->fieldlen) {
+			g_warning ("Field '%s' (at pos %u, len %u) exceeds record size (%u)",
+				   field->name, field->pos, (unsigned)field->len, ans->fieldlen);
+			go_format_unref (field->fmt);
+			g_free (field);
+			break;
+		}
+
 		if (ans->fields == allocated) {
 			allocated *= 2;
 			ans->format = g_renew (XBfield *, ans->format, allocated);

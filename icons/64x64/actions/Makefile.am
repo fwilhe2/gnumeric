@@ -1,4 +1,4 @@
 internalicons = \
-	cursor-cross.png
+	gnumeric-cursor-cross.png
 
 EXTRA_DIST = $(internalicons)

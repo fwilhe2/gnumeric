@@ -162,7 +162,7 @@
     <file>icons/24x24/actions/gnumeric-subscript.png</file>
     <file>icons/24x24/actions/gnumeric-superscript.png</file>
     <file>icons/24x24/actions/gnumeric-ungroup.png</file>
-    <file>icons/32x32/actions/cursor-cross.png</file>
+    <file>icons/32x32/actions/gnumeric-cursor-cross.png</file>
     <file>icons/32x32/actions/gnumeric-format-halign-distributed.png</file>
     <file>icons/32x32/actions/gnumeric-format-valign-bottom.png</file>
     <file>icons/32x32/actions/gnumeric-format-valign-center.png</file>
@@ -170,7 +170,7 @@
     <file>icons/32x32/actions/gnumeric-format-valign-justify.png</file>
     <file>icons/32x32/actions/gnumeric-format-valign-top.png</file>
     <file>icons/48x48/actions/gnumeric-protection-yes-dialog.png</file>
-    <file>icons/64x64/actions/cursor-cross.png</file>
+    <file>icons/64x64/actions/gnumeric-cursor-cross.png</file>
     <file alias="images/line_pattern_dash_dot.png">src/pixmaps/line_pattern_dash_dot.png</file>
     <file alias="images/line_pattern_dash_dot_dot.png">src/pixmaps/line_pattern_dash_dot_dot.png</file>
     <file alias="images/line_pattern_dashed.png">src/pixmaps/line_pattern_dashed.png</file>

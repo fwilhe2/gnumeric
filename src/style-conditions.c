@@ -34,7 +34,7 @@
 #include <gutils.h>
 
 typedef GObjectClass GnmStyleConditionsClass;
-struct _GnmStyleConditions {
+struct GnmStyleConditions_ {
 	GObject base;
 	GPtrArray *conditions;
 	Sheet *sheet;
@@ -291,7 +291,7 @@ generate_end_match (const char *endfunc, gboolean force, gboolean negate,
  * gnm_style_cond_get_alternate_expr:
  * @cond: condition
  *
- * Returns: (transfer full) (allow-none): An custom expression that can be
+ * Returns: (transfer full) (nullable): An custom expression that can be
  * used in place of @cond.
  **/
 GnmExprTop const *
@@ -536,8 +536,7 @@ gnm_style_cond_canonicalize (GnmStyleCond *cond)
 
 	if (newop != GNM_STYLE_COND_CUSTOM) {
 		gnm_style_cond_set_expr (cond, texpr, 0);
-		if (texpr)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 		cond->op = newop;
 	}
 }
@@ -760,14 +759,15 @@ gscd_eval (GnmDependent *dep)
 	// Nothing yet
 }
 
-static GSList *
-gscd_changed (GnmDependent *dep)
+static void
+gscd_changed (GnmDependent *dep, GPtrArray *extra)
 {
 	GnmStyleCondDep const *scd = (GnmStyleCondDep const *)dep;
 	if (debug_style_conds ()) {
 		g_printerr ("Changed StyleCondDep/%p\n", dep);
 	}
-	return scd->dep_cont ? g_slist_prepend (NULL, scd->dep_cont) : NULL;
+	if (scd->dep_cont)
+		g_ptr_array_add (extra, scd->dep_cont);
 }
 
 static GnmCellPos *

@@ -184,7 +184,7 @@ make_gnm_help (const char *name, int count, SV **SP)
 				if (helptmp[k].type != GNM_FUNC_HELP_END &&
 				    helptmp[k].text)
 					help[i++] = helptmp[k];
-			g_free(helptmp);
+			g_free (helptmp);
 		}
 		help[m].type = GNM_FUNC_HELP_END;
 		help[m].text = NULL;
@@ -286,6 +286,7 @@ gplp_load_base (GOPluginLoader *loader, GOErrorInfo **ret_error)
 	argv[1] = g_strconcat ("-I", arg, NULL);
 	argv[2] = g_build_filename (arg, "perl_func.pl", NULL);
 	argc = 2;
+	g_free (arg);
 
 	if (g_file_test (argv[2], G_FILE_TEST_EXISTS)) {
 		PERL_SYS_INIT3 (&argc, (char ***)&argv, NULL);

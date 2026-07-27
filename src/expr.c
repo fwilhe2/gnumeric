@@ -38,7 +38,6 @@
 #include <number-match.h>
 #include <workbook.h>
 #include <gutils.h>
-#include <parse-util.h>
 #include <mathfunc.h>
 
 #include <goffice/goffice.h>
@@ -80,8 +79,6 @@ gnm_expr_new_constant (GnmValue *v)
 	g_return_val_if_fail (v != NULL, NULL);
 
 	ans = CHUNK_ALLOC (GnmExprConstant, expression_pool_small);
-	if (!ans)
-		return NULL;
 	gnm_expr_constant_init (ans, v);
 
 	return (GnmExpr *)ans;
@@ -104,7 +101,6 @@ gnm_expr_new_funcallv (GnmFunc *func, int argc, GnmExprConstPtr *argv)
 	g_return_val_if_fail (func, NULL);
 
 	ans = CHUNK_ALLOC (GnmExprFunction, expression_pool_small);
-
 	ans->oper = GNM_EXPR_OP_FUNCALL;
 	gnm_func_inc_usage (func);
 	ans->func = func;
@@ -266,9 +262,6 @@ gnm_expr_new_unary (GnmExprOp op, GnmExpr const *e)
 	GnmExprUnary *ans;
 
 	ans = CHUNK_ALLOC (GnmExprUnary, expression_pool_small);
-	if (!ans)
-		return NULL;
-
 	ans->oper = op;
 	ans->value = e;
 
@@ -291,9 +284,6 @@ gnm_expr_new_binary (GnmExpr const *l, GnmExprOp op, GnmExpr const *r)
 	GnmExprBinary *ans;
 
 	ans = CHUNK_ALLOC (GnmExprBinary, expression_pool_small);
-	if (!ans)
-		return NULL;
-
 	ans->oper = op;
 	ans->value_a = l;
 	ans->value_b = r;
@@ -303,22 +293,27 @@ gnm_expr_new_binary (GnmExpr const *l, GnmExprOp op, GnmExpr const *r)
 
 /***************************************************************************/
 
+/**
+ * gnm_expr_new_name:
+ * @name: #GnmNamedExpr
+ * @sheet_scope: (nullable): Sheet scope
+ * @wb_scope: (nullable): Workbook scope
+ *
+ * Returns: (transfer full): name expression.
+ */
 GnmExpr const *
 gnm_expr_new_name (GnmNamedExpr *name,
-		   Sheet *optional_scope, Workbook *optional_wb_scope)
+		   Sheet *sheet_scope, Workbook *wb_scope)
 {
 	GnmExprName *ans;
 
 	ans = CHUNK_ALLOC (GnmExprName, expression_pool_big);
-	if (!ans)
-		return NULL;
-
 	ans->oper = GNM_EXPR_OP_NAME;
 	ans->name = name;
 	expr_name_ref (name);
 
-	ans->optional_scope = optional_scope;
-	ans->optional_wb_scope = optional_wb_scope;
+	ans->optional_scope = sheet_scope;
+	ans->optional_wb_scope = wb_scope;
 
 	return (GnmExpr *)ans;
 }
@@ -337,9 +332,6 @@ gnm_expr_new_cellref (GnmCellRef const *cr)
 	GnmExprCellRef *ans;
 
 	ans = CHUNK_ALLOC (GnmExprCellRef, expression_pool_big);
-	if (!ans)
-		return NULL;
-
 	ans->oper = GNM_EXPR_OP_CELLREF;
 	ans->ref = *cr;
 
@@ -372,7 +364,7 @@ gnm_expr_is_array (GnmExpr const *expr)
  * Returns: (transfer full): An array corner expression
  **/
 static GnmExpr const *
-gnm_expr_new_array_corner(int cols, int rows, GnmExpr const *expr)
+gnm_expr_new_array_corner (int cols, int rows, GnmExpr const *expr)
 {
 	GnmExprArrayCorner *ans;
 
@@ -452,7 +444,7 @@ gnm_expr_new_set (GnmExprList *set)
  * This function builds a range constructor or something simpler,
  * but equivalent, if the arguments allow it.
  *
- * Returns: (transfer full): And expression referencing @l to @r.
+ * Returns: (transfer full): An expression referencing @l to @r.
  **/
 GnmExpr const *
 gnm_expr_new_range_ctor (GnmExpr const *l, GnmExpr const *r)
@@ -642,6 +634,11 @@ gnm_expr_free (GnmExpr const *expr)
 	}
 }
 
+/**
+ * gnm_expr_get_type:
+ *
+ * Returns: the GType for GnmExpr.
+ **/
 GType
 gnm_expr_get_type (void)
 {
@@ -655,6 +652,11 @@ gnm_expr_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_expr_array_corner_get_type:
+ *
+ * Returns: the GType for GnmExprArrayCorner.
+ **/
 GType
 gnm_expr_array_corner_get_type (void)
 {
@@ -670,8 +672,8 @@ gnm_expr_array_corner_get_type (void)
 
 /**
  * gnm_expr_equal:
- * @a: first #GnmExpr
- * @b: first #GnmExpr
+ * @a: (nullable): first #GnmExpr
+ * @b: (nullable): second #GnmExpr
  *
  * Returns: %TRUE, if the supplied expressions are exactly the
  *   same and %FALSE otherwise.  No eval position is used to see if they
@@ -683,9 +685,8 @@ gnm_expr_equal (GnmExpr const *a, GnmExpr const *b)
 {
 	if (a == b)
 		return TRUE;
-
-	g_return_val_if_fail (a != NULL, FALSE);
-	g_return_val_if_fail (b != NULL, FALSE);
+	if (!a || !b)
+		return FALSE;
 
 	if (GNM_EXPR_GET_OPER (a) != GNM_EXPR_GET_OPER (b))
 		return FALSE;
@@ -775,7 +776,7 @@ gnm_expr_extract_ref (GnmRangeRef *res, GnmExpr const *expr,
 		      GnmEvalPos const *pos, GnmExprEvalFlags flags)
 {
 	switch (GNM_EXPR_GET_OPER (expr)) {
-	case GNM_EXPR_OP_FUNCALL : {
+	case GNM_EXPR_OP_FUNCALL: {
 		gboolean failed = TRUE;
 		GnmValue *v;
 		GnmFuncEvalInfo ei;
@@ -837,7 +838,7 @@ handle_empty (GnmValue *res, GnmExprEvalFlags flags)
 
 /**
  * value_intersection:
- * @v: a VALUE_CELLRANGE or VALUE_ARRAY
+ * @v: (transfer full): a VALUE_CELLRANGE or VALUE_ARRAY
  * @pos:
  *
  * Handle the implicit union of a single row or column with the eval position.
@@ -846,15 +847,12 @@ handle_empty (GnmValue *res, GnmExprEvalFlags flags)
  * array or not because we can differentiate based on the required type for the
  * argument.
  *
- * Always release the value passed in.
- *
  * NOTE: This should match link_unlink_constant.
  *
- * Return value:
- *     If the intersection succeeded return a duplicate of the value
- *     at the intersection point.  This value needs to be freed.
- *     %NULL if there is no intersection
- * Returns the upper left corner of an array.
+ * Returns: (transfer full): If the intersection succeeded return a
+ * duplicate of the value at the intersection point.  Returns %NULL if
+ * there is no intersection.  If the @v is and array, return the upper
+ * left value.
  **/
 static GnmValue *
 value_intersection (GnmValue *v, GnmEvalPos const *pos)
@@ -907,7 +905,7 @@ value_intersection (GnmValue *v, GnmEvalPos const *pos)
 				col, row);
 			if (cell == NULL)
 				return value_new_empty ();
-			gnm_cell_eval (cell);
+			gnm_dep_cell_eval (cell);
 			return value_dup (cell->value);
 		}
 	}
@@ -937,7 +935,7 @@ bin_arith (GnmExpr const *expr, GnmEvalPos const *ep,
 		break;
 
 	case GNM_EXPR_OP_DIV:
-		if (vb == 0.0)
+		if (vb == 0)
 			return value_new_error_DIV0 (ep);
 		res = va / vb;
 		break;
@@ -1094,7 +1092,7 @@ static GnmValue *
 cb_implicit_iter_a_and_b (GnmValueIter const *v_iter,
 			  BinOpImplicitIteratorState const *state)
 {
-	state->res->v_array.vals [v_iter->x][v_iter->y] =
+	state->res->v_array.vals[v_iter->x][v_iter->y] =
 		(*state->func) (v_iter->ep,
 			value_area_get_x_y (state->a,
 				state->x.a * v_iter->x,
@@ -1109,7 +1107,7 @@ static GnmValue *
 cb_implicit_iter_a_to_scalar_b (GnmValueIter const *v_iter,
 				BinOpImplicitIteratorState const *state)
 {
-	state->res->v_array.vals [v_iter->x][v_iter->y] =
+	state->res->v_array.vals[v_iter->x][v_iter->y] =
 		(*state->func) (v_iter->ep,
 			v_iter->v, state->b, state->user_data);
 	return NULL;
@@ -1177,7 +1175,7 @@ static GnmValue *
 cb_implicit_iter_b_to_scalar_a (GnmValueIter const *v_iter,
 				BinOpImplicitIteratorState const *state)
 {
-	state->res->v_array.vals [v_iter->x][v_iter->y] =
+	state->res->v_array.vals[v_iter->x][v_iter->y] =
 		(*state->func) (v_iter->ep,
 			state->a, v_iter->v, state->user_data);
 	return NULL;
@@ -1336,7 +1334,7 @@ gnm_expr_range_op (GnmExpr const *expr, GnmEvalPos const *ep,
  * @pos: evaluation position
  * @flags: #GnmExprEvalFlags
  *
- * Evaluatates the given expression.  If GNM_EXPR_EVAL_PERMIT_EMPTY is not set
+ * Evaluates the given expression.  If GNM_EXPR_EVAL_PERMIT_EMPTY is not set
  * then return zero if the expression instead of the empty value, or the value
  * of an unused cell.
  *
@@ -1614,7 +1612,7 @@ gnm_expr_eval (GnmExpr const *expr, GnmEvalPos const *pos,
 		cell = sheet_cell_get (eval_sheet (r.sheet, pos->sheet),
 				       r.col, r.row);
 		if (cell)
-			gnm_cell_eval (cell);
+			gnm_dep_cell_eval (cell);
 
 		if (flags & GNM_EXPR_EVAL_WANT_REF) {
 			return value_new_cellrange_unsafe (&r, &r);
@@ -1647,7 +1645,6 @@ gnm_expr_eval (GnmExpr const *expr, GnmEvalPos const *pos,
 			int argc = expr->set.argc;
 
 			res = value_new_array_non_init (1, expr->set.argc);
-			res->v_array.vals[0] = g_new (GnmValue *, expr->set.argc);
 			for (i = 0; i < argc; i++)
 				res->v_array.vals[0][i] = gnm_expr_eval (
 					expr->set.argv[i], pos,
@@ -1999,7 +1996,7 @@ gnm_expr_get_name (GnmExpr const *expr)
  * @expr: #GnmExpr
  *
  * Returns: (transfer none) (nullable): If this expression consists of just
- * a cell reference, return it.  Otherwise, %NULL.
+ * a cell reference, return it.  Otherwise, return %NULL.
  */
 GnmCellRef const *
 gnm_expr_get_cellref (GnmExpr const *expr)
@@ -2812,6 +2809,14 @@ gnm_expr_list_copy (GnmExprList *list)
 }
 
 
+/**
+ * gnm_expr_list_as_string:
+ * @argc: argument count
+ * @argv: (array length=argc): arguments
+ * @out: #GnmConventionsOut
+ *
+ * Renders a list of expressions as a comma-separated string.
+ **/
 void
 gnm_expr_list_as_string (int argc,
 			 GnmExprConstPtr const *argv,
@@ -2888,6 +2893,11 @@ gnm_expr_hash (GnmExpr const *expr)
 
 /***************************************************************************/
 
+/**
+ * gnm_expr_sharer_new:
+ *
+ * Returns: (transfer full): a new expression sharer object.
+ */
 GnmExprSharer *
 gnm_expr_sharer_new (void)
 {
@@ -2933,6 +2943,14 @@ gnm_expr_sharer_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_expr_sharer_share:
+ * @es: #GnmExprSharer
+ * @texpr: (transfer full): #GnmExprTop
+ *
+ * Returns: (transfer full): an expression equivalent to @texpr, but
+ * possibly shared.
+ */
 GnmExprTop const *
 gnm_expr_sharer_share (GnmExprSharer *es, GnmExprTop const *texpr)
 {
@@ -2973,6 +2991,12 @@ gnm_expr_sharer_report (GnmExprSharer *es)
 
 /***************************************************************************/
 
+/**
+ * gnm_expr_top_new:
+ * @e: (transfer full): expression.
+ *
+ * Returns: (transfer full): new (top-level) expression.
+ */
 GnmExprTop const *
 gnm_expr_top_new (GnmExpr const *expr)
 {
@@ -2989,23 +3013,74 @@ gnm_expr_top_new (GnmExpr const *expr)
 	return res;
 }
 
+/**
+ * gnm_expr_top_new_constant:
+ * @v: (transfer full): #GnmValue
+ *
+ * Returns: (transfer full): constant expression.
+ */
 GnmExprTop const *
 gnm_expr_top_new_constant (GnmValue *v)
 {
 	return gnm_expr_top_new (gnm_expr_new_constant (v));
 }
 
+/**
+ * gnm_expr_top_new_array_corner:
+ * @cols: number of columns.
+ * @rows: number of rows.
+ * @expr: (transfer full) (nullable): expression.
+ *
+ * Returns: (transfer full): new array corner expression.
+ */
+GnmExprTop const *
+gnm_expr_top_new_array_corner (int cols, int rows, GnmExpr const *expr)
+{
+	return gnm_expr_top_new (gnm_expr_new_array_corner (cols, rows, expr));
+}
+
+/**
+ * gnm_expr_top_new_array_elem:
+ * @x: x coordinate.
+ * @y: y coordinate.
+ *
+ * Returns: (transfer full): new array non-corner expression.
+ */
+GnmExprTop const *
+gnm_expr_top_new_array_elem  (int x, int y)
+{
+	return gnm_expr_top_new (gnm_expr_new_array_elem (x, y));
+}
+
+
+/**
+ * gnm_expr_top_ref:
+ * @texpr: (transfer none) (nullable): #GnmExprTop
+ *
+ * Returns: (transfer full): the top expression itself with an increased reference count.
+ **/
 GnmExprTop const *
 gnm_expr_top_ref (GnmExprTop const *texpr)
 {
-	g_return_val_if_fail (GNM_IS_EXPR_TOP (texpr), NULL);
-	((GnmExprTop *)texpr)->refcount++;
+	if (texpr != NULL) {
+		g_return_val_if_fail (GNM_IS_EXPR_TOP (texpr), NULL);
+		((GnmExprTop *)texpr)->refcount++;
+	}
 	return texpr;
 }
 
+/**
+ * gnm_expr_top_unref:
+ * @texpr: (nullable) (transfer full): #GnmExprTop
+ *
+ * Decreases the reference count of @texpr. If it reaches 0, the top expression is destroyed.
+ **/
 void
 gnm_expr_top_unref (GnmExprTop const *texpr)
 {
+	if (texpr == NULL)
+		return;
+
 	g_return_if_fail (GNM_IS_EXPR_TOP (texpr));
 
 	((GnmExprTop *)texpr)->refcount--;
@@ -3016,6 +3091,11 @@ gnm_expr_top_unref (GnmExprTop const *texpr)
 	}
 }
 
+/**
+ * gnm_expr_top_get_type:
+ *
+ * Returns: the GType for GnmExprTop.
+ **/
 GType
 gnm_expr_top_get_type (void)
 {
@@ -3029,6 +3109,12 @@ gnm_expr_top_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_expr_top_is_shared:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE, if the expression is shared.
+ */
 gboolean
 gnm_expr_top_is_shared (GnmExprTop const *texpr)
 {
@@ -3037,17 +3123,6 @@ gnm_expr_top_is_shared (GnmExprTop const *texpr)
 	return texpr->refcount > 1;
 }
 
-GnmExprTop const *
-gnm_expr_top_new_array_corner (int cols, int rows, GnmExpr const *expr)
-{
-	return gnm_expr_top_new (gnm_expr_new_array_corner (cols, rows, expr));
-}
-
-GnmExprTop const *
-gnm_expr_top_new_array_elem  (int x, int y)
-{
-	return gnm_expr_top_new (gnm_expr_new_array_elem (x, y));
-}
 
 static GnmExpr const *
 cb_get_ranges (GnmExpr const *expr, GnmExprWalk *data)
@@ -3067,11 +3142,12 @@ cb_get_ranges (GnmExpr const *expr, GnmExprWalk *data)
 
 /**
  * gnm_expr_top_get_ranges:
- * @texpr:
+ * @texpr: #GnmExprTop
  *
- * A collect the set of GnmRanges in @expr.
+ * A collect the set of GnmRanges in @texpr.
+ *
  * Returns: (element-type GnmRange) (transfer full): a list of the unique
- * references Caller is responsible for releasing the list and the content.
+ * references.  Caller is responsible for releasing the list and the content.
  **/
 GSList *
 gnm_expr_top_get_ranges (GnmExprTop const *texpr)
@@ -3083,6 +3159,14 @@ gnm_expr_top_get_ranges (GnmExprTop const *texpr)
 	return res;
 }
 
+/**
+ * gnm_expr_top_get_range:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: (transfer full) (nullable): If this expression contains a
+ * single range, return it.  Otherwise, %NULL.  A cell reference is
+ * returned as a singleton range.
+ */
 GnmValue *
 gnm_expr_top_get_range (GnmExprTop const *texpr)
 {
@@ -3091,6 +3175,17 @@ gnm_expr_top_get_range (GnmExprTop const *texpr)
 	return gnm_expr_get_range (texpr->expr);
 }
 
+/**
+ * gnm_expr_top_as_string:
+ * @texpr: Expression
+ * @pp: (nullable): Parse position.  %NULL should be used for debugging only.
+ * @convs: (nullable): #GnmConventions.  %NULL should be used for debugging
+ * or when @pp identifies a #Sheet.
+ *
+ * Renders the expression as a string according to @convs.
+ *
+ * Returns: (transfer full): @texpr as a string.
+ */
 char *
 gnm_expr_top_as_string (GnmExprTop const *texpr,
 			GnmParsePos const *pp,
@@ -3128,6 +3223,13 @@ gnm_expr_top_multiple_as_string  (GnmExprTop const *texpr,
 	return res;
 }
 
+/**
+ * gnm_expr_top_as_gstring:
+ * @texpr: #GnmExprTop
+ * @out: #GnmConventionsOut
+ *
+ * Appends a string representation of @texpr to @out->target.
+ **/
 void
 gnm_expr_top_as_gstring (GnmExprTop const *texpr,
 			 GnmConventionsOut *out)
@@ -3138,6 +3240,13 @@ gnm_expr_top_as_gstring (GnmExprTop const *texpr,
 	do_expr_as_string (texpr->expr, 0, out);
 }
 
+/**
+ * gnm_expr_top_hash:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: a hash value computed from the expression.  The value is
+ * cached.
+ */
 guint
 gnm_expr_top_hash (GnmExprTop const *texpr)
 {
@@ -3152,6 +3261,13 @@ gnm_expr_top_hash (GnmExprTop const *texpr)
 	return texpr->hash;
 }
 
+/**
+ * gnm_expr_top_equal:
+ * @te1: (nullable): #GnmExprTop
+ * @te2: (nullable): #GnmExprTop
+ *
+ * Returns: %TRUE, if the expressions are identical.
+ */
 gboolean
 gnm_expr_top_equal (GnmExprTop const *te1, GnmExprTop const *te2)
 {
@@ -3169,7 +3285,7 @@ gnm_expr_top_equal (GnmExprTop const *te1, GnmExprTop const *te2)
 	return gnm_expr_equal (te1->expr, te2->expr);
 }
 
-/*
+/**
  * gnm_expr_top_relocate:
  * @texpr: #GnmExprTop to fixup
  * @rinfo: #GnmExprRelocateInfo details of relocation
@@ -3188,6 +3304,7 @@ gnm_expr_top_equal (GnmExprTop const *te1, GnmExprTop const *te2)
  * GNM_EXPR_RELOCATE_COLS
  * GNM_EXPR_RELOCATE_ROWS
  *
+ * Returns: (transfer full) (nullable): new expression.
  */
 GnmExprTop const *
 gnm_expr_top_relocate (GnmExprTop const *texpr,
@@ -3208,8 +3325,15 @@ gnm_expr_top_relocate (GnmExprTop const *texpr,
 	return gnm_expr_top_new (gnm_expr_relocate (texpr->expr, &rinfo_tmp));
 }
 
-/*
+/**
+ * gnm_expr_top_relocate_sheet:
+ * @texpr: expression
+ * @src: old sheet
+ * @dst: new sheet
+ *
  * Convenience function to change an expression from one sheet to another.
+ *
+ * Returns: (transfer full) (nullable): new expression.
  */
 GnmExprTop const *
 gnm_expr_top_relocate_sheet (GnmExprTop const *texpr,
@@ -3242,6 +3366,12 @@ gnm_expr_top_relocate_sheet (GnmExprTop const *texpr,
 	return res;
 }
 
+/**
+ * gnm_expr_top_contains_subtotal:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE, if the expression contains a call to the SUBTOTAL function.
+ */
 gboolean
 gnm_expr_top_contains_subtotal (GnmExprTop const *texpr)
 {
@@ -3262,6 +3392,14 @@ cb_is_volatile (GnmExpr const *expr, GnmExprWalk *data)
 	return NULL;
 }
 
+/**
+ * gnm_expr_top_is_volatile:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE, if the expression contains a volatile function
+ * call, i.e., a call to a function like RAND or TODAY that can change
+ * value without any of the arguments changing.
+ */
 gboolean
 gnm_expr_top_is_volatile (GnmExprTop const *texpr)
 {
@@ -3325,7 +3463,7 @@ gnm_expr_top_eval_array_elem (GnmExprTop const *texpr,
 		return handle_empty (NULL, flags);
 	}
 
-	gnm_cell_eval (corner);
+	gnm_dep_cell_eval (corner);
 	a = gnm_expr_top_get_array_value (corner->base.texpr);
 	if (a == NULL)
 		return handle_empty (NULL, flags);
@@ -3355,6 +3493,16 @@ gnm_expr_top_eval_array_elem (GnmExprTop const *texpr,
 	return handle_empty ((a != NULL) ? value_dup (a) : NULL, flags);
 }
 
+
+/**
+ * gnm_expr_top_eval:
+ * @texpr: #GnmExprTop
+ * @pos: evaluation positions
+ * @flags: evaluation flags
+ *
+ * Returns: (transfer full): Evaluate the expression relative to
+ * position @pos and return the value.
+ */
 GnmValue *
 gnm_expr_top_eval (GnmExprTop const *texpr,
 		   GnmEvalPos const *pos,
@@ -3436,11 +3584,12 @@ cb_referenced_sheets (GnmExpr const *expr, GnmExprWalk *data)
 
 /**
  * gnm_expr_top_referenced_sheets:
- * @texpr:
+ * @texpr: #GnmExprTop
  *
  * Generates a list of the sheets referenced by the supplied expression.
- * Caller must free the list.  Note, that NULL may occur in the result
+ * Caller must free the list.  Note, that %NULL may occur in the result
  * if the expression has a range or cellref without a sheet.
+ *
  * Returns: (element-type Sheet) (transfer container): the created list.
  */
 GSList *
@@ -3453,6 +3602,14 @@ gnm_expr_top_referenced_sheets (GnmExprTop const *texpr)
 	return res;
 }
 
+/**
+ * gnm_expr_top_is_err:
+ * @texpr: #GnmExprTop
+ * @e: #GnmStdError
+ *
+ * Returns: %TRUE, if the expression is an error expression of the
+ * indicated type.
+ **/
 gboolean
 gnm_expr_top_is_err (GnmExprTop const *texpr, GnmStdError err)
 {
@@ -3462,9 +3619,10 @@ gnm_expr_top_is_err (GnmExprTop const *texpr, GnmStdError err)
 
 /**
  * gnm_expr_top_get_constant:
- * @texpr:
+ * @texpr: #GnmExprTop
  *
- * If this expression consists of just a constant, return it.
+ * Returns: (transfer none) (nullable): If this expression consists of
+ * just a constant, return it.  Otherwise, return %NULL.
  */
 GnmValue const *
 gnm_expr_top_get_constant (GnmExprTop const *texpr)
@@ -3474,6 +3632,13 @@ gnm_expr_top_get_constant (GnmExprTop const *texpr)
 	return gnm_expr_get_constant (texpr->expr);
 }
 
+/**
+ * gnm_expr_top_get_cellref:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: (transfer none) (nullable): If this expression consists of just
+ * a cell reference, return it.  Otherwise, return %NULL.
+ */
 GnmCellRef const *
 gnm_expr_top_get_cellref (GnmExprTop const *texpr)
 {
@@ -3494,8 +3659,10 @@ cb_first_funcall (GnmExpr const *expr, GnmExprWalk *data)
 
 /**
  * gnm_expr_top_first_funcall:
- * @texpr:
+ * @texpr: #GnmExprTop
  *
+ * Returns: (transfer none) (nullable): the first function call inside the
+ * expression.
  */
 GnmExpr const *
 gnm_expr_top_first_funcall (GnmExprTop const *texpr)
@@ -3541,9 +3708,12 @@ cb_get_boundingbox (GnmExpr const *expr, GnmExprWalk *data)
 
 /**
  * gnm_expr_top_get_boundingbox:
+ * @texpr: #GnmExprTop
+ * @sheet: #Sheet
+ * @bound: (out): bounding box
  *
- * Returns the range of cells in which the expression can be used without going
- * out of bounds.
+ * Determines the range of cells inside @sheet in which the expression can be
+ * used without internal relative references reaching beyond one of the edges.
  **/
 void
 gnm_expr_top_get_boundingbox (GnmExprTop const *texpr, Sheet const *sheet,
@@ -3560,6 +3730,12 @@ gnm_expr_top_get_boundingbox (GnmExprTop const *texpr, Sheet const *sheet,
 	gnm_expr_walk (texpr->expr, cb_get_boundingbox, &args);
 }
 
+/**
+ * gnm_expr_top_is_rangeref:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE for a range reference expression, %FALSE otherwise.
+ */
 gboolean
 gnm_expr_top_is_rangeref (GnmExprTop const *texpr)
 {
@@ -3568,6 +3744,12 @@ gnm_expr_top_is_rangeref (GnmExprTop const *texpr)
 	return gnm_expr_is_rangeref (texpr->expr);
 }
 
+/**
+ * gnm_expr_top_is_array_corner:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE for an array corner expression, %FALSE otherwise.
+ */
 gboolean
 gnm_expr_top_is_array_corner (GnmExprTop const *texpr)
 {
@@ -3575,6 +3757,14 @@ gnm_expr_top_is_array_corner (GnmExprTop const *texpr)
 	return GNM_EXPR_GET_OPER (texpr->expr) == GNM_EXPR_OP_ARRAY_CORNER;
 }
 
+/**
+ * gnm_expr_top_get_array_size:
+ * @texpr: #GnmExprTop for an array corner expression
+ * @cols: (out) (optional): number of columns
+ * @rows: (out) (optional): number of rows
+ *
+ * Computes the size of the array expression.
+ */
 void
 gnm_expr_top_get_array_size (GnmExprTop const *texpr, int *cols, int *rows)
 {
@@ -3587,6 +3777,12 @@ gnm_expr_top_get_array_size (GnmExprTop const *texpr, int *cols, int *rows)
 		*rows = texpr->expr->array_corner.rows;
 }
 
+/**
+ * gnm_expr_top_get_array_value:
+ * @texpr: #GnmExprTop for an array corner expression
+ *
+ * Returns: (transfer none): the last computed value for the array expression.
+ */
 GnmValue *
 gnm_expr_top_get_array_value (GnmExprTop const *texpr)
 {
@@ -3595,6 +3791,12 @@ gnm_expr_top_get_array_value (GnmExprTop const *texpr)
 	return texpr->expr->array_corner.value;
 }
 
+/**
+ * gnm_expr_top_get_array_expr:
+ * @texpr: #GnmExprTop for an array corner expression
+ *
+ * Returns: (transfer none): the #GnmExpr for the array.
+ */
 GnmExpr const *
 gnm_expr_top_get_array_expr (GnmExprTop const *texpr)
 {
@@ -3603,6 +3805,16 @@ gnm_expr_top_get_array_expr (GnmExprTop const *texpr)
 	return texpr->expr->array_corner.expr;
 }
 
+/**
+ * gnm_expr_top_is_array_elem:
+ * @texpr: #GnmExprTop
+ * @x: (out) (optional): x coordinate
+ * @y: (out) (optional): y coordinate
+ *
+ * Returns: %TRUE, if the expression is a non-corner array expression.
+ * In that case, @x and @y are used to return the coordinates relative
+ * to the corner.
+ */
 gboolean
 gnm_expr_top_is_array_elem (GnmExprTop const *texpr, int *x, int *y)
 {
@@ -3616,6 +3828,13 @@ gnm_expr_top_is_array_elem (GnmExprTop const *texpr, int *x, int *y)
 	return TRUE;
 }
 
+/**
+ * gnm_expr_top_is_array:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: %TRUE, if the expression is an array expression.  Both corners
+ * and non-corners count.
+ */
 gboolean
 gnm_expr_top_is_array (GnmExprTop const *texpr)
 {
@@ -3623,6 +3842,13 @@ gnm_expr_top_is_array (GnmExprTop const *texpr)
 	return gnm_expr_is_array (texpr->expr);
 }
 
+/**
+ * gnm_expr_top_transpose:
+ * @texpr: #GnmExprTop
+ *
+ * Returns: (transfer full) (nullable): A transposed array expression if @expr
+ * is an array expression, %NULL otherwise.
+ */
 GnmExprTop const *
 gnm_expr_top_transpose (GnmExprTop const *texpr)
 {

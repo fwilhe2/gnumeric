@@ -159,7 +159,7 @@ auto_format_grid_class_init (GnmPreviewGridClass *klass)
 
 static GSF_CLASS (AutoFormatGrid, auto_format_grid,
 		  auto_format_grid_class_init, NULL,
-		  gnm_preview_grid_get_type())
+		  gnm_preview_grid_get_type ())
 
 static GocItem *
 auto_format_grid_new (AutoFormatState *state, int i, GnmFT *ft)
@@ -183,13 +183,9 @@ auto_format_grid_new (AutoFormatState *state, int i, GnmFT *ft)
 static void
 templates_free (AutoFormatState *state)
 {
-	GSList *ptr;
-
 	g_return_if_fail (state != NULL);
 
-	for (ptr = state->templates; ptr != NULL ; ptr = ptr->next)
-		gnm_ft_free (ptr->data);
-	g_slist_free (state->templates);
+	g_slist_free_full (state->templates, g_object_unref);
 	state->templates = NULL;
 }
 
@@ -597,8 +593,7 @@ dialog_autoformat (WBCGtk *wbcg)
 		G_CALLBACK (gtk_widget_destroy), state->dialog);
 
 	/* Fill category list */
-	state->category_groups =
-		g_list_sort (gnm_ft_category_group_list_get (),  gnm_ft_category_group_cmp);
+	state->category_groups = gnm_ft_category_group_list_get ();
 
 	if (state->category_groups == NULL) {
 		GtkWidget *dialog;
@@ -614,7 +609,7 @@ dialog_autoformat (WBCGtk *wbcg)
 		GList *ptr = state->category_groups;
 		GtkListStore* store = gtk_list_store_new (1, G_TYPE_STRING);
 		GtkTreeIter iter;
-		GtkCellRenderer *renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new();
+		GtkCellRenderer *renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new ();
 		gtk_combo_box_set_model (state->category, GTK_TREE_MODEL (store));
 		g_object_unref (store);
 		gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->category), renderer, TRUE);
@@ -648,7 +643,7 @@ dialog_autoformat (WBCGtk *wbcg)
 	/* a candidate for merging into attach guru */
 	go_gtk_nonmodal_dialog (wbcg_toplevel (state->wbcg),
 				   GTK_WINDOW (state->dialog));
-	wbc_gtk_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
+	wbcg_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify)cb_autoformat_destroy);
 

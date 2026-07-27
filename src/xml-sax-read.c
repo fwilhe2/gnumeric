@@ -1,9 +1,8 @@
-
 /*
  * xml-sax-read.c : a sax based parser.
  *
  * Copyright (C) 2000-2007 Jody Goldberg (jody@gnome.org)
- * Copyright (C) 2007-2009 Morten Welinder (terra@gnome.org)
+ * Copyright (C) 2007-2024 Morten Welinder (terra@gnome.org)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -147,7 +146,7 @@ gnm_xml_attr_double (xmlChar const * const *attrs, char const *name, double * re
 	tmp = go_strtod (CXML2C (attrs[1]), &end);
 	if (*end) {
 		g_warning ("Invalid attribute '%s', expected double, received '%s'",
-			   name, attrs[1]);
+			   name, CXML2C (attrs[1]));
 		return FALSE;
 	}
 	*res = tmp;
@@ -160,6 +159,29 @@ xml_sax_double (xmlChar const *chars, double *res)
 	char *end;
 	*res = go_strtod (CXML2C (chars), &end);
 	return *end == '\0';
+}
+
+static gboolean
+gnm_xml_attr_float (xmlChar const * const *attrs, char const *name, gnm_float* res)
+{
+	char *end;
+	gnm_float tmp;
+
+	g_return_val_if_fail (attrs != NULL, FALSE);
+	g_return_val_if_fail (attrs[0] != NULL, FALSE);
+	g_return_val_if_fail (attrs[1] != NULL, FALSE);
+
+	if (!attr_eq (attrs[0], name))
+		return FALSE;
+
+	tmp = gnm_strto (CXML2C (attrs[1]), &end);
+	if (*end) {
+		g_warning ("Invalid attribute '%s', expected double, received '%s'",
+			   name, CXML2C (attrs[1]));
+		return FALSE;
+	}
+	*res = tmp;
+	return TRUE;
 }
 
 gboolean
@@ -393,6 +415,8 @@ typedef struct {
 	GnmXmlStyleHandler style_handler;
 	gpointer style_handler_user;
 	GsfXMLInDoc *style_handler_doc;
+
+	gboolean hack_colrow_size;
 } XMLSaxParseState;
 
 static void
@@ -481,7 +505,7 @@ xml_sax_wb (GsfXMLIn *xin, xmlChar const **attrs)
 			static struct {
 				char const * const id;
 				GnumericXMLVersion const version;
-			} const GnumericVersions [] = {
+			} const GnumericVersions[] = {
 				{ "http://www.gnumeric.org/v14.dtd", GNM_XML_V14 },	/* 1.12.21 */
 				{ "http://www.gnumeric.org/v13.dtd", GNM_XML_V13 },	/* 1.7.7 */
 				{ "http://www.gnumeric.org/v12.dtd", GNM_XML_V12 },	/* 1.7.3 */
@@ -499,14 +523,14 @@ xml_sax_wb (GsfXMLIn *xin, xmlChar const **attrs)
 				{ NULL, 0}
 			};
 			int i;
-			for (i = 0 ; GnumericVersions [i].id != NULL ; ++i )
-				if (strcmp (CXML2C (attrs[1]), GnumericVersions [i].id) == 0) {
+			for (i = 0 ; GnumericVersions[i].id != NULL ; ++i )
+				if (strcmp (CXML2C (attrs[1]), GnumericVersions[i].id) == 0) {
 					if (state->version != GNM_XML_UNKNOWN)
 						go_io_warning (state->context,
 							_("Multiple version specifications.  Assuming %d"),
 							state->version);
 					else {
-						state->version = GnumericVersions [i].version;
+						state->version = GnumericVersions[i].version;
 						break;
 					}
 				}
@@ -557,6 +581,9 @@ xml_sax_version (GsfXMLIn *xin, xmlChar const **attrs)
 		else if (version >= 10700)
 			state->version = GNM_XML_V11;
 	}
+
+	state->hack_colrow_size = (version <= 11259) ||
+		(version == 11260 && (getenv("GNM_HACK_COLROW") != NULL));
 }
 
 static void
@@ -637,7 +664,7 @@ xml_sax_calculation (GsfXMLIn *xin, xmlChar const **attrs)
 	XMLSaxParseState *state = (XMLSaxParseState *)xin->user_state;
 	gboolean b;
 	int	 i;
-	double	 d;
+	gnm_float tol;
 
 	for (; attrs != NULL && attrs[0] && attrs[1] ; attrs += 2)
 		if (gnm_xml_attr_bool (attrs, "ManualRecalc", &b))
@@ -646,8 +673,8 @@ xml_sax_calculation (GsfXMLIn *xin, xmlChar const **attrs)
 			workbook_iteration_enabled (state->wb, b);
 		else if (gnm_xml_attr_int  (attrs, "MaxIterations", &i))
 			workbook_iteration_max_number (state->wb, i);
-		else if (gnm_xml_attr_double (attrs, "IterationTolerance", &d))
-			workbook_iteration_tolerance (state->wb, d);
+		else if (gnm_xml_attr_float (attrs, "IterationTolerance", &tol))
+			workbook_iteration_tolerance (state->wb, tol);
 		else if (strcmp (CXML2C (attrs[0]), "DateConvention") == 0) {
 			GODateConventions const *date_conv =
 				go_date_conv_from_str (CXML2C (attrs[1]));
@@ -1322,6 +1349,21 @@ xml_sax_sheet_freezepanes (GsfXMLIn *xin, xmlChar const **attrs)
 			&frozen_tl, &unfrozen_tl);
 }
 
+static double
+maybe_hack_colrow_size (XMLSaxParseState *state, double pts, gboolean is_col)
+{
+	double s = (pts /
+		    colrow_compute_pixel_scale (state->sheet, is_col) *
+		    (gnm_app_display_dpi_get (is_col) / 72.0));
+
+	// A weak sanity check
+	if (s >= 1 && s < (is_col ? 200 : 40))
+		pts = s;
+
+	return pts;
+}
+
+
 static void
 xml_sax_cols_rows (GsfXMLIn *xin, xmlChar const **attrs)
 {
@@ -1338,6 +1380,77 @@ xml_sax_cols_rows (GsfXMLIn *xin, xmlChar const **attrs)
 			else
 				sheet_row_set_default_size_pts (state->sheet, def_size);
 		}
+}
+
+static gboolean
+cb_xml_sax_cols_rows_end (GnmColRowIter const *iter, void *xin_, gboolean is_col)
+{
+	GsfXMLIn *xin = xin_;
+	XMLSaxParseState *state = (XMLSaxParseState *)xin->user_state;
+	Sheet *sheet = state->sheet;
+
+	double pts = maybe_hack_colrow_size (state, iter->cri->size_pts, is_col);
+	// g_printerr ("%d: %g->%g\n", iter->pos, iter->cri->size_pts, pts);
+
+	(is_col ? sheet_col_set_size_pts : sheet_row_set_size_pts)
+		(sheet, iter->pos, pts, iter->cri->hard_size);
+
+	return FALSE;
+}
+
+static gboolean
+cb_xml_sax_cols_end (GnmColRowIter const *iter, void *xin_)
+{
+	return cb_xml_sax_cols_rows_end (iter, xin_, TRUE);
+}
+
+static gboolean
+cb_xml_sax_rows_end (GnmColRowIter const *iter, void *xin_)
+{
+	return cb_xml_sax_cols_rows_end (iter, xin_, FALSE);
+}
+
+static void
+xml_sax_cols_rows_end (GsfXMLIn *xin, G_GNUC_UNUSED GsfXMLBlob *blob)
+{
+	gboolean const is_col = xin->node->user_data.v_bool;
+	XMLSaxParseState *state = (XMLSaxParseState *)xin->user_state;
+	Sheet *sheet = state->sheet;
+
+	if (is_col || !state->hack_colrow_size)
+		return;
+
+	// Don't want to deal with this
+	if (sheet->last_zoom_factor_used != 1)
+		return;
+
+	if (fabs (sheet_row_get_default_size_pts (sheet) - 12.75) < 0.051)
+		// Probably something imported.
+		return;
+
+	// Pre 1.12.60 we used nominal pixels for computing row pixel height
+	// and column pixel width.  Anyone with high-dpi displays (relative
+	// to the nominal 96) will therefore have saved too large point
+	// sizes.  Correct for that here.
+	//
+	// Once resaved, the file will have a higher version number inside
+	// and thus not get here again.
+	//
+	// Note: anyone who has saved with the git version between 1.12.59
+	// and now will have to do the correction by hand.  Run *once*
+	// with GNM_HACK_COLROW=1 to force the correction.
+
+	sheet_colrow_foreach (sheet, TRUE, 0, -1, cb_xml_sax_cols_end, xin);
+	sheet_colrow_foreach (sheet, FALSE, 0, -1, cb_xml_sax_rows_end, xin);
+
+	sheet_col_set_default_size_pts (sheet,
+					maybe_hack_colrow_size (state,
+								sheet_col_get_default_size_pts (sheet),
+								TRUE));
+	sheet_row_set_default_size_pts (sheet,
+					maybe_hack_colrow_size (state,
+								sheet_row_get_default_size_pts (sheet),
+								FALSE));
 }
 
 static void
@@ -1388,17 +1501,15 @@ xml_sax_colrow (GsfXMLIn *xin, xmlChar const **attrs)
 		sheet_col_set_size_pts (state->sheet, pos, size, cri->hard_size);
 		if (state->sheet->cols.max_outline_level < cri->outline_level)
 			state->sheet->cols.max_outline_level = cri->outline_level;
-		/* resize flags are already set only need to copy the sizes */
-		while (--count > 0)
-			col_row_info_copy (sheet_col_fetch (state->sheet, ++pos), cri);
 	} else {
 		sheet_row_set_size_pts (state->sheet, pos, size, cri->hard_size);
 		if (state->sheet->rows.max_outline_level < cri->outline_level)
 			state->sheet->rows.max_outline_level = cri->outline_level;
-		/* resize flags are already set only need to copy the sizes */
-		while (--count > 0)
-			col_row_info_copy (sheet_row_fetch (state->sheet, ++pos), cri);
 	}
+
+	// resize flags are already set only need to copy the sizes
+	while (--count > 0)
+		sheet_colrow_copy_info (state->sheet, ++pos, is_col, cri);
 }
 
 static void
@@ -1588,14 +1699,14 @@ style_font_read_from_x11 (GnmStyle *mstyle, char const *fontname)
 	 * of hardcoding it to helvetica.
 	 */
 	c = font_component (fontname, 2);
-	if (strncmp (c, "bold", 4) == 0)
+	if (g_str_has_prefix (c, "bold"))
 		gnm_style_set_font_bold (mstyle, TRUE);
 
 	c = font_component (fontname, 3);
-	if (strncmp (c, "o", 1) == 0)
+	if (g_str_has_prefix (c, "o"))
 		gnm_style_set_font_italic (mstyle, TRUE);
 
-	if (strncmp (c, "i", 1) == 0)
+	if (g_str_has_prefix (c, "i"))
 		gnm_style_set_font_italic (mstyle, TRUE);
 }
 
@@ -2190,7 +2301,7 @@ xml_sax_cell_content (GsfXMLIn *xin, G_GNUC_UNUSED GsfXMLBlob *blob)
 					 &pos, content + 1,
 					 array_cols, array_rows);
 		texpr = cr ? cc->texpr : cell->base.texpr;
-		if (texpr) gnm_expr_top_ref (texpr);
+		gnm_expr_top_ref (texpr);
 		goto store_shared;
 	}
 
@@ -2304,7 +2415,7 @@ assign_and_done:
 			gnm_cell_set_value (cell, v);
 	} else {
 		// Clipboard case
-		cc->texpr = texpr ? gnm_expr_top_ref (texpr) : NULL;
+		cc->texpr = gnm_expr_top_ref (texpr);
 		cc->val = v;
 	}
 
@@ -2371,31 +2482,32 @@ xml_sax_filter_condition (GsfXMLIn *xin, xmlChar const **attrs)
 	GnmValueType vtype0 = VALUE_EMPTY, vtype1 = VALUE_EMPTY;
 	GnmFilterOp op0 = GNM_FILTER_UNUSED, op1 = GNM_FILTER_UNUSED;
 	GnmFilterCondition *cond = NULL;
-	gboolean top = TRUE, items = TRUE, is_and = FALSE;
-	int i, tmp, cond_num = 0;
+	gboolean top = TRUE, items = TRUE, rel_range = TRUE, is_and = FALSE;
+	int tmp, cond_num = 0;
 	double bucket_count = 10.;
 
 	if (NULL == state->filter) return;
 
-	for (i = 0; attrs != NULL && attrs[i] && attrs[i + 1] ; i += 2) {
-		if (attr_eq (attrs[i], "Type"))   type = CXML2C (attrs[i + 1]);
-		else if (gnm_xml_attr_int (attrs+i, "Index", &cond_num)) ;
-		else if (gnm_xml_attr_bool (attrs, "Top", &top)) ;
-		else if (gnm_xml_attr_bool (attrs, "Items", &items)) ;
-		else if (gnm_xml_attr_double  (attrs, "Count", &bucket_count)) ;
+	for (; attrs != NULL && attrs[0] && attrs[1] ; attrs += 2) {
+		if (attr_eq (attrs[0], "Type"))   type = CXML2C (attrs[1]);
+		else if (gnm_xml_attr_int (attrs, "Index", &cond_num)) ;
+		else if (gnm_xml_attr_bool (attrs, "top", &top)) ;
+		else if (gnm_xml_attr_bool (attrs, "items", &items)) ;
+		else if (gnm_xml_attr_bool (attrs, "rel_range", &rel_range)) ;
+		else if (gnm_xml_attr_double (attrs, "count", &bucket_count));
 		else if (gnm_xml_attr_bool (attrs, "IsAnd", &is_and)) ;
-		else if (attr_eq (attrs[i], "Op0")) xml_sax_filter_operator (state, &op0, attrs[i + 1]);
-		else if (attr_eq (attrs[i], "Op1")) xml_sax_filter_operator (state, &op1, attrs[i + 1]);
+		else if (attr_eq (attrs[0], "Op0")) xml_sax_filter_operator (state, &op0, attrs[1]);
+		else if (attr_eq (attrs[0], "Op1")) xml_sax_filter_operator (state, &op1, attrs[1]);
 		/*
 		 * WARNING WARNING WARING
 		 * Value and ValueType are _reversed_ !!!
 		 * An error in the DOM exporter was propogated to the SAX
 		 * exporter and fixing this reversal would break all old files.
 		 */
-		else if (attr_eq (attrs[i], "ValueType0")) val0 = CXML2C (attrs[i + 1]);
-		else if (attr_eq (attrs[i], "ValueType1")) val1 = CXML2C (attrs[i + 1]);
-		else if (gnm_xml_attr_int (attrs+i, "Value0", &tmp)) vtype0 = tmp;
-		else if (gnm_xml_attr_int (attrs+i, "Value1", &tmp)) vtype1 = tmp;
+		else if (attr_eq (attrs[0], "ValueType0")) val0 = CXML2C (attrs[1]);
+		else if (attr_eq (attrs[0], "ValueType1")) val1 = CXML2C (attrs[1]);
+		else if (gnm_xml_attr_int (attrs, "Value0", &tmp)) vtype0 = tmp;
+		else if (gnm_xml_attr_int (attrs, "Value1", &tmp)) vtype1 = tmp;
 	}
 
 	if (NULL == type) {
@@ -2424,7 +2536,7 @@ xml_sax_filter_condition (GsfXMLIn *xin, xmlChar const **attrs)
 			GNM_FILTER_OP_NON_BLANKS, NULL);
 	} else if (0 == g_ascii_strcasecmp (type, "bucket")) {
 		cond = gnm_filter_condition_new_bucket
-			(top, items, TRUE, bucket_count);
+			(top, items, rel_range, bucket_count);
 	} else {
 		go_io_warning (state->context, _("Unknown filter type \"%s\""), type);
 	}
@@ -2864,7 +2976,6 @@ xml_sax_named_expr_end (GsfXMLIn *xin, G_GNUC_UNUSED GsfXMLBlob *blob)
 		nexpr = expr_name_add (&pp, state->name.name,
 				       gnm_expr_top_new_constant (value_new_empty ()),
 				       NULL,
-				       TRUE,
 				       NULL);
 		if (nexpr) {
 			state->delayed_names = g_list_prepend (state->delayed_names, state->sheet);
@@ -3245,7 +3356,7 @@ GSF_XML_IN_NODE_FULL (START, WB, GNM, "Workbook", GSF_XML_NO_CONTENT, TRUE, TRUE
 			      GSF_XML_NO_CONTENT, FALSE, FALSE, &xml_sax_colrow, NULL, TRUE),
 
       GSF_XML_IN_NODE_FULL (SHEET, SHEET_ROWS, GNM, "Rows",
-			    GSF_XML_NO_CONTENT, FALSE, FALSE, &xml_sax_cols_rows, NULL, FALSE),
+			    GSF_XML_NO_CONTENT, FALSE, FALSE, &xml_sax_cols_rows, &xml_sax_cols_rows_end, FALSE),
 	GSF_XML_IN_NODE_FULL (SHEET_ROWS, ROW, GNM, "RowInfo",
 			      GSF_XML_NO_CONTENT, FALSE, FALSE, &xml_sax_colrow, NULL, FALSE),
 
@@ -3450,8 +3561,7 @@ read_file_free_state (XMLSaxParseState *state, gboolean self)
 	g_hash_table_destroy (state->expr_map);
 	state->expr_map = NULL;
 
-	gnm_conventions_unref (state->convs);
-	state->convs = NULL;
+	g_clear_object (&state->convs);
 
 	/*
 	 * Malformed documents can cause the parser to exit early.

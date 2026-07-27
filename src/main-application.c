@@ -2,11 +2,11 @@
  * main-application.c: Main entry point for the Gnumeric application
  *
  * Author:
- *   Jon Kåre Hellan <hellan@acm.org>
+ *   Jon KÃ¥re Hellan <hellan@acm.org>
  *   Morten Welinder <terra@gnome.org>
  *   Jody Goldberg <jody@gnome.org>
  *
- * Copyright (C) 2002-2004, Jon Kåre Hellan
+ * Copyright (C) 2002-2004, Jon KÃ¥re Hellan
  */
 
 #include <gnumeric-config.h>
@@ -54,7 +54,7 @@ static gboolean gnumeric_no_warnings = FALSE;
 static gchar  *geometry = NULL;
 static gchar **startup_files;
 
-static const GOptionEntry gnumeric_options [] = {
+static const GOptionEntry gnumeric_options[] = {
 	/*********************************
 	 * Public Variables */
 	{ "geometry", 'g', 0, G_OPTION_ARG_STRING, &geometry,
@@ -218,13 +218,13 @@ main (int argc, char const **argv)
 		LPFNATTACHCONSOLE MyAttachConsole;
 		HMODULE hmod;
 
-		if ((hmod = GetModuleHandle("kernel32.dll"))) {
-			MyAttachConsole = (LPFNATTACHCONSOLE) GetProcAddress(hmod, "AttachConsole");
-			if (MyAttachConsole && MyAttachConsole(ATTACH_PARENT_PROCESS)) {
-				freopen("CONOUT$", "w", stdout);
-				freopen("CONOUT$", "w", stderr);
-				dup2(fileno(stdout), 1);
-				dup2(fileno(stderr), 2);
+		if ((hmod = GetModuleHandle ("kernel32.dll"))) {
+			MyAttachConsole = (LPFNATTACHCONSOLE) GetProcAddress (hmod, "AttachConsole");
+			if (MyAttachConsole && MyAttachConsole (ATTACH_PARENT_PROCESS)) {
+				freopen ("CONOUT$", "w", stdout);
+				freopen ("CONOUT$", "w", stderr);
+				dup2 (fileno (stdout), 1);
+				dup2 (fileno (stderr), 2);
 				has_console = TRUE;
 			}
 		}
@@ -352,9 +352,9 @@ main (int argc, char const **argv)
 
 #if defined(G_OS_WIN32)
 	if (has_console) {
-		close(1);
-		close(2);
-		FreeConsole();
+		close (1);
+		close (2);
+		FreeConsole ();
 	}
 #endif
 
@@ -368,7 +368,7 @@ main (int argc, char const **argv)
 	if (gnm_debug_flag ("close-displays")) {
 		GSList *displays;
 
-		gdk_flush();
+		gdk_flush ();
 		while (g_main_context_iteration (NULL, FALSE))
 			;/* nothing */
 

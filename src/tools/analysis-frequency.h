@@ -22,24 +22,30 @@
  */
 
 
-#ifndef ANALYSIS_FREQUENCY_H
-#define ANALYSIS_FREQUENCY_H
+#ifndef GNM_TOOLS_ANALYSIS_FREQUENCY_H_
+#define GNM_TOOLS_ANALYSIS_FREQUENCY_H_
 
 #include <gnumeric.h>
 #include <numbers.h>
-#include <tools/dao.h>
-#include <tools/tools.h>
 #include <tools/analysis-tools.h>
 
 typedef enum {
-	NO_CHART = 0,
-	BAR_CHART,
-	COLUMN_CHART
-} chart_freq_t;
+	GNM_FREQ_TOOL_NO_CHART = 0,
+	GNM_FREQ_TOOL_BAR_CHART,
+	GNM_FREQ_TOOL_COLUMN_CHART
+} gnm_freq_tool_chart_t;
+
+GType gnm_freq_tool_chart_get_type (void);
+#define GNM_FREQ_TOOL_CHART_TYPE (gnm_freq_tool_chart_get_type ())
 
 
-typedef struct {
-	analysis_tools_data_generic_t base;
+#define GNM_TYPE_FREQUENCY_TOOL (gnm_frequency_tool_get_type ())
+GType gnm_frequency_tool_get_type (void);
+typedef struct _GnmFrequencyTool GnmFrequencyTool;
+typedef struct _GnmFrequencyToolClass GnmFrequencyToolClass;
+
+struct _GnmFrequencyTool {
+	GnmGenericAnalysisTool parent;
 	gboolean   predetermined;
 	GnmValue   *bin;
 	gnm_float max;
@@ -47,10 +53,16 @@ typedef struct {
 	gint       n;
 	gboolean   percentage;
 	gboolean   exact;
-	chart_freq_t   chart;
-} analysis_tools_data_frequency_t;
+	gnm_freq_tool_chart_t chart;
+};
 
-gboolean analysis_tool_frequency_engine (GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-					   analysis_tool_engine_t selector, gpointer result);
+struct _GnmFrequencyToolClass {
+	GnmGenericAnalysisToolClass parent_class;
+};
+
+#define GNM_FREQUENCY_TOOL(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), GNM_TYPE_FREQUENCY_TOOL, GnmFrequencyTool))
+#define GNM_IS_FREQUENCY_TOOL(o)        (G_TYPE_CHECK_INSTANCE_TYPE ((o), GNM_TYPE_FREQUENCY_TOOL))
+
+GnmAnalysisTool *gnm_frequency_tool_new (void);
 
 #endif

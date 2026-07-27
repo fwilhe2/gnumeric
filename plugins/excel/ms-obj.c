@@ -1,4 +1,3 @@
-
 /*
  * ms-obj.c: MS Excel Object support for Gnumeric
  *
@@ -390,17 +389,17 @@ ms_obj_delete (MSObj *obj)
 char *
 ms_read_TXO (BiffQuery *q, MSContainer *c, PangoAttrList **markup)
 {
-	static char const * const orientations [] = {
+	static char const * const orientations[] = {
 		"Left to right",
 		"Top to Bottom",
 		"Bottom to Top on Side",
 		"Top to Bottom on Side"
 	};
-	static char const * const haligns [] = {
+	static char const * const haligns[] = {
 		"At left", "Horizontally centered",
 		"At right", "Horizontally justified"
 	};
-	static char const * const valigns [] = {
+	static char const * const valigns[] = {
 		"At top", "Vertically centered",
 		"At bottom", "Vertically justified"
 	};
@@ -635,7 +634,7 @@ read_pre_biff8_read_name_and_fmla (BiffQuery *q, MSContainer *c, MSObj *obj,
 				   gboolean has_name, unsigned offset)
 {
 	guint8 const *data;
-	gboolean fmla_len;
+	unsigned fmla_len;
 
 	XL_CHECK_CONDITION_VAL (q->length >= 28, NULL);
 	fmla_len = GSF_LE_GET_GUINT16 (q->data+26);
@@ -678,8 +677,7 @@ ms_obj_read_pre_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 #if 0
 	guint16 const flags = GSF_LE_GET_GUINT16(q->data+8);
 #endif
-	anchor = g_malloc (MS_ANCHOR_SIZE);
-	memcpy (anchor, q->data+8, MS_ANCHOR_SIZE);
+	anchor = go_memdup (q->data + 8, MS_ANCHOR_SIZE);
 	ms_obj_attr_bag_insert (obj->attrs,
 		ms_obj_attr_new_ptr (MS_OBJ_ATTR_ANCHOR, anchor));
 
@@ -718,7 +716,7 @@ ms_obj_read_pre_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 	case MSOT_OVAL:
 	case MSOT_ARC:
 	case MSOT_TEXTBOX:
-		XL_CHECK_CONDITION_VAL (q->data + 36 <= last, TRUE);
+		XL_CHECK_CONDITION_VAL (q->data + 41 <= last, TRUE);
 		ms_obj_attr_bag_insert (obj->attrs,
 			ms_obj_attr_new_uint (MS_OBJ_ATTR_FILL_BACKGROUND,
 				0x80000000 | GSF_LE_GET_GUINT8 (q->data+34)));
@@ -873,7 +871,7 @@ ms_obj_read_pre_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 		obj->auto_combo =
 			(GSF_LE_GET_GUINT16 (q->data + 8) & 0x8000) ? TRUE : FALSE;
 		break;
-	default :
+	default:
 		break;
 	}
 
@@ -905,7 +903,7 @@ ms_obj_map_forms_obj (MSObj *obj, MSContainer *c,
 		unsigned    excel_type;
 		gboolean    has_result_link;
 		gboolean    has_source_link; /* requires has_result_link */
-	} const map_forms [] = {
+	} const map_forms[] = {
 		{ "ScrollBar.1",	MSOT_SCROLLBAR, TRUE,	FALSE },
 		{ "CheckBox.1",		MSOT_CHECKBOX,  TRUE,	FALSE },
 		{ "TextBox.1",		MSOT_TEXTBOX,   FALSE,	FALSE },
@@ -926,8 +924,8 @@ ms_obj_map_forms_obj (MSObj *obj, MSContainer *c,
 		return;
 	type = excel_get_text (c->importer, data + 16,
 			       GSF_LE_GET_GUINT16 (data + 14),
-			       &len, NULL, last - data);
-	if (NULL == type || strncmp (type, "Forms.", 6)) {
+			       &len, NULL, last - data - 16);
+	if (NULL == type || !g_str_has_prefix (type, "Forms.")) {
 		g_free (type);
 		return;
 	}
@@ -1011,25 +1009,25 @@ ms_obj_read_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 			hit_end = TRUE;
 			break;
 
-		case GR_MACRO :
+		case GR_MACRO:
 			ms_obj_read_expr (obj, MS_OBJ_ATTR_MACRO_EXPR, c,
 				data+4, data + 4 + len);
 			ms_obj_dump (data, len, data_len_left, "MacroObject");
 			break;
 
-		case GR_COMMAND_BUTTON :
+		case GR_COMMAND_BUTTON:
 			ms_obj_dump (data, len, data_len_left, "CommandButton");
 			break;
 
-		case GR_GROUP :
+		case GR_GROUP:
 			ms_obj_dump (data, len, data_len_left, "Group");
 			break;
 
-		case GR_CLIPBOARD_FORMAT :
+		case GR_CLIPBOARD_FORMAT:
 			ms_obj_dump (data, len, data_len_left, "ClipboardFmt");
 			break;
 
-		case GR_PICTURE_OPTIONS :
+		case GR_PICTURE_OPTIONS:
 			if (len == 2) {
 				guint16 opt = GSF_LE_GET_GUINT16 (data + 4);
 
@@ -1049,21 +1047,21 @@ ms_obj_read_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 			next_biff_record_maybe_imdata = TRUE;
 			break;
 
-		case GR_PICTURE_FORMULA :
+		case GR_PICTURE_FORMULA:
 			/* Check for form objects stored here for no apparent reason */
 			if (obj->excel_type == 8)
 				ms_obj_map_forms_obj (obj, c, data+4, data+4+len);
 			break;
 
-		case GR_CHECKBOX_LINK :
+		case GR_CHECKBOX_LINK:
 			ms_obj_dump (data, len, data_len_left, "CheckboxLink");
 			break;
 
-		case GR_RADIO_BUTTON :
+		case GR_RADIO_BUTTON:
 			ms_obj_dump (data, len, data_len_left, "RadioButton");
 			break;
 
-		case GR_SCROLLBAR :
+		case GR_SCROLLBAR:
 			XL_CHECK_CONDITION_VAL (data_len_left >= 20, TRUE);
 			ms_obj_attr_bag_insert (obj->attrs,
 				ms_obj_attr_new_uint (MS_OBJ_ATTR_SCROLLBAR_VALUE,
@@ -1086,33 +1084,33 @@ ms_obj_read_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 			ms_obj_dump (data, len, data_len_left, "ScrollBar");
 			break;
 
-		case GR_NOTE_STRUCTURE :
+		case GR_NOTE_STRUCTURE:
 			ms_obj_dump (data, len, data_len_left, "Note");
 			break;
 
-		case GR_SCROLLBAR_FORMULA :
+		case GR_SCROLLBAR_FORMULA:
 			ms_obj_read_expr (obj, MS_OBJ_ATTR_LINKED_TO_CELL, c,
 				data+4, data + 4 + len);
 			ms_obj_dump (data, len, data_len_left, "ScrollbarFmla");
 			break;
 
-		case GR_GROUP_BOX_DATA :
+		case GR_GROUP_BOX_DATA:
 			ms_obj_dump (data, len, data_len_left, "GroupBoxData");
 			break;
 
-		case GR_EDIT_CONTROL_DATA :
+		case GR_EDIT_CONTROL_DATA:
 			ms_obj_dump (data, len, data_len_left, "EditCtrlData");
 			break;
 
-		case GR_RADIO_BUTTON_DATA :
+		case GR_RADIO_BUTTON_DATA:
 			ms_obj_dump (data, len, data_len_left, "RadioData");
 			break;
 
-		case GR_CHECKBOX_DATA :
+		case GR_CHECKBOX_DATA:
 			ms_obj_dump (data, len, data_len_left, "CheckBoxData");
 			break;
 
-		case GR_LISTBOX_DATA :
+		case GR_LISTBOX_DATA:
 			if (!obj->auto_combo)
 				ms_obj_read_expr (obj, MS_OBJ_ATTR_INPUT_FROM, c,
 					data+6, data + data_len_left);
@@ -1129,13 +1127,13 @@ ms_obj_read_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
 			ms_obj_dump (data, len, data_len_left, "ListBoxData");
 			break;
 
-		case GR_CHECKBOX_FORMULA :
+		case GR_CHECKBOX_FORMULA:
 			ms_obj_read_expr (obj, MS_OBJ_ATTR_LINKED_TO_CELL, c,
 				data+4, data + 4 + len);
 			ms_obj_dump (data, len, data_len_left, "CheckBoxFmla");
 			break;
 
-		case GR_COMMON_OBJ_DATA : {
+		case GR_COMMON_OBJ_DATA: {
 			guint16 options;
 
 			XL_CHECK_CONDITION_VAL (data_len_left >= 10, TRUE);
@@ -1247,9 +1245,7 @@ ms_obj_read_biff8_obj (BiffQuery *q, MSContainer *c, MSObj *obj)
  * ms_read_OBJ :
  * @q: The biff record to start with.
  * @c: The object's container
- * @attrs: an optional hash of object attributes.
- *
- * This function takes ownership of attrs.
+ * @attrs: (transfer full) (nullable): an optional hash of object attributes.
  *
  * Returns: %TRUE on success.
  **/

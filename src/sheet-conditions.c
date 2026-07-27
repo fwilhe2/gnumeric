@@ -374,6 +374,12 @@ sheet_conditions_remove (Sheet *sheet, GnmRange const *r, GnmStyle *style)
 		return;
 	}
 
+	if (!range_valid (r)) {
+		// Inverted range, probably related to style in a tile that
+		// extended past the sheet
+		return;
+	}
+
 	//g_printerr ("Removing style %p from %s\n", style, range_as_string (r));
 	g = find_group (cd, style);
 	if (!g) {
@@ -757,8 +763,8 @@ csgd_eval (GnmDependent *dep)
 	// Nothing yet
 }
 
-static GSList *
-csgd_changed (GnmDependent *dep)
+static void
+csgd_changed (GnmDependent *dep, GPtrArray *extra)
 {
 	CSGroupDep *gd = (CSGroupDep *)dep;
 	CSGroup *g = (CSGroup *)gd; // Since the dep is first
@@ -776,8 +782,6 @@ csgd_changed (GnmDependent *dep)
 		// sheet_range_calc_spans ???
 		sheet_queue_redraw_range (sheet, r);
 	}
-
-	return NULL;
 }
 
 static GnmCellPos *

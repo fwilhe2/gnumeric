@@ -305,11 +305,8 @@ cb_dialog_apply_clicked (G_GNUC_UNUSED GtkWidget *button,
 
 /**
  * dialog_realized:
- * @widget
- * @state:
- *
- *
- *
+ * @dialog: #GtkWidget
+ * @state: #GoalSeekState
  **/
 static void
 dialog_realized (G_GNUC_UNUSED GtkWidget *dialog,
@@ -320,10 +317,8 @@ dialog_realized (G_GNUC_UNUSED GtkWidget *dialog,
 
 /**
  * dialog_preload_selection:
- * @state:
- * @entry
- *
- *
+ * @state: #GoalSeekState
+ * @entry: #GnmExprEntry
  **/
 static void
 dialog_preload_selection (GoalSeekState *state, GnmExprEntry *entry)
@@ -424,7 +419,7 @@ dialog_init (GoalSeekState *state)
 	state->old_value = NULL;
 	state->old_cell = NULL;
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_dialog_destroy);
 

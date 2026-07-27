@@ -68,6 +68,11 @@ pointer_dup (gpointer *cc)
 	return cc;
 }
 
+/**
+ * gnm_cell_copy_get_type:
+ *
+ * Returns: the GType for #GnmCellCopy.
+ **/
 GType
 gnm_cell_copy_get_type (void)
 {
@@ -89,6 +94,11 @@ gnm_paste_target_copy (GnmPasteTarget *pt)
 	return go_memdup (pt, sizeof (*pt));
 }
 
+/**
+ * gnm_paste_target_get_type:
+ *
+ * Returns: the GType for #GnmPasteTarget.
+ **/
 GType
 gnm_paste_target_get_type (void)
 {
@@ -102,6 +112,14 @@ gnm_paste_target_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_paste_target_new:
+ * @sheet: #Sheet
+ * @r: #GnmRange
+ * @flags: #GnmPasteFlags
+ *
+ * Returns: (transfer full): a newly allocated #GnmPasteTarget.
+ **/
 GnmPasteTarget *
 gnm_paste_target_new (Sheet *sheet, GnmRange *r, GnmPasteFlags flags)
 {
@@ -216,8 +234,8 @@ paste_link (GnmPasteTarget const *pt, int top, int left,
 		return;
 
 	/* TODO : support relative links ? */
-	source_cell_ref.col_relative = 0;
-	source_cell_ref.row_relative = 0;
+	source_cell_ref.col_relative = FALSE;
+	source_cell_ref.row_relative = FALSE;
 	source_cell_ref.sheet = (cr->origin_sheet != pt->sheet)
 		? cr->origin_sheet : NULL;
 	pos.col = left;
@@ -278,8 +296,7 @@ paste_cell (int target_col, int target_row,
 				GnmExprTop const *trelo =
 					gnm_expr_top_transpose (relo ? relo : src->texpr);
 				if (trelo) {
-					if (relo)
-						gnm_expr_top_unref (relo);
+					gnm_expr_top_unref (relo);
 					relo = trelo;
 				}
 			} else if (!relo && gnm_expr_top_is_array_corner (src->texpr)) {
@@ -288,8 +305,7 @@ paste_cell (int target_col, int target_row,
 			}
 			gnm_cell_set_expr_and_value (dst, relo ? relo : src->texpr,
 						 value_dup (src->val), TRUE);
-			if (NULL != relo)
-				gnm_expr_top_unref (relo);
+			gnm_expr_top_unref (relo);
 		} else if (src->val) {
 			GnmValue *newval = NULL;
 			GnmValue const *oldval = src->val;
@@ -716,8 +732,11 @@ cb_dup_objects (SheetObject const *src, GnmCellRegion *cr)
 
 /**
  * clipboard_copy_range:
+ * @sheet: Sheet to copy from
+ * @r: range to copy
  *
- * Entry point to the clipboard copy code
+ * Returns: (transfer full): the copied contents of the given
+ * range.
  */
 GnmCellRegion *
 clipboard_copy_range (Sheet *sheet, GnmRange const *r)
@@ -823,8 +842,7 @@ clipboard_copy_ranges_undo (Sheet *sheet, GSList *ranges)
  * @sheet: #Sheet
  * @objects: (element-type SheetObject): #GSList
  *
- * Returns a cell region with copies of objects in list.  Caller is responsible
- *	for cellregion_unref-ing the result.
+ * Returns: (transfer full): a cell region with copies of objects in list.
  **/
 GnmCellRegion *
 clipboard_copy_obj (Sheet *sheet, GSList *objects)
@@ -835,7 +853,7 @@ clipboard_copy_obj (Sheet *sheet, GSList *objects)
 	GnmRange *r;
 	GSList *ptr;
 	SheetObject *so;
-	double coords [4];
+	double coords[4];
 	guint w, h;
 
 	g_return_val_if_fail (IS_SHEET (sheet), NULL);
@@ -872,7 +890,18 @@ clipboard_copy_obj (Sheet *sheet, GSList *objects)
 	return cr;
 }
 
-GnmPasteTarget*
+/**
+ * paste_target_init:
+ * @pt: #GnmPasteTarget
+ * @sheet: #Sheet
+ * @r: #GnmRange
+ * @flags: #GnmPasteFlags
+ *
+ * Initializes @pt.
+ *
+ * Returns: (transfer none): its argument.
+ **/
+GnmPasteTarget *
 paste_target_init (GnmPasteTarget *pt, Sheet *sheet,
 		   GnmRange const *r, GnmPasteFlags flags)
 {
@@ -884,9 +913,9 @@ paste_target_init (GnmPasteTarget *pt, Sheet *sheet,
 
 /**
  * gnm_cell_region_new:
- * @origin_sheet: optionally NULL.
+ * @origin_sheet: (nullable): source sheet
  *
- * A convenience routine to create CellRegions and init the flags nicely.
+ * Returns: (transfer full): a cell region with the flags set nicely.
  */
 GnmCellRegion *
 gnm_cell_region_new (Sheet *origin_sheet)
@@ -909,6 +938,14 @@ gnm_cell_region_new (Sheet *origin_sheet)
 	return cr;
 }
 
+/**
+ * cellregion_ref:
+ * @cr: #GnmCellRegion
+ *
+ * Increments the reference count of @cr.
+ *
+ * Returns: (transfer full): its argument.
+ **/
 GnmCellRegion *
 cellregion_ref (GnmCellRegion *cr)
 {
@@ -917,6 +954,12 @@ cellregion_ref (GnmCellRegion *cr)
 	return cr;
 }
 
+/**
+ * cellregion_unref:
+ * @cr: (transfer full): #GnmCellRegion
+ *
+ * Decrements the reference count of @cr and destroys it if it reaches zero.
+ **/
 void
 cellregion_unref (GnmCellRegion *cr)
 {
@@ -932,12 +975,11 @@ cellregion_unref (GnmCellRegion *cr)
 		cr->cell_content = NULL;
 	}
 
-	if (NULL != cr->col_state)
-		cr->col_state = colrow_state_list_destroy (cr->col_state);
-	if (NULL != cr->row_state)
-		cr->row_state = colrow_state_list_destroy (cr->row_state);
+	colrow_state_list_destroy (cr->col_state);
+	colrow_state_list_destroy (cr->row_state);
+
 	if (cr->styles != NULL) {
-		style_list_free (cr->styles);
+		sheet_style_list_free (cr->styles);
 		cr->styles = NULL;
 	}
 	if (cr->merged != NULL) {
@@ -958,6 +1000,11 @@ cellregion_unref (GnmCellRegion *cr)
 	g_free (cr);
 }
 
+/**
+ * gnm_cell_region_get_type:
+ *
+ * Returns: the GType for #GnmCellRegion.
+ **/
 GType
 gnm_cell_region_get_type (void)
 {
@@ -1005,8 +1052,7 @@ cb_invalidate_cellcopy (GnmCellCopy *cc, gconstpointer ignore,
  * Invalidate references from cell content, objects or style to @sheet.
  **/
 void
-cellregion_invalidate_sheet (GnmCellRegion *cr,
-			     Sheet *sheet)
+cellregion_invalidate_sheet (GnmCellRegion *cr, Sheet *sheet)
 {
 	GSList *ptr;
 	gboolean save_invalidated;
@@ -1092,6 +1138,14 @@ cellregion_extent (GnmCellRegion const *cr, GnmRange *extent)
 		range_init (extent, 0, 0, 0, 0);
 }
 
+/**
+ * cellregion_to_string:
+ * @cr: #GnmCellRegion
+ * @only_visible: only process visible cells
+ * @date_conv: #GODateConventions
+ *
+ * Returns: (transfer full): a string representation of the cell region.
+ **/
 GString *
 cellregion_to_string (GnmCellRegion const *cr,
 		      gboolean only_visible,
@@ -1168,7 +1222,7 @@ cellregion_to_string (GnmCellRegion const *cr,
 
 			cc = cellregion_get_content (cr, col, row);
 			if (cc) {
-				style = style_list_get_style (cr->styles, col, row);
+				style = sheet_style_list_get_style (cr->styles, col, row);
 				fmt = gnm_style_get_format (style);
 
 				if (go_format_is_general (fmt) &&
@@ -1190,6 +1244,12 @@ cellregion_to_string (GnmCellRegion const *cr,
 	return all;
 }
 
+/**
+ * cellregion_cmd_size:
+ * @cr: #GnmCellRegion
+ *
+ * Returns: the size of the cell region.
+ **/
 int
 cellregion_cmd_size (GnmCellRegion const *cr)
 {
@@ -1206,16 +1266,22 @@ cellregion_cmd_size (GnmCellRegion const *cr)
 static void
 gnm_cell_copy_free (GnmCellCopy *cc)
 {
-	if (cc->texpr) {
-		gnm_expr_top_unref (cc->texpr);
-		cc->texpr = NULL;
-	}
+	gnm_expr_top_unref (cc->texpr);
+	cc->texpr = NULL;
 	value_release (cc->val);
 	cc->val = NULL;
 
 	CHUNK_FREE (cell_copy_pool, cc);
 }
 
+/**
+ * gnm_cell_copy_new:
+ * @cr: #GnmCellRegion
+ * @col_offset: column offset
+ * @row_offset: row offset
+ *
+ * Returns: (transfer full): a newly allocated #GnmCellCopy.
+ **/
 GnmCellCopy *
 gnm_cell_copy_new (GnmCellRegion *cr, int col_offset, int row_offset)
 {

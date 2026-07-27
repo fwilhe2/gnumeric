@@ -30,38 +30,115 @@
 #include <ranges.h>
 #include <expr.h>
 #include <func.h>
-#include <numbers.h>
+#include <sheet.h>
+
+
+G_DEFINE_TYPE (GnmOneMeanTestTool, gnm_one_mean_test_tool, GNM_TYPE_GENERIC_ANALYSIS_TOOL)
+
+enum {
+	ONE_MEAN_TEST_PROP_0,
+	ONE_MEAN_TEST_PROP_MEAN,
+	ONE_MEAN_TEST_PROP_ALPHA
+};
+
+static void
+gnm_one_mean_test_tool_set_property (GObject      *obj,
+				     guint         property_id,
+				     GValue const *value,
+				     GParamSpec   *pspec)
+{
+	GnmOneMeanTestTool *tool = GNM_ONE_MEAN_TEST_TOOL (obj);
+
+	switch (property_id) {
+	case ONE_MEAN_TEST_PROP_MEAN:
+		tool->mean = g_value_get_double (value);
+		break;
+	case ONE_MEAN_TEST_PROP_ALPHA:
+		tool->alpha = g_value_get_double (value);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_one_mean_test_tool_get_property (GObject    *obj,
+				     guint       property_id,
+				     GValue     *value,
+				     GParamSpec *pspec)
+{
+	GnmOneMeanTestTool *tool = GNM_ONE_MEAN_TEST_TOOL (obj);
+
+	switch (property_id) {
+	case ONE_MEAN_TEST_PROP_MEAN:
+		g_value_set_double (value, tool->mean);
+		break;
+	case ONE_MEAN_TEST_PROP_ALPHA:
+		g_value_set_double (value, tool->alpha);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID (obj, property_id, pspec);
+		break;
+	}
+}
+
+static void
+gnm_one_mean_test_tool_init (GnmOneMeanTestTool *tool)
+{
+	tool->mean = 0.0;
+	tool->alpha = 0.05;
+}
+
+static void
+gnm_one_mean_test_tool_finalize (GObject *obj)
+{
+	G_OBJECT_CLASS (gnm_one_mean_test_tool_parent_class)->finalize (obj);
+}
 
 static gboolean
-analysis_tool_one_mean_test_engine_run (data_analysis_output_t *dao,
-				      analysis_tools_data_one_mean_test_t *info)
+gnm_one_mean_test_tool_update_dao (GnmAnalysisTool *tool, data_analysis_output_t *dao)
 {
+	GnmGenericAnalysisTool *gtool = GNM_GENERIC_ANALYSIS_TOOL (tool);
+	analysis_tool_prepare_input_range (gtool);
+	dao_adjust (dao, 1 + g_slist_length (gtool->base.input), 10);
+	return FALSE;
+}
+
+static char *
+gnm_one_mean_test_tool_update_descriptor (G_GNUC_UNUSED GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	return dao_command_descriptor (dao, _("Student-t Test (%s)"));
+}
+
+static gboolean
+gnm_one_mean_test_tool_prepare_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	dao_prepare_output (wbc, dao, _("Student-t Test"));
+	return FALSE;
+}
+
+static gboolean
+gnm_one_mean_test_tool_format_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	return dao_format_output (wbc, dao, _("Student-t Test"));
+}
+
+static gboolean
+gnm_one_mean_test_tool_perform_calc (GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	GnmOneMeanTestTool *otool = GNM_ONE_MEAN_TEST_TOOL (tool);
+	GnmGenericAnalysisTool *gtool = &otool->parent;
 	guint    col;
-	GSList  *data = info->base.input;
+	GSList  *data = gtool->base.input;
 	gboolean first = TRUE;
-
-	GnmFunc *fd_mean;
-	GnmFunc *fd_var;
-	GnmFunc *fd_sqrt;
-	GnmFunc *fd_abs;
-	GnmFunc *fd_tdist;
-	GnmFunc *fd_iferror;
-	GnmFunc *fd_count;
-
-	fd_count = gnm_func_lookup_or_add_placeholder ("COUNT");
-	gnm_func_inc_usage (fd_count);
-	fd_mean = gnm_func_lookup_or_add_placeholder ("AVERAGE");
-	gnm_func_inc_usage (fd_mean);
-	fd_var = gnm_func_lookup_or_add_placeholder ("VAR");
-	gnm_func_inc_usage (fd_var);
-	fd_sqrt = gnm_func_lookup_or_add_placeholder ("SQRT");
-	gnm_func_inc_usage (fd_sqrt);
-	fd_abs = gnm_func_lookup_or_add_placeholder ("ABS");
-	gnm_func_inc_usage (fd_abs);
-	fd_tdist = gnm_func_lookup_or_add_placeholder ("TDIST");
-	gnm_func_inc_usage (fd_tdist);
-	fd_iferror = gnm_func_lookup_or_add_placeholder ("IFERROR");
-	gnm_func_inc_usage (fd_iferror);
+	GnmFunc *fd_count = gnm_func_get_and_use ("COUNT");
+	GnmFunc *fd_mean = gnm_func_get_and_use ("AVERAGE");
+	GnmFunc *fd_var = gnm_func_get_and_use ("VAR");
+	GnmFunc *fd_sqrt = gnm_func_get_and_use ("SQRT");
+	GnmFunc *fd_abs = gnm_func_get_and_use ("ABS");
+	GnmFunc *fd_tdist = gnm_func_get_and_use ("TDIST");
+	GnmFunc *fd_iferror = gnm_func_get_and_use ("IFERROR");
 
 	dao_set_italic (dao, 0, 0, 0, 9);
 	set_cell_text_col (dao, 0, 0, _("/Student-t Test"
@@ -85,14 +162,14 @@ analysis_tool_one_mean_test_engine_run (data_analysis_output_t *dao,
 
 		/* Note that analysis_tools_write_label may modify val_org */
 		dao_set_italic (dao, col, 0, col, 0);
-		analysis_tools_write_label (val_org, dao, &info->base, col, 0, col);
+		analysis_tools_write_label (gtool, val_org, dao, col, 0, col);
 		expr_org = gnm_expr_new_constant (val_org);
 		expr_range_clean = gnm_expr_new_funcall2
-			(fd_iferror, gnm_expr_copy (expr_org), gnm_expr_new_constant (value_new_string("")));
+			(fd_iferror, gnm_expr_copy (expr_org), gnm_expr_new_constant (value_new_string ("")));
 
 		if (first) {
-			dao_set_cell_float (dao, col, 3, info->mean);
-			dao_set_cell_float (dao, col, 7, info->alpha);
+			dao_set_cell_float (dao, col, 3, otool->mean);
+			dao_set_cell_float (dao, col, 7, otool->alpha);
 			first = FALSE;
 		} else {
 			dao_set_cell_expr (dao, col, 3, make_cellref (-1,0));
@@ -142,35 +219,33 @@ analysis_tool_one_mean_test_engine_run (data_analysis_output_t *dao,
 	return FALSE;
 }
 
-
-gboolean
-analysis_tool_one_mean_test_engine (G_GNUC_UNUSED GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-			      analysis_tool_engine_t selector, gpointer result)
+static void
+gnm_one_mean_test_tool_class_init (GnmOneMeanTestToolClass *klass)
 {
-	analysis_tools_data_one_mean_test_t *info = specs;
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	GnmAnalysisToolClass *at_class = GNM_ANALYSIS_TOOL_CLASS (klass);
 
-	switch (selector) {
-	case TOOL_ENGINE_UPDATE_DESCRIPTOR:
-		return (dao_command_descriptor
-			(dao, _("Student-t Test (%s)"), result)
-			== NULL);
-	case TOOL_ENGINE_UPDATE_DAO:
-		prepare_input_range (&info->base.input, info->base.group_by);
-		dao_adjust (dao, 1 + g_slist_length (info->base.input), 10);
-		return FALSE;
-	case TOOL_ENGINE_CLEAN_UP:
-		return analysis_tool_generic_clean (specs);
-	case TOOL_ENGINE_LAST_VALIDITY_CHECK:
-		return FALSE;
-	case TOOL_ENGINE_PREPARE_OUTPUT_RANGE:
-		dao_prepare_output (NULL, dao, _("Student-t Test"));
-		return FALSE;
-	case TOOL_ENGINE_FORMAT_OUTPUT_RANGE:
-		return dao_format_output (dao, _("Student-t Test"));
-	case TOOL_ENGINE_PERFORM_CALC:
-	default:
-		return analysis_tool_one_mean_test_engine_run (dao, specs);
-	}
-	return TRUE;
+	gobject_class->set_property = gnm_one_mean_test_tool_set_property;
+	gobject_class->get_property = gnm_one_mean_test_tool_get_property;
+	gobject_class->finalize = gnm_one_mean_test_tool_finalize;
+	at_class->update_dao = gnm_one_mean_test_tool_update_dao;
+	at_class->update_descriptor = gnm_one_mean_test_tool_update_descriptor;
+	at_class->prepare_output_range = gnm_one_mean_test_tool_prepare_output_range;
+	at_class->format_output_range = gnm_one_mean_test_tool_format_output_range;
+	at_class->perform_calc = gnm_one_mean_test_tool_perform_calc;
+
+	g_object_class_install_property (gobject_class,
+		ONE_MEAN_TEST_PROP_MEAN,
+		g_param_spec_double ("mean", NULL, NULL,
+				     -G_MAXDOUBLE, G_MAXDOUBLE, 0.0, G_PARAM_READWRITE));
+	g_object_class_install_property (gobject_class,
+		ONE_MEAN_TEST_PROP_ALPHA,
+		g_param_spec_double ("alpha", NULL, NULL,
+				     0.0, 1.0, 0.05, G_PARAM_READWRITE));
 }
 
+GnmAnalysisTool *
+gnm_one_mean_test_tool_new (void)
+{
+	return g_object_new (GNM_TYPE_ONE_MEAN_TEST_TOOL, NULL);
+}

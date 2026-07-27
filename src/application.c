@@ -20,7 +20,6 @@
 #include <sheet-object.h>
 #include <gutils.h>
 #include <ranges.h>
-#include <sheet-object.h>
 #include <commands.h>
 #include <gui-clipboard.h>
 #include <expr-name.h>
@@ -55,7 +54,7 @@ enum {
 
 static guint signals[LAST_SIGNAL] = { 0 };
 
-struct _GnmApp {
+struct GnmApp_ {
 	GObject  base;
 
 	/* Clipboard */

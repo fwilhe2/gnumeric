@@ -102,9 +102,9 @@ typedef struct {
 	SheetObject   *so;
 } BlipInf;
 
-typedef struct _BlipType BlipType;
+typedef struct BlipType_ BlipType;
 
-struct _BlipType {
+struct BlipType_ {
 	char const *type_name;
 	guint8 type;
 	guint8 blip_tag[2];
@@ -139,9 +139,9 @@ static guint
 go_color_to_bgr (GOColor const c)
 {
 	guint32 abgr;
-	abgr  = GO_COLOR_UINT_R(c);
-	abgr |= GO_COLOR_UINT_G(c) << 8;
-	abgr |= GO_COLOR_UINT_B(c) << 16;
+	abgr  = GO_COLOR_UINT_R (c);
+	abgr |= GO_COLOR_UINT_G (c) << 8;
+	abgr |= GO_COLOR_UINT_B (c) << 16;
 	return abgr;
 }
 
@@ -206,7 +206,7 @@ map_color_to_palette (XLExportBase const *xle,
 }
 
 void
-excel_sheet_extent (Sheet const *sheet, GnmRange *extent, GnmStyle **col_styles,
+excel_sheet_extent (Sheet const *sheet, GnmRange *extent, GPtrArray *col_styles,
 		    int maxcols, int maxrows, GOIOContext *io_context)
 {
 	int i;
@@ -216,30 +216,30 @@ excel_sheet_extent (Sheet const *sheet, GnmRange *extent, GnmStyle **col_styles,
 	*extent = sheet_get_extent (sheet, FALSE, TRUE);
 
 	range_init (&r, 0, 0,
-		    MAX (maxcols, gnm_sheet_get_max_cols(sheet)) - 1,
-		    MAX (maxrows, gnm_sheet_get_max_rows(sheet)) - 1);
+		    MAX (maxcols, gnm_sheet_get_max_cols (sheet)) - 1,
+		    MAX (maxrows, gnm_sheet_get_max_rows (sheet)) - 1);
 	sheet_style_get_nondefault_extent (sheet, extent, &r, col_styles);
 
 	if (extent->end.col >= maxcols) {
 		go_io_warning (io_context,
-			ngettext("Some content will be lost when saving.  "
-				 "This format only supports %u column, and "
-				 "this workbook has %d",
-				 "Some content will be lost when saving.  "
-				 "This format only supports %u columns, "
-				 "and this workbook has %d",
-				 maxcols),
+			       ngettext ("Some content will be lost when saving.  "
+					 "This format only supports %u column, and "
+					 "this workbook has %d",
+					 "Some content will be lost when saving.  "
+					 "This format only supports %u columns, "
+					 "and this workbook has %d",
+					 maxcols),
 			  maxcols, extent->end.col);
 		extent->end.col = maxcols - 1;
 	}
 	if (extent->end.row >= maxrows) {
 		go_io_warning (io_context,
-			ngettext("Some content will be lost when saving.  "
-				 "This format only supports %u row, and "
-				 "this workbook has %d",
-				 "Some content will be lost when saving.  "
-				 "This format only supports %u rows, "
-				 "and this workbook has %d",
+			ngettext ("Some content will be lost when saving.  "
+				  "This format only supports %u row, and "
+				  "this workbook has %d",
+				  "Some content will be lost when saving.  "
+				  "This format only supports %u rows, "
+				  "and this workbook has %d",
 				 maxrows),
 			maxrows, extent->end.row);
 		extent->end.row = maxrows - 1;
@@ -574,7 +574,7 @@ excel_write_SETUP (BiffPut *bp, ExcelWriteSheet *esheet)
 		}
 
 		switch (pi->error_display) {
-		default :
+		default:
 		case GNM_PRINT_ERRORS_AS_DISPLAYED: break;
 		case GNM_PRINT_ERRORS_AS_BLANK:	 flags |= 0x400; break;
 		case GNM_PRINT_ERRORS_AS_DASHES: flags |= 0x800; break;
@@ -612,8 +612,8 @@ static void
 excel_write_externsheets_v7 (ExcelWriteState *ewb)
 {
 	/* 2 byte expression #REF! */
-	static guint8 const expr_ref []   = { 0x02, 0, 0x1c, 0x17 };
-	static guint8 const zeros []	  = { 0, 0, 0, 0, 0 ,0 };
+	static guint8 const expr_ref[]    = { 0x02, 0, 0x1c, 0x17 };
+	static guint8 const zeros[]	  = { 0, 0, 0, 0, 0 ,0 };
 	static guint8 const magic_addin[] = { 0x01, 0x3a };
 	static guint8 const magic_self[]  = { 0x01, 0x04 };
 	unsigned i, num_sheets = ewb->esheets->len;
@@ -676,8 +676,8 @@ cb_write_sheet_pairs (ExcelSheetPair *sp, gconstpointer dummy, ExcelWriteState *
 static void
 excel_write_externsheets_v8 (ExcelWriteState *ewb)
 {
-	static guint8 const expr_ref []   = { 0x02, 0, 0x1c, 0x17 };
-	static guint8 const zeros []	  = { 0, 0, 0, 0, 0 ,0 };
+	static guint8 const expr_ref[]    = { 0x02, 0, 0x1c, 0x17 };
+	static guint8 const zeros[]	  = { 0, 0, 0, 0, 0 ,0 };
 	static guint8 const magic_addin[] = { 0x01, 0x00, 0x01, 0x3a };
 	static guint8 const magic_self[]  = { 0x01, 0x04 };
 	unsigned i;
@@ -943,7 +943,7 @@ write_border (ExcelWriteSheet const *esheet,
 	GnmBorder *b;
 
 	if (!gnm_style_is_element_set (s, elem) ||
-	    NULL == (b = gnm_style_get_border(s, elem)))
+	    NULL == (b = gnm_style_get_border (s, elem)))
 		return TRUE;
 
 	d[pat_offset / 32] |=
@@ -961,12 +961,12 @@ static int
 map_underline_to_xl (GnmUnderline const ul)
 {
 	switch (ul) {
-	default :
-	case UNDERLINE_NONE :   return 0;
-	case UNDERLINE_SINGLE : return 1;
-	case UNDERLINE_DOUBLE : return 2;
-	case UNDERLINE_SINGLE_LOW : return 0x21;
-	case UNDERLINE_DOUBLE_LOW : return 0x22;
+	default:
+	case UNDERLINE_NONE:   return 0;
+	case UNDERLINE_SINGLE: return 1;
+	case UNDERLINE_DOUBLE: return 2;
+	case UNDERLINE_SINGLE_LOW: return 0x21;
+	case UNDERLINE_DOUBLE_LOW: return 0x22;
 	}
 }
 
@@ -982,10 +982,10 @@ static int
 map_script_to_xl (GnmStyle const *style)
 {
 	switch (gnm_style_get_font_script (style)) {
-	case GO_FONT_SCRIPT_SUB :	return 2;
-	default :
-	case GO_FONT_SCRIPT_STANDARD :	return 0;
-	case GO_FONT_SCRIPT_SUPER :	return 1;
+	case GO_FONT_SCRIPT_SUB:	return 2;
+	default:
+	case GO_FONT_SCRIPT_STANDARD:	return 0;
+	case GO_FONT_SCRIPT_SUPER:	return 1;
 	}
 }
 
@@ -1408,10 +1408,11 @@ cb_write_condition (GnmStyleConditions const *sc, CondDetails *cd,
 		case GNM_STYLE_COND_LTE:	op = 0x08; break;
 
 		default:
-			if (alt_texpr)
-				gnm_expr_top_unref (alt_texpr);
-			else
+			if (!alt_texpr)
 				g_warning ("unknown condition %d", cond->op);
+			gnm_expr_top_unref (alt_texpr);
+			alt_texpr = NULL;
+			// Fall through
 		case GNM_STYLE_COND_CUSTOM:
 			op = 0; type = 2; break;
 		}
@@ -1490,7 +1491,7 @@ excel_write_DV (XLValInputPair const *vip, gpointer dummy, ExcelWriteSheet *eshe
 		case GNM_VALIDATION_TYPE_AS_TIME:		options = 5; break;
 		case GNM_VALIDATION_TYPE_TEXT_LENGTH:	options = 6; break;
 		case GNM_VALIDATION_TYPE_CUSTOM:		options = 7; break;
-		default : g_warning ("EXCEL : Unknown constraint type %d",
+		default: g_warning ("EXCEL : Unknown constraint type %d",
 				     vip->v->type);
 		}
 
@@ -1499,7 +1500,7 @@ excel_write_DV (XLValInputPair const *vip, gpointer dummy, ExcelWriteSheet *eshe
 		case GNM_VALIDATION_STYLE_STOP:	options |= (0 << 4); break;
 		case GNM_VALIDATION_STYLE_WARNING:	options |= (1 << 4); break;
 		case GNM_VALIDATION_STYLE_INFO:	options |= (2 << 4); break;
-		default : g_warning ("EXCEL : Unknown validation style %d",
+		default: g_warning ("EXCEL : Unknown validation style %d",
 				     vip->v->style);
 		}
 
@@ -1513,7 +1514,7 @@ excel_write_DV (XLValInputPair const *vip, gpointer dummy, ExcelWriteSheet *eshe
 		case GNM_VALIDATION_OP_LT:		options |= (5 << 20); break;
 		case GNM_VALIDATION_OP_GTE:		options |= (6 << 20); break;
 		case GNM_VALIDATION_OP_LTE:		options |= (7 << 20); break;
-		default : g_warning ("EXCEL : Unknown constraint operator %d",
+		default: g_warning ("EXCEL : Unknown constraint operator %d",
 				     vip->v->op);
 		}
 		if (vip->v->allow_blank)
@@ -1602,7 +1603,7 @@ excel_write_HLINKs (BiffPut *bp, ExcelWriteSheet *esheet)
 	GnmHLink		*hlink = NULL;
 	char const		*target;
 	char const		*tip;
-	guint8			 data [16];
+	guint8			 data[16];
 	GType			 t;
 
 	for (ptr = esheet->hlinks ; ptr != NULL ; ptr = ptr->next) {
@@ -1645,8 +1646,7 @@ excel_write_HLINKs (BiffPut *bp, ExcelWriteSheet *esheet)
 				STR_FOUR_BYTE_LENGTH | STR_SUPPRESS_HEADER | STR_TRAILING_NULL | STR_LEN_IN_BYTES,
 				target);
 		} else if (t == gnm_hlink_external_get_type ()) {
-			if (NULL != target &&
-			    0 == strncmp (target, "\\\\", 2)) {
+			if (NULL != target && g_str_has_prefix (target, "\\\\")) {
 				GSF_LE_SET_GUINT32 (data,  0x117);
 				ms_biff_put_var_write (bp, data, 4);
 				excel_write_string (bp,
@@ -1849,7 +1849,7 @@ excel_write_prep_validations (ExcelWriteSheet *esheet)
 static int
 excel_write_builtin_name (char const *ptr, MsBiffVersion version)
 {
-	static char const *builtins [] = {
+	static char const * const builtins[] = {
 		"Consolidate_Area",	"Auto_Open",
 		"Auto_Close",		"Extract",
 		"Database",		"Criteria",
@@ -1873,7 +1873,7 @@ static void
 excel_write_NAME (G_GNUC_UNUSED gpointer key,
 		  GnmNamedExpr *nexpr, ExcelWriteState *ewb)
 {
-	guint8 data [16];
+	guint8 data[16];
 	guint16 expr_len, flags = 0;
 	size_t name_len;
 	char const *name;
@@ -1961,10 +1961,10 @@ excel_write_BOUNDSHEET (BiffPut *bp, Sheet *sheet)
 	default:
 		g_warning ("unknown sheet type %d (assuming WorkSheet)", sheet->sheet_type);
 		break;
-	case GNM_SHEET_DATA :	GSF_LE_SET_GUINT8 (data+5, 0); break;
-	case GNM_SHEET_OBJECT : GSF_LE_SET_GUINT8 (data+5, 2); break;
-	case GNM_SHEET_XLM :	GSF_LE_SET_GUINT8 (data+5, 1); break;
-	/* case MS_BIFF_TYPE_VBModule :	GSF_LE_SET_GUINT8 (data+5, 6); break; */
+	case GNM_SHEET_DATA:	GSF_LE_SET_GUINT8 (data+5, 0); break;
+	case GNM_SHEET_OBJECT: GSF_LE_SET_GUINT8 (data+5, 2); break;
+	case GNM_SHEET_XLM:	GSF_LE_SET_GUINT8 (data+5, 1); break;
+	/* case MS_BIFF_TYPE_VBModule:	GSF_LE_SET_GUINT8 (data+5, 6); break; */
 	}
 	ms_biff_put_var_write (bp, data, 6);
 	excel_write_string (bp, STR_ONE_BYTE_LENGTH, sheet->name_unquoted);
@@ -2315,26 +2315,26 @@ excel_font_overlay_pango (ExcelWriteFont *efont, GSList *pango)
 		PangoColor const *c;
 
 		switch (attr->klass->type) {
-		case PANGO_ATTR_FAMILY :
+		case PANGO_ATTR_FAMILY:
 			g_free (efont->font_name_copy);
 			efont->font_name = efont->font_name_copy =
 				g_strdup (((PangoAttrString *)attr)->value);
 			break;
-		case PANGO_ATTR_SIZE : efont->size_pts	=
+		case PANGO_ATTR_SIZE: efont->size_pts	=
 			(double )(((PangoAttrInt *)attr)->value) / PANGO_SCALE;
 			break;
-		case PANGO_ATTR_STYLE : efont->is_italic =
+		case PANGO_ATTR_STYLE: efont->is_italic =
 			((PangoAttrInt *)attr)->value == PANGO_STYLE_ITALIC;
 			break;
-		case PANGO_ATTR_WEIGHT : efont->is_bold	=
+		case PANGO_ATTR_WEIGHT: efont->is_bold	=
 			((PangoAttrInt *)attr)->value >= PANGO_WEIGHT_BOLD;
 			break;
-		case PANGO_ATTR_STRIKETHROUGH : efont->strikethrough =
+		case PANGO_ATTR_STRIKETHROUGH: efont->strikethrough =
 			((PangoAttrInt *)attr)->value != 0;
 			break;
-		case PANGO_ATTR_SCALE :
+		case PANGO_ATTR_SCALE:
 			break; /* ignored */
-		case PANGO_ATTR_RISE :
+		case PANGO_ATTR_RISE:
 			if (((PangoAttrInt *)attr)->value < 0)
 				efont->script = 2;
 			else if (((PangoAttrInt *)attr)->value > 0)
@@ -2343,17 +2343,17 @@ excel_font_overlay_pango (ExcelWriteFont *efont, GSList *pango)
 				efont->script = 0;
 			break;
 
-		case PANGO_ATTR_UNDERLINE :
+		case PANGO_ATTR_UNDERLINE:
 			efont->underline = gnm_translate_underline_from_pango
 				(((PangoAttrInt *)attr)->value);
 			break;
 
-		case PANGO_ATTR_FOREGROUND :
+		case PANGO_ATTR_FOREGROUND:
 			c = &((PangoAttrColor *)attr)->color;
 			efont->is_auto = FALSE;
 			efont->color = ((c->blue & 0xff00) << 8) + (c->green & 0xff00) + (c->red >> 8);
 			break;
-		default :
+		default:
 			if (attr->klass->type ==
 			    go_pango_attr_subscript_get_attr_type ())
 				efont->script = ((GOPangoAttrSubscript *)attr)->val
@@ -2430,10 +2430,8 @@ after_put_font (ExcelWriteFont *f, gboolean was_added, gint index, gconstpointer
 
 /**
  * put_efont :
- * @efont: #ExcelWriteFont
+ * @efont: (transfer full): #ExcelWriteFont
  * @xle: #XLExportBase
- *
- * Absorbs ownership of @efont potentially freeing it.
  *
  * Returns the index of the font
  **/
@@ -2602,7 +2600,7 @@ formats_init (XLExportBase *ewb)
 	/* Add built-in formats to format table */
 	for (i = 0; i < EXCEL_BUILTIN_FORMAT_LEN; i++) {
 		fmt = excel_builtin_formats[i];
-		if (!fmt || strlen (fmt) == 0)
+		if (!fmt || *fmt == 0)
 			fmt = "General";
 		two_way_table_put (ewb->formats.two_way_table,
 				   go_format_new_from_XL (fmt),
@@ -2652,10 +2650,10 @@ set_ifmt (G_GNUC_UNUSED GOFormat *format, G_GNUC_UNUSED gboolean was_added,
 int
 excel_write_add_object_format (ExcelWriteState *ewb, GOFormat *format)
 {
-	int ifmt;
+	int ifmt = 0;
 	two_way_table_put (ewb->base.formats.two_way_table,
 	                   /* cast the int* to char* until the API accepts void* there */
-	                   format, TRUE, (AfterPutFunc) set_ifmt, (char*) &ifmt);
+	                   format, TRUE, (AfterPutFunc) set_ifmt, &ifmt);
 	return ifmt;
 }
 
@@ -2694,7 +2692,7 @@ excel_write_FORMATs (ExcelWriteState *ewb)
 {
 	TwoWayTable *twt = ewb->base.formats.two_way_table;
 	guint nformats = twt->idx_to_key->len;
-	int magic_num [] = { 5, 6, 7, 8, 0x2a, 0x29, 0x2c, 0x2b };
+	int const magic_num[] = { 5, 6, 7, 8, 0x2a, 0x29, 0x2c, 0x2b };
 	guint i;
 
 	/* The built-in formats which get localized */
@@ -2936,7 +2934,7 @@ gather_styles (ExcelWriteState *ewb)
 	for (i = 0; i < ewb->esheets->len; i++) {
 		ExcelWriteSheet *esheet = g_ptr_array_index (ewb->esheets, i);
 		Sheet *sheet = esheet->gnum_sheet;
-		int col, cols = MIN (XLS_MaxCol, gnm_sheet_get_max_cols(sheet));
+		int col, cols = MIN (XLS_MaxCol, gnm_sheet_get_max_cols (sheet));
 		GPtrArray *cells = sheet_cells (sheet, NULL);
 		g_ptr_array_foreach (cells,
 				     (GFunc)cb_cell_pre_pass,
@@ -2945,7 +2943,7 @@ gather_styles (ExcelWriteState *ewb)
 		sheet_style_foreach (sheet, (GFunc)cb_accum_styles, &ewb->base);
 		for (col = 0; col < cols; col++) {
 			ExcelStyleVariant esv;
-			esv.style = esheet->col_style[col];
+			esv.style = g_ptr_array_index (esheet->col_style, col);
 			esv.variant = 0;
 			esheet->col_xf[col] = two_way_table_key_to_idx
 				(ewb->base.xf.two_way_table, &esv);
@@ -3137,7 +3135,7 @@ excel_write_XF (BiffPut *bp, ExcelWriteState *ewb, BiffXFData *xfd)
 			tmp16 |= (1 << 4);
 		/* tmp16 |= (0 << 5);	flag merges in MERGECELL */
 		switch (xfd->text_dir) {
-		default :
+		default:
 		case GNM_TEXT_DIR_CONTEXT:	tmp16 |= (0 << 6); break;
 		case GNM_TEXT_DIR_LTR:		tmp16 |= (1 << 6); break;
 		case GNM_TEXT_DIR_RTL:		tmp16 |= (2 << 6); break;
@@ -3425,8 +3423,8 @@ excel_write_value (ExcelWriteState *ewb, GnmValue *v, guint32 col, guint32 row, 
 
 		d (3, g_printerr ("Writing %g is (%g %g) is int ? %d\n",
 				  (double)val,
-				  (double)(1.0 * gnm_floor (val)),
-				  (double)(1.0 * (val - gnm_floor (val))),
+				  (double)(gnm_floor (val)),
+				  (double)(val - gnm_floor (val)),
 			      is_int););
 
 		/* FIXME : Add test for double of form i/100.0
@@ -3685,7 +3683,7 @@ excel_write_RSTRING (ExcelWriteState *ewb, GnmCell const *cell, unsigned xf)
 	GArray *txo = g_hash_table_lookup (ewb->cell_markup, cell);
 	const char *txt = value_peek_string (cell->value);
 	size_t txtlen = strlen (txt);
-	guint8 buf [6];
+	guint8 buf[6];
 	unsigned i, n;
 
 	g_return_if_fail (txo != NULL);
@@ -3779,7 +3777,7 @@ write_mulblank (BiffPut *bp, ExcelWriteSheet *esheet, guint32 end_col, guint32 r
 	if (run == 1) {
 		guint8 *data;
 
-		xf = xf_list [0];
+		xf = xf_list[0];
 		d (2, g_printerr ("Writing blank at %s, xf = 0x%x\n",
 			      cell_coord_name (end_col, row), xf););
 
@@ -3979,7 +3977,7 @@ excel_write_colinfos (BiffPut *bp, ExcelWriteSheet *esheet)
 	int cols = MIN (XLS_MaxCol, gnm_sheet_get_max_cols (esheet->gnum_sheet));
 
 	info = sheet_col_get (esheet->gnum_sheet, 0);
-	xf   = esheet->col_xf [0];
+	xf   = esheet->col_xf[0];
 	for (i = 1; i < cols; i++) {
 		ci = sheet_col_get (esheet->gnum_sheet, i);
 		new_xf = esheet->col_xf [i];
@@ -4035,7 +4033,7 @@ excel_write_DOPER (GnmFilterCondition const *cond, int i, guint8 *buf)
 		str = value_peek_string (v);
 		buf[6] = excel_strlen (str, NULL);
 		break;
-	default :
+	default:
 		/* ignore arrays, ranges, empties */
 		break;
 	}
@@ -4047,7 +4045,7 @@ excel_write_DOPER (GnmFilterCondition const *cond, int i, guint8 *buf)
 	case GNM_FILTER_OP_GTE:		buf[1] = 6; break;
 	case GNM_FILTER_OP_LTE:		buf[1] = 3; break;
 	case GNM_FILTER_OP_NOT_EQUAL:	buf[1] = 5; break;
-	default :
+	default:
 		g_warning ("how did this happen");
 	}
 
@@ -4114,7 +4112,7 @@ excel_write_AUTOFILTERINFO (BiffPut *bp, ExcelWriteSheet *esheet)
 			break;
 		}
 
-		default :
+		default:
 			str0 = excel_write_DOPER (cond, 0, buf + 4);
 			str1 = excel_write_DOPER (cond, 1, buf + 14);
 			GSF_LE_SET_GUINT16 (buf+2, cond->is_and ? 0 : 1);
@@ -4156,8 +4154,7 @@ excel_write_autofilter_names (ExcelWriteState *ewb)
 				nexpr = expr_name_new (name);
 
 			nexpr->is_hidden = TRUE;
-			expr_name_set_is_placeholder (nexpr, FALSE);
-			expr_name_set_pos (nexpr, &pp);
+			expr_name_set_pos (nexpr, &pp, NULL);
 			expr_name_set_expr (nexpr,
 					    gnm_expr_top_new_constant
 					    (value_new_cellrange_r (sheet, &filter->r)));
@@ -4823,7 +4820,7 @@ excel_write_other_v8 (ExcelWriteSheet *esheet,
 					 esheet,
 					 link,
 					 macro_nexpr);
-		if (link) gnm_expr_top_unref (link);
+		gnm_expr_top_unref (link);
 		break;
 	}
 	case MSOT_OPTION: {
@@ -4833,7 +4830,7 @@ excel_write_other_v8 (ExcelWriteSheet *esheet,
 					    esheet,
 					    link,
 					    macro_nexpr);
-		if (link) gnm_expr_top_unref (link);
+		gnm_expr_top_unref (link);
 		break;
 	}
 	case MSOT_SPINNER: {
@@ -4846,7 +4843,7 @@ excel_write_other_v8 (ExcelWriteSheet *esheet,
 					   adj, horiz,
 					   link,
 					   macro_nexpr);
-		if (link) gnm_expr_top_unref (link);
+		gnm_expr_top_unref (link);
 		break;
 	}
 	case MSOT_SCROLLBAR: {
@@ -4859,7 +4856,7 @@ excel_write_other_v8 (ExcelWriteSheet *esheet,
 					  adj, horiz,
 					  link,
 					  macro_nexpr);
-		if (link) gnm_expr_top_unref (link);
+		gnm_expr_top_unref (link);
 		break;
 	}
 	case MSOT_LIST:
@@ -4874,8 +4871,8 @@ excel_write_other_v8 (ExcelWriteSheet *esheet,
 				     esheet,
 				     adj, res_link, data_link,
 				     macro_nexpr);
-		if (res_link) gnm_expr_top_unref (res_link);
-		if (data_link) gnm_expr_top_unref (data_link);
+		gnm_expr_top_unref (res_link);
+		gnm_expr_top_unref (data_link);
 		g_object_unref (adj);
 		terminate_obj = FALSE;  /* GR_LISTBOX_DATA is strange */
 		break;
@@ -5405,10 +5402,10 @@ excel_sheet_write_DBCELL (ExcelWriteSheet *esheet,
 	guint8 *data = ms_biff_put_len_next (bp, BIFF_DBCELL, 4 + nrows * 2);
 	pos = bp->streamPos;
 
-	GSF_LE_SET_GUINT32 (data, pos - ri_start [0]);
+	GSF_LE_SET_GUINT32 (data, pos - ri_start[0]);
 	for (i = 0 ; i < nrows; i++) {
-		offset = rc_start [0]
-			- (i > 0 ? rc_start [i - 1] : ri_start [1]);
+		offset = rc_start[0]
+			- (i > 0 ? rc_start [i - 1] : ri_start[1]);
 		GSF_LE_SET_GUINT16 (data + 4 + i * 2, offset);
 	}
 
@@ -5436,7 +5433,7 @@ excel_sheet_write_block (ExcelWriteSheet *esheet, guint32 begin, int nrows,
 {
 	ExcelWriteState *ewb = esheet->ewb;
 	int col, row, max_row, max_col = esheet->max_col;
-	unsigned  ri_start [2]; /* Row info start */
+	unsigned  ri_start[2]; /* Row info start */
 	unsigned *rc_start;	/* Row cells start */
 	guint16   *xf_list;
 	GnmRange  r;
@@ -5451,8 +5448,8 @@ excel_sheet_write_block (ExcelWriteSheet *esheet, guint32 begin, int nrows,
 		nrows = esheet->max_row - (int) begin;
 	max_row = begin + nrows - 1;
 
-	ri_start [0] = excel_write_ROWINFO (ewb->bp, esheet, begin, max_col);
-	ri_start [1] = ewb->bp->streamPos;
+	ri_start[0] = excel_write_ROWINFO (ewb->bp, esheet, begin, max_col);
+	ri_start[1] = ewb->bp->streamPos;
 	for (row = begin + 1; row <= max_row; row++)
 		(void) excel_write_ROWINFO (ewb->bp, esheet, row, max_col);
 
@@ -5464,7 +5461,7 @@ excel_sheet_write_block (ExcelWriteSheet *esheet, guint32 begin, int nrows,
 	r.start.col = 0;
 	r.end.col = max_col-1;
 
-	rc_start = g_alloca (sizeof (unsigned) * nrows);
+	rc_start = g_new (unsigned, nrows);
 	for (row = begin; row <= max_row; row++) {
 		guint32 run_size = 0;
 
@@ -5531,6 +5528,7 @@ excel_sheet_write_block (ExcelWriteSheet *esheet, guint32 begin, int nrows,
 	excel_sheet_write_DBCELL (esheet, ri_start, rc_start,
 				  has_content ? nrows : 0, dbcells);
 
+	g_free (rc_start);
 	g_free (xf_list);
 
 	return row - 1;
@@ -5657,12 +5655,12 @@ excel_write_sheet (ExcelWriteState *ewb, ExcelWriteSheet *esheet)
 	guint32 nblocks = (esheet->max_row - 1) / rows_in_block + 1;
 
 	switch (esheet->gnum_sheet->sheet_type) {
-	default :
+	default:
 		g_warning ("unknown sheet type %d (assuming WorkSheet)",
 			   esheet->gnum_sheet->sheet_type);
-	case GNM_SHEET_DATA :	type = MS_BIFF_TYPE_Worksheet; break;
-	case GNM_SHEET_OBJECT : type = MS_BIFF_TYPE_Chart; break;
-	case GNM_SHEET_XLM :	type = MS_BIFF_TYPE_Macrosheet; break;
+	case GNM_SHEET_DATA:	type = MS_BIFF_TYPE_Worksheet; break;
+	case GNM_SHEET_OBJECT: type = MS_BIFF_TYPE_Chart; break;
+	case GNM_SHEET_XLM:	type = MS_BIFF_TYPE_Macrosheet; break;
 	}
 	esheet->streamPos = excel_write_BOF (ewb->bp, type);
 	if (esheet->gnum_sheet->sheet_type == GNM_SHEET_OBJECT) {
@@ -5773,7 +5771,7 @@ create_macroname (SheetObject *so)
 
 	pp.sheet = NULL;
 
-	nexpr = expr_name_add (&pp, name, NULL, NULL, TRUE, NULL);
+	nexpr = expr_name_add (&pp, name, NULL, NULL, NULL);
 	expr_name_set_expr (nexpr, NULL);
 
 	g_free (name);
@@ -5928,10 +5926,10 @@ excel_sheet_free (ExcelWriteSheet *esheet)
 	g_hash_table_destroy (esheet->commentshash);
 	g_hash_table_destroy (esheet->widget_macroname);
 	g_slist_free_full (esheet->blips, (GDestroyNotify)blipinf_free);
-	style_list_free (esheet->conditions);
-	style_list_free (esheet->hlinks);
-	style_list_free (esheet->validations);
-	g_free (esheet->col_style);
+	sheet_style_list_free (esheet->conditions);
+	sheet_style_list_free (esheet->hlinks);
+	sheet_style_list_free (esheet->validations);
+	g_ptr_array_free (esheet->col_style, TRUE);
 	g_free (esheet->col_xf);
 	g_free (esheet);
 }
@@ -5967,7 +5965,7 @@ excel_write_SST (ExcelWriteState *ewb)
 	GPtrArray const *strings = ewb->sst.indicies;
 	BiffPut		*bp = ewb->bp;
 	SSTInf		*extsst = NULL;
-	char *ptr, data [8224];
+	char *ptr, data[8224];
 	char const * const last = data + sizeof (data);
 	size_t out_bytes, char_len, byte_len;
 	unsigned i, tmp, blocks, scale;
@@ -5976,7 +5974,7 @@ excel_write_SST (ExcelWriteState *ewb)
 
 	if (strings->len > 0) {
 		blocks = 1 + ((strings->len - 1) / 8);
-		extsst = g_alloca (sizeof (SSTInf) * blocks);
+		extsst = g_new (SSTInf, blocks);
 	} else
 		blocks = 0;
 
@@ -6057,12 +6055,12 @@ unicode_loop :
 						*ptr++ = 0;
 						count++;
 					} else {
-						g_warning ("We exported a string containg unicode characters > 0xffff (%s).\n"
+						g_warning ("We exported a string containing unicode characters > 0xffff (%s).\n"
 							   "Expect some funky characters to show up.", str);
 					}
 					GSF_LE_SET_GUINT16 (len, (count/2));
 				} else {
-					g_warning ("We're toast a string containg unicode characters > 0xffff crossed a record boundary.");
+					g_warning ("We're toast a string containing unicode characters > 0xffff crossed a record boundary.");
 				}
 			}
 		}
@@ -6086,12 +6084,13 @@ unicode_loop :
 		ms_biff_put_var_write (bp, data, 8);
 	}
 	ms_biff_put_commit (bp);
+	g_free (extsst);
 }
 
 static void
 excel_write_WRITEACCESS (BiffPut *bp)
 {
-	guint8   pad [112];
+	guint8   pad[112];
 	unsigned len;
 	char const *utf8_name = go_get_real_name ();
 
@@ -6192,7 +6191,7 @@ excel_write_vector_blip (ExcelWriteState *ewb, BlipInf *blip, const BlipType *bt
 
 	if (bp->version >= MS_BIFF_V8) {
 		guint8 buf [VECTOR_BLIP_HDR_LEN];
-		double coords [4];
+		double coords[4];
 		double width, height;
 
 		sheet_object_position_pts_get (blip->so, coords);
@@ -6219,7 +6218,7 @@ excel_write_vector_blip (ExcelWriteState *ewb, BlipInf *blip, const BlipType *bt
 		GSF_LE_SET_GUINT16 (buf + 2, 0xf018 + bt->type);
 		GSF_LE_SET_GUINT32 (buf + 4,
 				    blip->bytes.len + VECTOR_BLIP_HDR_LEN - 8);
-		memcpy(buf + 8, blip->id, sizeof blip->id);
+		memcpy (buf + 8, blip->id, sizeof blip->id);
 		/* buf + 24: uncompressed length */
 		GSF_LE_SET_GUINT32 (buf +  24, blip->uncomp_len);
 		/* buf + 28: metafile bounds (rectangle) */
@@ -6260,7 +6259,7 @@ excel_write_raster_blip (ExcelWriteState *ewb, BlipInf *blip, const BlipType *bt
 		GSF_LE_SET_GUINT16 (buf + 2, 0xf018 + bt->type);
 		GSF_LE_SET_GUINT32 (buf + 4,
 				    blip->bytes.len + BLIP_ID_LEN + 1);
-		memcpy(buf + 8, blip->id, sizeof blip->id);
+		memcpy (buf + 8, blip->id, sizeof blip->id);
 		GSF_LE_SET_GUINT8 (buf + 24, 0xff);
 		ms_biff_put_var_write (bp, buf, sizeof buf);
 
@@ -6300,7 +6299,7 @@ excel_write_blip (ExcelWriteState *ewb, BlipInf *blip)
 		static guint8 const header_obj_v8[] = {
 /* BSE header  */ 0x2, 0, 7, 0xf0, 0, 0, 0, 0  /* fill in bliptype, length */
 		};
-		guint8 buf [44];
+		guint8 buf[44];
 		guint8 win_type, mac_type;
 
 		memset (buf, 0, sizeof buf);
@@ -6321,8 +6320,8 @@ excel_write_blip (ExcelWriteState *ewb, BlipInf *blip)
 		GSF_LE_SET_GUINT8  (buf +  9, mac_type);
 
 		/* id (checksum) */
-		mdfour(blip->id, blip->bytes.data, blip->bytes.len);
-		memcpy(buf + 10, blip->id, sizeof blip->id);
+		mdfour (blip->id, blip->bytes.data, blip->bytes.len);
+		memcpy (buf + 10, blip->id, sizeof blip->id);
 		/* size */
 		GSF_LE_SET_GUINT32  (buf +  28,
 				     blip->bytes.len + blip->header_len - 44);
@@ -6632,15 +6631,15 @@ extract_gog_object_style (XLExportBase *ewb, GogObject *obj)
 			put_color_go_color (ewb, style->line.color);
 		if (style->interesting_fields & GO_STYLE_FILL)
 			switch (style->fill.type) {
-			default :
-			case GO_STYLE_FILL_NONE :
-			case GO_STYLE_FILL_IMAGE :
+			default:
+			case GO_STYLE_FILL_NONE:
+			case GO_STYLE_FILL_IMAGE:
 				break;
-			case GO_STYLE_FILL_PATTERN :
+			case GO_STYLE_FILL_PATTERN:
 				put_color_go_color (ewb, style->fill.pattern.fore);
 				put_color_go_color (ewb, style->fill.pattern.back);
 				break;
-			case GO_STYLE_FILL_GRADIENT :
+			case GO_STYLE_FILL_GRADIENT:
 				put_color_go_color (ewb, style->fill.pattern.fore);
 			}
 		if (style->interesting_fields & GO_STYLE_MARKER) {

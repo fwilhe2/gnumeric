@@ -120,35 +120,32 @@ advanced_filter_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
 	criteria = gnm_expr_entry_parse_as_value
 		(state->input_entry_2, state->sheet);
 
-        dao  = parse_output ((GnmGenericToolState *) state, NULL);
+        dao  = dao_parse_output ((GnmGenericToolState *) state);
 
 	w = go_gtk_builder_get_widget (state->gui, "unique-button");
 	unique = (1 == gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (w)));
 
-	if (dao->type == InPlaceOutput)
+	if (dao->type == GNM_DAO_OUTPUT_INPLACE)
 		err = advanced_filter (GNM_WBC (state->wbcg),
 				       dao, input, criteria, unique);
 	else {
-		analysis_tools_data_advanced_filter_t  *
-			data = g_new0 (analysis_tools_data_advanced_filter_t, 1);
-		data->base.wbc = GNM_WBC (state->wbcg);
-		data->base.range_1 = input;
-		data->base.range_2 = criteria;
-		data->unique_only_flag = unique;
+		GnmAnalysisTool *atool = gnm_advanced_filter_tool_new ();
+		GnmAdvancedFilterTool *ftool = GNM_ADVANCED_FILTER_TOOL (atool);
+		ftool->parent.base.range_1 = input;
+		ftool->parent.base.range_2 = criteria;
+		ftool->unique_only_flag = unique;
 
-		if (cmd_analysis_tool (GNM_WBC (state->wbcg), state->sheet,
-				       dao, data, analysis_tool_advanced_filter_engine, FALSE)) {
-			err = data->base.err;
-			g_free (data);
+		if (cmd_analysis_tool (GNM_WBC (state->wbcg), state->sheet, dao, atool)) {
+			err = ftool->parent.base.err;
 		} else
 			err = analysis_tools_noerr;
-
+		g_object_unref (atool);
 	}
 
-	if (dao->type == InPlaceOutput || err != analysis_tools_noerr) {
+	if (dao->type == GNM_DAO_OUTPUT_INPLACE || err != analysis_tools_noerr) {
 		value_release (input);
 		value_release (criteria);
-		g_free (dao);
+		dao_free (dao);
 	}
 
 	switch (err) {

@@ -61,10 +61,10 @@ complete_sheet_finalize (GObject *object)
 }
 
 static gboolean
-text_matches (GnmCompleteSheet const *cs)
+text_matches (GnmCompleteSheet *cs)
 {
 	char const *text;
-	GnmComplete const *complete = &cs->parent;
+	GnmComplete *complete = &cs->parent;
 
 	if (cs->cell->value == NULL ||
 	    !VALUE_IS_STRING (cs->cell->value) ||
@@ -72,10 +72,10 @@ text_matches (GnmCompleteSheet const *cs)
 		return FALSE;
 
 	text = value_peek_string (cs->cell->value);
-	if (strncmp (text, complete->text, strlen (complete->text)) != 0)
+	if (!g_str_has_prefix (text, complete->text))
 		return FALSE;
 
-	(*complete->notify)(text, complete->notify_closure);
+	g_signal_emit_by_name (complete, "notify-match", text);
 	return TRUE;
 }
 
@@ -89,7 +89,7 @@ complete_sheet_search_iteration (GnmComplete *complete)
 	    gnm_conf_get_core_gui_editing_autocomplete_min_chars ())
 		return FALSE;
 
-	if (strncmp (cs->current_text, complete->text, strlen (cs->current_text)) != 0)
+	if (!g_str_has_prefix (cs->current_text, complete->text))
 		search_strategy_reset_search (cs);
 
 	for (i = 0; i < SEARCH_STEPS; i++) {
@@ -118,13 +118,11 @@ complete_sheet_class_init (GObjectClass *object_class)
  * @sheet: #Sheet
  * @col: column
  * @row: row
- * @notify: (scope async): #GnmCompleteMatchNotifyFn
- * @notify_closure: user data
  *
  * Returns: (transfer full): the new #GnmComplete.
  **/
 GnmComplete *
-gnm_complete_sheet_new (Sheet *sheet, int col, int row, GnmCompleteMatchNotifyFn notify, void *notify_closure)
+gnm_complete_sheet_new (Sheet *sheet, int col, int row)
 {
 	/*
 	 * Somehow every time I pronounce this, I feel like something is not quite right.
@@ -132,7 +130,6 @@ gnm_complete_sheet_new (Sheet *sheet, int col, int row, GnmCompleteMatchNotifyFn
 	GnmCompleteSheet *cs;
 
 	cs = g_object_new (GNM_COMPLETE_SHEET_TYPE, NULL);
-	gnm_complete_construct (GNM_COMPLETE (cs), notify, notify_closure);
 
 	cs->sheet = sheet;
 	cs->entry.col = col;

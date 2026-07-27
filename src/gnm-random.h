@@ -1,11 +1,15 @@
-#ifndef _GNM_RANDOM_H_
-#define _GNM_RANDOM_H_
+#ifndef GNM_RANDOM_H_
+#define GNM_RANDOM_H_
 
 #include <numbers.h>
 
 G_BEGIN_DECLS
 
 gnm_float random_01             (void);
+
+guint32   gnm_random_uniform_int (guint32 n);
+gnm_float gnm_random_uniform_integer (gnm_float l, gnm_float h);
+
 gnm_float random_poisson        (gnm_float lambda);
 gnm_float random_binomial       (gnm_float p, gnm_float trials);
 gnm_float random_negbinom       (gnm_float p, gnm_float f);

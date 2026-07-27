@@ -44,10 +44,17 @@
 #include <math.h>
 #include <string.h>
 
-#define UNICODE_PI "\360\235\234\213"
+#define UNICODE_PI "\317\200"
 #define UNICODE_MINUS "\xe2\x88\x92"
 
 GNM_PLUGIN_MODULE_HEADER;
+
+
+// binary64 (double): 17
+// binary80 (long double): 20
+// decimal64 (_Decimal64): 16
+static int dmax = -1;
+
 
 #define FUNCTION_A_DESC   GNM_FUNC_HELP_DESCRIPTION, F_("Numbers, text and logical values are "	\
 							"included in the calculation too. If the cell contains text or " \
@@ -70,7 +77,7 @@ oldstyle_if_func (GnmFuncEvalInfo *ei, GnmValue const * const *argv,
 	GnmValue const *vals;
 
 	g_ptr_array_add (data, (gpointer)(argv[0]));
-	g_ptr_array_add (crits, parse_criteria (argv[1], date_conv, TRUE));
+	g_ptr_array_add (crits, gnm_criteria_parse (argv[1], date_conv, TRUE));
 
 	if (argv[2]) {
 		vals = argv[2];
@@ -92,7 +99,7 @@ oldstyle_if_func (GnmFuncEvalInfo *ei, GnmValue const * const *argv,
 		insanity = FALSE;
 	}
 
-	res = gnm_ifs_func (data, crits, vals,
+	res = gnm_criteria_ifs_func (data, crits, vals,
 			    fun, err, ei->pos,
 			    flags);
 
@@ -157,7 +164,7 @@ newstyle_if_func (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv,
 			goto out;
 		}
 
-		g_ptr_array_add (crits, parse_criteria (crit, date_conv, TRUE));
+		g_ptr_array_add (crits, gnm_criteria_parse (crit, date_conv, TRUE));
 		value_release (crit);
 	}
 
@@ -167,7 +174,7 @@ newstyle_if_func (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv,
 		goto out;
 	}
 
-	res = gnm_ifs_func (data, crits, vals,
+	res = gnm_criteria_ifs_func (data, crits, vals,
 			    fun, err, ei->pos,
 			    (no_data
 			     ? 0
@@ -198,12 +205,12 @@ static GnmFuncHelp const help_gcd[] = {
 	{ GNM_FUNC_HELP_END}
 };
 
-static const gnm_float gnm_gcd_max = 1 / GNM_EPSILON;
+static const gnm_float gnm_gcd_max = GNM_RADIX / GNM_EPSILON;
 
 static gnm_float
 gnm_gcd (gnm_float a, gnm_float b)
 {
-	while (b > 0.5) {
+	while (b > GNM_const(0.5)) {
 		gnm_float r = gnm_fmod (a, b);
 		a = b;
 		b = r;
@@ -240,9 +247,9 @@ gnumeric_gcd (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	return float_range_function (argc, argv, ei,
 				     range_gcd,
-				     COLLECT_IGNORE_STRINGS |
-				     COLLECT_IGNORE_BOOLS |
-				     COLLECT_IGNORE_BLANKS,
+				     COLLECT_COERCE_STRINGS |
+				     COLLECT_IGNORE_BLANKS |
+				     COLLECT_ORDER_IRRELEVANT,
 				     GNM_ERROR_NUM);
 }
 
@@ -272,6 +279,7 @@ range_lcm (gnm_float const *xs, int n, gnm_float *res)
 {
 	int i;
 	gnm_float lcm;
+	gboolean has_zero = FALSE;
 
 	if (n <= 0)
 		return 1;
@@ -279,14 +287,18 @@ range_lcm (gnm_float const *xs, int n, gnm_float *res)
 	lcm = 1;
 	for (i = 0; i < n; i++) {
 		gnm_float thisx = gnm_fake_floor (xs[i]);
-		if (thisx == 1)
-			continue;
-		if (thisx < 1 || thisx > gnm_gcd_max || lcm > gnm_gcd_max)
+		if (thisx < 0 || thisx > gnm_gcd_max)
 			return 1;
-		lcm = gnm_lcm (lcm, thisx);
+		if (thisx == 0)
+			has_zero = TRUE;
+		else if (!has_zero && thisx != 1) {
+			lcm = gnm_lcm (lcm, thisx);
+			if (lcm > gnm_gcd_max)
+				return 1;
+		}
 	}
 
-	*res = lcm;
+	*res = has_zero ? 0 : lcm;
 	return 0;
 }
 
@@ -295,9 +307,9 @@ gnumeric_lcm (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 {
 	return float_range_function (argc, argv, ei,
 				     range_lcm,
-				     COLLECT_IGNORE_STRINGS |
-				     COLLECT_IGNORE_BOOLS |
-				     COLLECT_IGNORE_BLANKS,
+				     COLLECT_COERCE_STRINGS |
+				     COLLECT_IGNORE_BLANKS |
+				     COLLECT_ORDER_IRRELEVANT,
 				     GNM_ERROR_NUM);
 
 }
@@ -385,7 +397,7 @@ gnumeric_acos (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t < -1.0 || t > 1.0)
+	if (t < -1 || t > 1)
 		return value_new_error_NUM (ei->pos);
 	return value_new_float (gnm_acos (t));
 }
@@ -407,7 +419,7 @@ gnumeric_acosh (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t < 1.0)
+	if (t < 1)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_acosh (t));
@@ -455,7 +467,7 @@ static GnmFuncHelp const help_asin[] = {
 	{ GNM_FUNC_HELP_NAME, F_("ASIN:the arc sine of @{x}")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ASIN calculates the arc sine of @{x}; that is the value whose sine is @{x}.")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} falls outside the range -1 to 1, "
 				 "ASIN returns #NUM!") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ASIN(0.5)" },
@@ -469,7 +481,7 @@ gnumeric_asin (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t < -1.0 || t > 1.0)
+	if (t < -1 || t > 1)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_asin (t));
@@ -481,7 +493,7 @@ static GnmFuncHelp const help_asinh[] = {
 	{ GNM_FUNC_HELP_NAME, F_("ASINH:the inverse hyperbolic sine of @{x}")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ASINH calculates the inverse hyperbolic sine of @{x}; that is the value whose hyperbolic sine is @{x}.")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ASINH(0.5)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ASINH(1)" },
 	{ GNM_FUNC_HELP_SEEALSO, "ASIN,ACOSH,SIN,COS"},
@@ -505,7 +517,7 @@ static GnmFuncHelp const help_atan[] = {
 	{ GNM_FUNC_HELP_NOTE, F_("The result will be between "
 				 "\xe2\x88\x92" "\xcf\x80" "/2 and "
 				 "+" "\xcf\x80" "/2.")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ATAN(0.5)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ATAN(1)" },
 	{ GNM_FUNC_HELP_SEEALSO, "TAN,COS,SIN,DEGREES,RADIANS"},
@@ -524,7 +536,7 @@ static GnmFuncHelp const help_atanh[] = {
 	{ GNM_FUNC_HELP_NAME, F_("ATANH:the inverse hyperbolic tangent of @{x}")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ATANH calculates the inverse hyperbolic tangent of @{x}; that is the value whose hyperbolic tangent is @{x}.")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If the absolute value of @{x} is greater than 1.0, ATANH returns #NUM!") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ATANH(0.5)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ATANH(0.9)" },
@@ -537,10 +549,10 @@ gnumeric_atanh (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t <= -1.0 || t >= 1.0)
+	if (t <= -1 || t >= 1)
 		return value_new_error_NUM (ei->pos);
 
-	return value_new_float (gnm_atanh (value_get_as_float (argv[0])));
+	return value_new_float (gnm_atanh (t));
 }
 
 /***************************************************************************/
@@ -713,7 +725,7 @@ gnumeric_sumifs (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 /***************************************************************************/
 
 static GnmFuncHelp const help_averageif[] = {
-	{ GNM_FUNC_HELP_NAME, F_("AVERAGEIF:average of the cells in @{actual range} for which the corresponding cells in the range meet the given @{criteria}")},
+	{ GNM_FUNC_HELP_NAME, F_("AVERAGEIF:average of the cells in @{actual_range} for which the corresponding cells in the range meet the given @{criteria}")},
 	{ GNM_FUNC_HELP_ARG, F_("range:cell area")},
 	{ GNM_FUNC_HELP_ARG, F_("criteria:condition for a cell to be included")},
 	{ GNM_FUNC_HELP_ARG, F_("actual_range:cell area, defaults to @{range}")},
@@ -799,7 +811,7 @@ static GnmFuncHelp const help_ceiling[] = {
 	{ GNM_FUNC_HELP_ARG, F_("significance:base multiple (defaults to 1 for @{x} > 0 and -1 for @{x} < 0)")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("CEILING(@{x},@{significance}) is the nearest multiple of @{significance} whose absolute value is at least ABS(@{x}).")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} or @{significance} is non-numeric, CEILING returns a #VALUE! error.")},
-	{ GNM_FUNC_HELP_NOTE, F_("If @{x} and @{significance} have different signs, CEILING returns a #NUM! error.")},
+	{ GNM_FUNC_HELP_NOTE, F_("If @{x} is positive and @{significance} is negative, CEILING returns a #NUM! error.")},
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.")},
 	{ GNM_FUNC_HELP_ODF, F_("CEILING(@{x}) is exported to ODF as CEILING(@{x},SIGN(@{x}),1). CEILING(@{x},@{significance}) is the OpenFormula function CEILING(@{x},@{significance},1).")},
 	{ GNM_FUNC_HELP_EXAMPLES, "=CEILING(2.43,1)" },
@@ -818,7 +830,7 @@ gnumeric_ceiling (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (x == 0 || s == 0)
 		return value_new_int (0);
 
-	if (x / s < 0)
+	if (x > 0 && s < 0)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_fake_ceil (x / s) * s);
@@ -946,7 +958,7 @@ static GnmFuncHelp const help_degrees[] = {
 static GnmValue *
 gnumeric_degrees (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	return value_new_float ((value_get_as_float (argv[0]) * 180.0) /
+	return value_new_float ((value_get_as_float (argv[0]) * 180) /
 				M_PIgnum);
 }
 
@@ -997,7 +1009,7 @@ gnumeric_expm1 (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_fact[] = {
 	{ GNM_FUNC_HELP_NAME, F_("FACT:the factorial of @{x}, i.e. @{x}!")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_NOTE, F_("The domain of this function has been extended using the GAMMA function.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=FACT(3)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=FACT(9)" },
@@ -1021,6 +1033,7 @@ gnumeric_fact (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_gamma[] = {
 	{ GNM_FUNC_HELP_NAME, F_("GAMMA:the Gamma function")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=GAMMA(-1.8)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=GAMMA(2.4)" },
 	{ GNM_FUNC_HELP_SEEALSO, "GAMMALN"},
@@ -1051,7 +1064,7 @@ gnumeric_gammaln (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gboolean x_is_integer = (x == gnm_floor (x));
 
 	if (x < 0 && (x_is_integer ||
-		      gnm_fmod (gnm_floor (-x), 2.0) == 0.0))
+		      gnm_fmod (gnm_floor (-x), 2.0) == 0))
 		return value_new_error_NUM (ei->pos);
 	else
 		return value_new_float (gnm_lgamma (x));
@@ -1164,7 +1177,7 @@ static GnmFuncHelp const help_combin[] = {
 					" the number of @{k}-combinations of an @{n}-element set "
 					"without repetition.")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{n} is less than @{k} COMBIN returns #NUM!") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=COMBIN(8,6)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=COMBIN(6,2)" },
@@ -1221,6 +1234,7 @@ static GnmFuncHelp const help_floor[] = {
 	{ GNM_FUNC_HELP_ARG, F_("significance:base multiple (defaults to 1 for @{x} > 0 and -1 for @{x} < 0)") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_(
 			"FLOOR(@{x},@{significance}) is the nearest multiple of @{significance} whose absolute value is at most ABS(@{x})") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{x} is positive and @{significance} is negative, FLOOR returns a #NUM! error.")},
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.")},
 	{ GNM_FUNC_HELP_ODF, F_("FLOOR(@{x}) is exported to ODF as FLOOR(@{x},SIGN(@{x}),1). FLOOR(@{x},@{significance}) is the OpenFormula function FLOOR(@{x},@{significance},1).")},
 	{ GNM_FUNC_HELP_EXAMPLES, "=FLOOR(0.5)" },
@@ -1243,7 +1257,7 @@ gnumeric_floor (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (s == 0)
 		return value_new_error_DIV0 (ei->pos);
 
-	if (x / s < 0)
+	if (x > 0 && s < 0)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_fake_floor (x / s) * s);
@@ -1254,7 +1268,7 @@ gnumeric_floor (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_int[] = {
 	{ GNM_FUNC_HELP_NAME, F_("INT:largest integer not larger than @{x}")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=INT(7.2)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=INT(-5.5)" },
 	{ GNM_FUNC_HELP_SEEALSO, "CEIL,CEILING,FLOOR,ABS,MOD"},
@@ -1315,24 +1329,12 @@ gnumeric_log (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 	gnm_float base = argv[1] ? value_get_as_float (argv[1]) : 10;
-	gnm_float res;
+	gnm_float res = gnm_logbase (t, base);
 
-	if (base == 1. || base <= 0.)
-		return value_new_error_NUM (ei->pos);
-
-	if (t <= 0.0)
-		return value_new_error_NUM (ei->pos);
-
-	if (base == 2)
-		res = gnm_log2 (t);
-	else if (base == 0.5)
-		res = -gnm_log2 (t);
-	else if (base == 10)
-		res = gnm_log10 (t);
+	if (gnm_finite (res))
+		return value_new_float (res);
 	else
-		res = gnm_log (t) / gnm_log (base);
-
-	return value_new_float (res);
+		return value_new_error_NUM (ei->pos);
 }
 
 /***************************************************************************/
@@ -1357,10 +1359,10 @@ gnumeric_ilog (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float x = value_get_as_float (argv[0]);
 	gnm_float base = argv[1] ? value_get_as_float (argv[1]) : 10;
 
-	if (base == 1. || base <= 0.)
+	if (base == 1 || base <= 0)
 		return value_new_error_NUM (ei->pos);
 
-	if (x <= 0.0)
+	if (x <= 0)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_ilog (x, base));
@@ -1383,7 +1385,7 @@ gnumeric_ln (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t <= 0.0)
+	if (t <= 0)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_log (t));
@@ -1407,8 +1409,7 @@ static GnmFuncHelp const help_ln1p[] = {
 	{ GNM_FUNC_HELP_NAME, F_("LN1P:LN(1+@{x})")},
 	{ GNM_FUNC_HELP_ARG, F_("x:positive number")},
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("LN1P calculates LN(1+@{x}) but yielding a higher precision than evaluating LN(1+@{x}).")},
-	{ GNM_FUNC_HELP_NOTE, F_("If @{x} \xe2\x89\xa4 -1, LN returns #NUM! error.") },
-	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{x} \xe2\x89\xa4 -1, LN1P returns #NUM! error.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=LN1P(0.01)" },
 	{ GNM_FUNC_HELP_SEEALSO, "EXP,LN,EXPM1"},
 	{ GNM_FUNC_HELP_END}
@@ -1456,7 +1457,9 @@ gnumeric_power (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		gboolean z_even = gnm_fmod (z, 2.0) == 0;
 		if (z <= 0 || z != gnm_floor (z) || (r < 0 && z_even))
 			return value_new_error_NUM (ei->pos);
-		if (z != 1)
+		if (z == 3)
+			r = gnm_cbrt (r);
+		else if (z != 1)
 			r = (r < 0 ? -1 : +1) * gnm_pow (gnm_abs (r), 1 / z);
 		return value_new_float (r);
 	}
@@ -1504,7 +1507,7 @@ gnumeric_log2 (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t <= 0.0)
+	if (t <= 0)
 		return value_new_error_NUM (ei->pos);
 
 	return value_new_float (gnm_log2 (t));
@@ -1526,10 +1529,10 @@ gnumeric_log10 (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float t = value_get_as_float (argv[0]);
 
-	if (t <= 0.0)
+	if (t <= 0)
 		return value_new_error_NUM (ei->pos);
 
-	return value_new_float (gnm_log10 (t));
+	return value_new_float (gnm_logbase (t, 10));
 }
 
 /***************************************************************************/
@@ -1549,11 +1552,11 @@ static GnmFuncHelp const help_mod[] = {
 
 /*
  * MOD(-1,-3) = -1
- * MOD(2,-3) = -2
+ * MOD(2,-3) = -1
  * MOD(10.6,2) = 0.6
  * MOD(-10.6,2) = 1.4
- * MOD(10.6,-2) = -0.6
- * MOD(-10.6,-2) = -1.4
+ * MOD(10.6,-2) = -1.4
+ * MOD(-10.6,-2) = -0.6
  */
 
 static GnmValue *
@@ -1679,7 +1682,7 @@ static GnmFuncHelp const help_csc[] = {
 static GnmValue *
 gnumeric_csc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	return value_new_float (1./gnm_sin (value_get_as_float (argv[0])));
+	return value_new_float (1 / gnm_sin (value_get_as_float (argv[0])));
 }
 
 /***************************************************************************/
@@ -1699,7 +1702,7 @@ static GnmFuncHelp const help_csch[] = {
 static GnmValue *
 gnumeric_csch (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	return value_new_float (1./gnm_sinh (value_get_as_float (argv[0])));
+	return value_new_float (1 / gnm_sinh (value_get_as_float (argv[0])));
 }
 
 /***************************************************************************/
@@ -1719,7 +1722,7 @@ static GnmFuncHelp const help_sec[] = {
 static GnmValue *
 gnumeric_sec (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	return value_new_float (1./gnm_cos (value_get_as_float (argv[0])));
+	return value_new_float (1 / gnm_cos (value_get_as_float (argv[0])));
 }
 
 /***************************************************************************/
@@ -1739,7 +1742,7 @@ static GnmFuncHelp const help_sech[] = {
 static GnmValue *
 gnumeric_sech (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	return value_new_float (1./gnm_cosh (value_get_as_float (argv[0])));
+	return value_new_float (1 / gnm_cosh (value_get_as_float (argv[0])));
 }
 /***************************************************************************/
 static GnmFuncHelp const help_sinh[] = {
@@ -1822,7 +1825,9 @@ gnumeric_sumsq (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_sumsq,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
 }
@@ -1883,9 +1888,9 @@ gnumeric_multinomial (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv
 {
 	return float_range_function (argc, argv, ei,
 				     gnm_range_multinomial,
-				     COLLECT_IGNORE_STRINGS |
-				     COLLECT_IGNORE_BOOLS |
-				     COLLECT_IGNORE_BLANKS,
+				     COLLECT_COERCE_STRINGS |
+				     COLLECT_IGNORE_BLANKS |
+				     COLLECT_ORDER_IRRELEVANT,
 				     GNM_ERROR_NUM);
 }
 
@@ -1907,6 +1912,7 @@ gnumeric_g_product (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     gnm_range_product,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_VALUE);
@@ -1965,9 +1971,9 @@ gnumeric_tanh (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /***************************************************************************/
 
 static GnmFuncHelp const help_pi[] = {
-	{ GNM_FUNC_HELP_NAME, F_("PI:the constant " "\360\235\234\213")},
+	{ GNM_FUNC_HELP_NAME, F_("PI:the constant " "\317\200")},
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible, but it "
-				  "returns " "\360\235\234\213" " with a better "
+				  "returns " "\317\200" " with a better "
 				  "precision.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=PI()" },
 	{ GNM_FUNC_HELP_SEEALSO, "SQRTPI"},
@@ -1982,6 +1988,51 @@ gnumeric_pi (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 /***************************************************************************/
 
+static GnmFuncHelp const help_percentof[] = {
+	{ GNM_FUNC_HELP_NAME, F_("PERCENTOF:percentage of a subset relative to total")},
+	{ GNM_FUNC_HELP_ARG, F_("subset:subset of data")},
+	{ GNM_FUNC_HELP_ARG, F_("data_all:the complete dataset")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("PERCENTOF returns the sum of @{subset} divided by the sum of @{data_all}.")},
+	{ GNM_FUNC_HELP_NOTE, F_("If the sum of @{data_all} is zero, PERCENTOF returns #DIV/0!")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXAMPLES, "=PERCENTOF(B2:B3, B2:B10)" },
+	{ GNM_FUNC_HELP_SEEALSO, "SUM"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_percentof (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	gnm_float sum_subset = 0, sum_all = 0;
+	int n;
+	GnmValue *error = NULL;
+	gnm_float *vals;
+	CollectFlags flags = COLLECT_IGNORE_STRINGS | COLLECT_IGNORE_BOOLS | COLLECT_IGNORE_BLANKS;
+
+	/* Sum the subset */
+	vals = collect_floats_value (argv[0], ei->pos, flags, &n, &error);
+	if (error) return error;
+	if (vals) {
+		gnm_range_sum (vals, n, &sum_subset);
+		g_free (vals);
+	}
+
+	/* Sum the total dataset */
+	vals = collect_floats_value (argv[1], ei->pos, flags, &n, &error);
+	if (error) return error;
+	if (vals) {
+		gnm_range_sum (vals, n, &sum_all);
+		g_free (vals);
+	}
+
+	if (sum_all == 0)
+		return value_new_error_DIV0 (ei->pos);
+
+	return value_new_float (sum_subset / sum_all);
+}
+
+/***************************************************************************/
+
 static GnmFuncHelp const help_trunc[] = {
 	{ GNM_FUNC_HELP_NAME, F_("TRUNC:@{x} truncated to @{d} digits")},
 	{ GNM_FUNC_HELP_ARG, F_("x:number")},
@@ -1992,31 +2043,184 @@ static GnmFuncHelp const help_trunc[] = {
 	{ GNM_FUNC_HELP_EXAMPLES, "=TRUNC(35.12)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=TRUNC(43.15,1)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=TRUNC(43.15,-1)"},
-	{ GNM_FUNC_HELP_SEEALSO, "INT"},
+	{ GNM_FUNC_HELP_SEEALSO, "INT,CEIL,ROUNDDOWN,ROUNDUP,ROUND,FLOOR,CEILING"},
 	{ GNM_FUNC_HELP_END}
 };
+
+static void
+digit_counts (gnm_float x, int *pa, int *pb, int *pc)
+{
+	// Case 1: |x| >= 1:
+	//    ddddddddd.ddddddddddd
+	//    <---a---> <----c---->    b=0
+	// Case 2: |x| < 1:
+	//    0.000000000ddddddddddd
+	//      <---b---><----c---->   a=0
+
+	int e;
+
+	*pa = *pb = *pc = 0;
+	g_return_if_fail (gnm_finite (x) && x != 0);
+
+	x = gnm_abs (x);
+	(void)gnm_unscalbn (x, &e);
+	if (x >= 1) {
+		// Case 1
+		*pa = e;  // Not actually right unless base==10
+#if GNM_RADIX == 2 && GNM_MANT_DIG <= 64
+		guint64 ml = (guint64)(gnm_scalbn (x - gnm_floor (x), 64));
+		*pc = ml ? 64 - __builtin_ctzl (ml) : 0;
+#elif GNM_RADIX == 10 && GNM_MANT_DIG <= 19
+		// Untested
+		guint64 ml = (guint64)(gnm_scalbn (x - gnm_floor (x), 19));
+		if (ml) {
+			*pc = 19;
+			while (ml % 10u == 0)
+				ml /= 10u, (*pc)--;
+		}
+#else
+#error "New code needed"
+#endif
+	} else {
+		// Case 2
+		*pb = -(int)gnm_ilog (x, 10) - 1;
+#if GNM_RADIX == 2 && GNM_MANT_DIG <= 64
+		guint64 ml = (guint64)(gnm_scalbn (x, 64 - e - 1));
+		g_return_if_fail (ml != 0);
+		*pc = -e - 1 + (64 - __builtin_ctzl (ml)) - *pb;
+#elif GNM_RADIX == 10 && GNM_MANT_DIG <= 19
+		// Untested
+		guint64 ml = (guint64)(gnm_scalbn (x, 19 - e - 1));
+		g_return_if_fail (ml != 0);
+		if (ml) {
+			*pc = -e - 1 + 19 - *pb;
+			while (ml % 10u == 0)
+				ml /= 10u, (*pc)--;
+		}
+#else
+#error "New code needed"
+#endif
+	}
+}
+
+#if GNM_RADIX == 2
+// Calculate 10^d as f1*f2 where the latter is most often just 1.
+// This avoids overflow within the range we care about and when f2 is 1
+// it will not affect accuracy.
+static void
+gnm_pow10_dual (int d, gnm_float *f1, gnm_float *f2)
+{
+	g_return_if_fail (d >= 0);
+
+	if (d <= GNM_MAX_10_EXP) {
+		*f1 = gnm_pow10 (d);
+		*f2 = 1;
+	} else {
+#if GNM_MANT_DIG == 53
+		// "double" case with d large enough that 10^d would overflow.
+		//
+		// By a stroke of luck, 10^303 is much more accurately
+		// representable as a double than other useful powers
+		// of 10.  Except the range 0..22, of course.  Anyway,
+		// spitting at 303 nearly eliminates the representation
+		// error for the powers of 10.
+		//
+		// 10^303's bit pattern is
+		//    1.01110...011001|111111111100 * 2^1006
+		// where "|" indicates where a double cuts off
+		*f1 = gnm_pow10 (d - 303);
+		*f2 = GNM_const(1e303);
+#elif GNM_MANT_DIG == 64
+		// "long double" case with d large enough that 10^d would
+		// overflow.  As above, but less lucky.
+		*f1 = gnm_pow10 (d - 4926);
+		*f2 = GNM_const(1e4926);
+#else
+		*f1 = gnm_pow10 (MIN (d, GNM_MAX_10_EXP));
+		*f2 = gnm_pow10 (MAX (0, d - GNM_MAX_10_EXP));
+#endif
+	}
+}
+#endif
+
+static gnm_float
+gnm_digit_rounder (gnm_float x, int digits, gnm_float (*func) (gnm_float),
+		   int typ)
+{
+	if (x == 0 || !gnm_finite (x))
+		return x;
+
+	if (digits >= 0) {
+		// Round to <digits> decimals according to func
+
+		int a, b, c;
+		digit_counts (x, &a, &b, &c);
+		// g_printerr ("%.20g  %d %d %d\n", x, a, b, c);
+		// In the following cases we avoid producing a power of 10
+		// that may not be accurate.
+		if (digits >= b + c)
+			return x; // Every rounded digit is 0
+		if (digits >= b + dmax)
+			return x; // Rounding too small to matter
+
+#if GNM_RADIX == 10
+		// Untested
+		gnm_float xp10 = gnm_scalbn (x, digits);
+		return gnm_finite (xp10)
+			? gnm_scalbn (func (xp10), -digits)
+			: x;
+#else
+		gnm_float p10a, p10b;
+		gnm_pow10_dual (digits, &p10a, &p10b);
+		gnm_float xp10 = (x * p10b) * p10a;
+		return gnm_finite (xp10)
+			? (func (xp10) / p10b) / p10a
+			: x;
+#endif
+	} else {
+		// Round to -<digits> before decimal point according to func
+
+		if (digits >= -GNM_MAX_10_EXP) {
+			/* Keep p10 integer.  */
+			gnm_float p10n = gnm_pow10 (-digits);
+			return func (x / p10n) * p10n;
+		} else {
+			gboolean up;
+			switch (typ) {
+			case 0: // truncate
+				up = FALSE;
+				break;
+			case 1: // round to nearest
+				up = (digits == -(GNM_MAX_10_EXP + 1) &&
+				      gnm_abs (x) >= 5 * gnm_pow10 (-digits - 1));
+				break;
+			case 2: // round up
+				up = TRUE;
+				break;
+			default:
+				g_assert_not_reached ();
+			}
+
+			if (up)
+				return x >= 0 ? gnm_pinf : gnm_ninf;
+			else
+				return 0;
+		}
+	}
+}
+
 
 static GnmValue *
 gnumeric_trunc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number = value_get_as_float (argv[0]);
+	gnm_float x = value_get_as_float (argv[0]);
 	gnm_float digits = argv[1] ? value_get_as_float (argv[1]) : 0;
+	gnm_float y;
+	int idigits;
 
-	if (digits >= 0) {
-		if (digits <= GNM_MAX_EXP) {
-			gnm_float p10 = gnm_pow10 ((int)digits);
-			number = gnm_fake_trunc (number * p10) / p10;
-		}
-	} else {
-		if (digits >= GNM_MIN_EXP) {
-			/* Keep p10 integer.  */
-			gnm_float p10 = gnm_pow10 ((int)-digits);
-			number = gnm_fake_trunc (number / p10) * p10;
-		} else
-			number = 0;
-	}
-
-	return value_new_float (number);
+	idigits = (int)CLAMP(digits, -G_MAXINT, G_MAXINT);
+	y = gnm_digit_rounder (x, idigits, gnm_fake_trunc, 0);
+	return value_new_float (y);
 }
 
 /***************************************************************************/
@@ -2034,24 +2238,19 @@ static GnmFuncHelp const help_even[] = {
 static GnmValue *
 gnumeric_even (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number, ceiled;
-	int     sign = 1;
+	gnm_float x = value_get_as_float (argv[0]);
 
-	number = value_get_as_float (argv[0]);
-	if (number < 0) {
-	        sign = -1;
-		number = -number;
+	if (x >= 0) {
+		x = gnm_ceil (x);
+		if (gnm_fmod (x, 2) != 0)
+			x += 1;
+	} else {
+		x = gnm_floor (x);
+		if (gnm_fmod (x, 2) != 0)
+			x -= 1;
 	}
-	ceiled = gnm_ceil (number);
-	if (gnm_fmod (ceiled, 2) == 0)
-	        if (number > ceiled)
-		        number = sign * (ceiled + 2);
-		else
-		        number = sign * ceiled;
-	else
-	        number = sign * (ceiled + 1);
 
-	return value_new_float (number);
+	return value_new_float (x);
 }
 
 /***************************************************************************/
@@ -2062,6 +2261,7 @@ static GnmFuncHelp const help_odd[] = {
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=ODD(5.4)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ODD(-5.4)"},
+	{ GNM_FUNC_HELP_EXAMPLES, "=ODD(0)"},
 	{ GNM_FUNC_HELP_SEEALSO, "EVEN"},
 	{ GNM_FUNC_HELP_END}
 };
@@ -2069,24 +2269,19 @@ static GnmFuncHelp const help_odd[] = {
 static GnmValue *
 gnumeric_odd (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number, ceiled;
-	int     sign = 1;
+	gnm_float x = value_get_as_float (argv[0]);
 
-	number = value_get_as_float (argv[0]);
-	if (number < 0) {
-	        sign = -1;
-		number = -number;
+	if (x >= 0) {
+		x = gnm_ceil (x);
+		if (gnm_fmod (x, 2) == 0)
+			x += 1;
+	} else {
+		x = gnm_floor (x);
+		if (gnm_fmod (x, 2) == 0)
+			x -= 1;
 	}
-	ceiled = gnm_ceil (number);
-	if (gnm_fmod (ceiled, 2) == 1)
-	        if (number > ceiled)
-		        number = sign * (ceiled + 2);
-		else
-		        number = sign * ceiled;
-	else
-		number = sign * (ceiled + 1);
 
-	return value_new_float (number);
+	return value_new_float (x);
 }
 
 /***************************************************************************/
@@ -2106,24 +2301,12 @@ static GnmValue *
 gnumeric_factdouble (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 {
-	gnm_float number = value_get_as_float (argv[0]);
-	int inumber, n;
-	gnm_float res;
+	gnm_float x = value_get_as_float (argv[0]);
 
-	if (number < 0)
+	if (x < 0)
 		return value_new_error_NUM (ei->pos);
-
-	inumber = (int)MIN (number, (gnm_float)INT_MAX);
-	n = (inumber + 1) / 2;
-
-	if (inumber & 1) {
-		gnm_float lres = gnm_lgamma (n + 0.5) + n * M_LN2gnum;
-		/* Round as the result ought to be integer.  */
-		res = gnm_floor (0.5 + gnm_exp (lres) / gnm_sqrt (M_PIgnum));
-	} else
-		res = gnm_fact (n) * gnm_pow2 (n);
-
-	return value_new_float (res);
+	else
+		return value_new_float (gnm_fact2 ((int)MIN(x, INT_MAX)));
 }
 
 /***************************************************************************/
@@ -2225,7 +2408,7 @@ gnumeric_sign (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 static GnmFuncHelp const help_sqrtpi[] = {
 	{ GNM_FUNC_HELP_NAME, F_("SQRTPI:the square root of @{x} times "
-				 "\360\235\234\213")},
+				 "\317\200")},
 	{ GNM_FUNC_HELP_ARG, F_("x:non-negative number")},
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=SQRTPI(2)"},
@@ -2282,36 +2465,21 @@ static GnmFuncHelp const help_round[] = {
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUND(-3.3)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUND(1501.15,1)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUND(1501.15,-2)"},
-	{ GNM_FUNC_HELP_SEEALSO, "ROUNDDOWN,ROUNDUP"},
+	{ GNM_FUNC_HELP_SEEALSO, "INT,CEIL,TRUNC,ROUNDDOWN,ROUNDUP,FLOOR,CEILING"},
 	{ GNM_FUNC_HELP_END}
 };
 
 static GnmValue *
 gnumeric_round (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number = value_get_as_float (argv[0]);
+	gnm_float x = value_get_as_float (argv[0]);
 	gnm_float digits = argv[1] ? value_get_as_float (argv[1]) : 0;
+	gnm_float y;
+	int idigits;
 
-	if (digits >= 0) {
-		gnm_float p10 = (digits <= INT_MAX
-				 ? gnm_pow10 ((int)digits)
-				 : gnm_pinf);
-		gnm_float y = number * p10;
-		if (gnm_finite (y))
-			number = gnm_fake_round (y) / p10;
-		else
-			; // nothing -- keep number
-	} else {
-		gnm_float p10 = (-digits <= INT_MAX
-				 ? gnm_pow10 ((int)-digits)
-				 : gnm_pinf);
-		if (gnm_finite (p10)) {
-			number = gnm_fake_round (number / p10) * p10;
-		} else
-			number = 0;
-	}
-
-	return value_new_float (number);
+	idigits = (int)CLAMP(digits, -G_MAXINT, G_MAXINT);
+	y = gnm_digit_rounder (x, idigits, gnm_fake_round, 1);
+	return value_new_float (y);
 }
 
 /***************************************************************************/
@@ -2328,7 +2496,7 @@ static GnmFuncHelp const help_roundup[] = {
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUNDUP(-3.3)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUNDUP(1501.15,1)"},
 	{ GNM_FUNC_HELP_EXAMPLES, "=ROUNDUP(1501.15,-2)"},
-	{ GNM_FUNC_HELP_SEEALSO, "ROUND,ROUNDDOWN,INT"},
+	{ GNM_FUNC_HELP_SEEALSO, "INT,CEIL,TRUNC,ROUNDDOWN,ROUND,FLOOR,CEILING"},
 	{ GNM_FUNC_HELP_END}
 };
 
@@ -2341,24 +2509,14 @@ gnm_fake_roundup (gnm_float x)
 static GnmValue *
 gnumeric_roundup (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number = value_get_as_float (argv[0]);
+	gnm_float x = value_get_as_float (argv[0]);
 	gnm_float digits = argv[1] ? value_get_as_float (argv[1]) : 0;
+	gnm_float y;
+	int idigits;
 
-	if (digits >= 0) {
-		if (digits <= GNM_MAX_EXP) {
-			gnm_float p10 = gnm_pow10 ((int)digits);
-			number = gnm_fake_roundup (number * p10) / p10;
-		}
-	} else {
-		if (digits >= GNM_MIN_EXP) {
-			/* Keep p10 integer.  */
-			gnm_float p10 = gnm_pow10 ((int)-digits);
-			number = gnm_fake_roundup (number / p10) * p10;
-		} else
-			number = 0;
-	}
-
-	return value_new_float (number);
+	idigits = (int)CLAMP(digits, -G_MAXINT, G_MAXINT);
+	y = gnm_digit_rounder (x, idigits, gnm_fake_roundup, 2);
+	return value_new_float (y);
 }
 
 /***************************************************************************/
@@ -2378,12 +2536,10 @@ static GnmFuncHelp const help_mround[] = {
 static GnmValue *
 gnumeric_mround (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float number, multiple;
+	gnm_float number = value_get_as_float (argv[0]);
+	gnm_float multiple = value_get_as_float (argv[1]);
 	gnm_float div, mod;
 	int     sign = 1;
-
-	number = value_get_as_float (argv[0]);
-	multiple = value_get_as_float (argv[1]);
 
 	/* Weird, but XL compatible.  */
 	if (multiple == 0)
@@ -2954,7 +3110,7 @@ gnumeric_minverse (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		res = value_new_error_NUM (ei->pos);
 
 out:
-	if (A) gnm_matrix_unref (A);
+	gnm_matrix_unref (A);
 	return res;
 }
 
@@ -2990,8 +3146,8 @@ gnumeric_mpseudoinverse (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	res = gnm_matrix_to_value (B);
 
 out:
-	if (A) gnm_matrix_unref (A);
-	if (B) gnm_matrix_unref (B);
+	gnm_matrix_unref (A);
+	gnm_matrix_unref (B);
 	return res;
 }
 
@@ -3068,8 +3224,8 @@ gnumeric_cholesky (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		res = value_new_error_NUM (ei->pos);
 
 out:
-	if (A) gnm_matrix_unref (A);
-	if (B) gnm_matrix_unref (B);
+	gnm_matrix_unref (A);
+	gnm_matrix_unref (B);
 	return res;
 }
 
@@ -3117,7 +3273,7 @@ static GnmFuncHelp const help_mmult[] = {
 	{ GNM_FUNC_HELP_NAME, F_("MMULT:the matrix product of @{mat1} and @{mat2}")},
 	{ GNM_FUNC_HELP_ARG, F_("mat1:a matrix")},
 	{ GNM_FUNC_HELP_ARG, F_("mat2:a matrix")},
-	{ GNM_FUNC_HELP_NOTE, F_("The number of columns in @{mat1} must equal the number of rows in @{mat2}; otherwise #VALUE! is returned.  The result of MMULT is an array, in which the number of rows is the same as in @{mat1}), and the number of columns is the same as in (@{mat2}).") },
+	{ GNM_FUNC_HELP_NOTE, F_("The number of columns in @{mat1} must equal the number of rows in @{mat2}; otherwise #VALUE! is returned.  The result of MMULT is an array, in which the number of rows is the same as in @{mat1}, and the number of columns is the same as in @{mat2}.") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_SEEALSO, "TRANSPOSE,MINVERSE"},
 	{ GNM_FUNC_HELP_END}
@@ -3148,9 +3304,9 @@ gnumeric_mmult (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	res = gnm_matrix_to_value (C);
 
 out:
-	if (A) gnm_matrix_unref (A);
-	if (B) gnm_matrix_unref (B);
-	if (C) gnm_matrix_unref (C);
+	gnm_matrix_unref (A);
+	gnm_matrix_unref (B);
+	gnm_matrix_unref (C);
 	return res;
 }
 
@@ -3197,7 +3353,6 @@ gnumeric_linsolve (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 		res = value_new_array_non_init (B->cols, B->rows);
 		for (c = 0; c < B->cols; c++) {
-			res->v_array.vals[c] = g_new (GnmValue *, B->rows);
 			for (r = 0; r < B->rows; r++)
 				res->v_array.vals[c][r] =
 					value_new_float (B->data[r][c]);
@@ -3205,8 +3360,8 @@ gnumeric_linsolve (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	}
 
 out:
-	if (A) gnm_matrix_unref (A);
-	if (B) gnm_matrix_unref (B);
+	gnm_matrix_unref (A);
+	gnm_matrix_unref (B);
 	return res;
 }
 
@@ -3238,7 +3393,7 @@ gnumeric_mdeterm (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	res = value_new_float (gnm_matrix_determinant (A->data, A->rows));
 
 out:
-	if (A) gnm_matrix_unref (A);
+	gnm_matrix_unref (A);
 	return res;
 }
 
@@ -3349,10 +3504,10 @@ gnumeric_sumproduct_common (gboolean ignore_bools, GnmFuncEvalInfo *ei,
 				case VALUE_BOOLEAN:
 					data[i][y * thissizex + x] =
 						ignore_bools
-						? 0.0
+						? 0
 						: value_get_as_float (v);
 					break;
-				default :
+				default:
 					/* Ignore strings to be consistent with XL */
 					data[i][y * thissizex + x] = 0.;
 				}
@@ -3486,7 +3641,6 @@ gnumeric_eigen (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	res = value_new_array_non_init (A->cols, A->rows + 1);
 	for (c = 0; c < A->cols; ++c) {
-		res->v_array.vals[c] = g_new (GnmValue *, A->rows + 1);
 		res->v_array.vals[c][0] = value_new_float (eigenvalues[ev_sort[c].index]);
 		for (r = 0; r < A->rows; ++r) {
 			gnm_float tmp = EIG->data[r][ev_sort[c].index];
@@ -3497,8 +3651,8 @@ gnumeric_eigen (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	g_free (ev_sort);
 
 out:
-	if (A) gnm_matrix_unref (A);
-	if (EIG) gnm_matrix_unref (EIG);
+	gnm_matrix_unref (A);
+	gnm_matrix_unref (EIG);
 	g_free (eigenvalues);
 	return res;
 }
@@ -3623,10 +3777,10 @@ GnmFuncDescriptor const math_functions[] = {
 	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "csc",     "f",     help_csc,
 	  gnumeric_csc, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "csch",     "f",     help_csch,
 	  gnumeric_csch, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "floor",   "f|f",   help_floor,
 	  gnumeric_floor, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_FIRST,
@@ -3636,9 +3790,9 @@ GnmFuncDescriptor const math_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "gamma",    "f",     help_gamma,
 	  gnumeric_gamma, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
-	{ "gammaln",      "f",
-	  help_gammaln, gnumeric_gammaln, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "gammaln",     "f",     help_gammaln,
+	  gnumeric_gammaln, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "gcd", NULL,  help_gcd,
 	  NULL, gnumeric_gcd,
@@ -3729,10 +3883,10 @@ GnmFuncDescriptor const math_functions[] = {
 	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "sec",     "f",     help_sec,
 	  gnumeric_sec, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "sech",     "f",     help_sech,
 	  gnumeric_sech, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 	{ "seriessum", "fffA",  help_seriessum,
 	  gnumeric_seriessum, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
@@ -3811,6 +3965,8 @@ GnmFuncDescriptor const math_functions[] = {
 	  gnumeric_trunc, NULL,
 	  GNM_FUNC_SIMPLE + GNM_FUNC_AUTO_FIRST,
 	  GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+	{ "percentof", "AA", help_percentof, gnumeric_percentof, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
 	{ "pi",      "", help_pi,
 	  gnumeric_pi, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_EXHAUSTIVE },
@@ -3852,6 +4008,10 @@ go_plugin_init (GOPlugin *plugin, GOCmdContext *cc)
 			  "derivative", G_CALLBACK (gnumeric_exp_deriv), NULL);
 	g_signal_connect (gnm_func_lookup ("ln", NULL),
 			  "derivative", G_CALLBACK (gnumeric_ln_deriv), NULL);
+
+	gnm_float l10 = gnm_log10 (GNM_RADIX);
+	dmax = (int)gnm_ceil (GNM_MANT_DIG * l10) +
+		(l10 == (int)l10 ? 0 : 1);
 }
 
 G_MODULE_EXPORT void

@@ -41,6 +41,8 @@
 
 /* ------------------------------------------------------------------------- */
 
+static gboolean debug_factory;
+
 gboolean
 gnm_solver_debug (void)
 {
@@ -287,7 +289,7 @@ gnm_solver_constraint_set_lhs (GnmSolverConstraint *c, GnmValue *v)
 {
 	GnmExprTop const *texpr = v ? gnm_expr_top_new_constant (v) : NULL;
 	dependent_managed_set_expr (&c->lhs, texpr);
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 /**
@@ -313,7 +315,7 @@ gnm_solver_constraint_set_rhs (GnmSolverConstraint *c, GnmValue *v)
 {
 	GnmExprTop const *texpr = v ? gnm_expr_top_new_constant (v) : NULL;
 	dependent_managed_set_expr (&c->rhs, texpr);
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 /**
@@ -321,10 +323,10 @@ gnm_solver_constraint_set_rhs (GnmSolverConstraint *c, GnmValue *v)
  * @c: GnmSolverConstraint
  * @sp: GnmSolverParameters
  * @i: part index
- * @lhs: (optional) (out): #GnmCell of left-hand side
+ * @lhs: (optional) (out) (nullable) (transfer none): #GnmCell of left-hand side
  * @cl: (optional) (out): constant value of left-hand side
- * @rhs: (optional) (out): #GnmCell of right-hand side
- * @cr: (optional) (out): constant value of left-hand side
+ * @rhs: (optional) (out) (nullable) (transfer none): #GnmCell of right-hand side
+ * @cr: (optional) (out): constant value of right-hand side
  *
  * This splits @c into parts and returns information about the @i'th part.
  * There will be multiple parts when the left-hand side is a cell range.
@@ -602,7 +604,7 @@ gnm_solver_param_set_input (GnmSolverParameters *sp, GnmValue *v)
 {
 	GnmExprTop const *texpr = v ? gnm_expr_top_new_constant (v) : NULL;
 	dependent_managed_set_expr (&sp->input, texpr);
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 }
 
 static GnmValue *
@@ -1047,13 +1049,13 @@ gnm_solver_set_property (GObject *object, guint property_id,
  * gnm_solver_prepare: (virtual prepare)
  * @sol: solver
  * @wbc: control for user interaction
- * @err: location to store error
+ * @err: (out) (nullable) (optional): location to store error
  *
  * Prepare for solving.  Preparation need not do anything, but may include
  * such tasks as checking that the model is valid for the solver and
  * locating necessary external programs.
  *
- * Returns: %TRUE ok success, %FALSE on error.
+ * Returns: %TRUE on success, %FALSE on error.
  */
 gboolean
 gnm_solver_prepare (GnmSolver *sol, WorkbookControl *wbc, GError **err)
@@ -1062,6 +1064,9 @@ gnm_solver_prepare (GnmSolver *sol, WorkbookControl *wbc, GError **err)
 
 	g_return_val_if_fail (GNM_IS_SOLVER (sol), FALSE);
 	g_return_val_if_fail (sol->status == GNM_SOLVER_STATUS_READY, FALSE);
+
+	if (gnm_solver_debug ())
+		g_printerr ("Prepararing solver\n");
 
 	gnm_solver_update_derived (sol);
 
@@ -1073,11 +1078,11 @@ gnm_solver_prepare (GnmSolver *sol, WorkbookControl *wbc, GError **err)
  * gnm_solver_start: (virtual start)
  * @sol: solver
  * @wbc: control for user interaction
- * @err: location to store error
+ * @err: (out) (nullable) (optional): location to store error
  *
  * Start the solving process.  If needed, the solver will be prepared first.
  *
- * Returns: %TRUE ok success, %FALSE on error.
+ * Returns: %TRUE on success, %FALSE on error.
  */
 gboolean
 gnm_solver_start (GnmSolver *sol, WorkbookControl *wbc, GError **err)
@@ -1096,6 +1101,9 @@ gnm_solver_start (GnmSolver *sol, WorkbookControl *wbc, GError **err)
 
 	g_return_val_if_fail (sol->status == GNM_SOLVER_STATUS_PREPARED, FALSE);
 
+	if (gnm_solver_debug ())
+		g_printerr ("Starting solver\n");
+
 	g_signal_emit (sol, solver_signals[SOL_SIG_START], 0, wbc, err, &res);
 	return res;
 }
@@ -1103,11 +1111,11 @@ gnm_solver_start (GnmSolver *sol, WorkbookControl *wbc, GError **err)
 /**
  * gnm_solver_stop: (virtual stop)
  * @sol: solver
- * @err: location to store error
+ * @err: (out) (nullable) (optional): location to store error
  *
  * Terminate the currently-running solver.
  *
- * Returns: %TRUE ok success, %FALSE on error.
+ * Returns: %TRUE on success, %FALSE on error.
  */
 gboolean
 gnm_solver_stop (GnmSolver *sol, GError **err)
@@ -1115,6 +1123,9 @@ gnm_solver_stop (GnmSolver *sol, GError **err)
 	gboolean res;
 
 	g_return_val_if_fail (GNM_IS_SOLVER (sol), FALSE);
+
+	if (gnm_solver_debug ())
+		g_printerr ("Stopping solver\n");
 
 	g_signal_emit (sol, solver_signals[SOL_SIG_STOP], 0, err, &res);
 	return res;
@@ -1183,7 +1194,7 @@ gnm_solver_store_result (GnmSolver *sol)
 		GnmCell *cell = g_ptr_array_index (sol->input_cells, ui);
 		GnmValue *v = solution ? value_new_float (solution[ui])	: value_new_error_NA (NULL);
 		gnm_cell_set_value (cell, v);
-		cell_queue_recalc (cell);
+		gnm_cell_queue_recalc (cell);
 	}
 }
 
@@ -1245,6 +1256,9 @@ gnm_solver_set_reason (GnmSolver *solver, const char *reason)
 	g_free (solver->reason);
 	solver->reason = g_strdup (reason);
 
+	if (gnm_solver_debug ())
+		g_printerr ("Reason: %s\n", reason ? reason : "-");
+
 	g_object_notify (G_OBJECT (solver), "reason");
 }
 
@@ -1270,9 +1284,7 @@ gnm_solver_has_solution (GnmSolver *solver)
 static gnm_float
 get_cell_value (GnmCell *cell)
 {
-	GnmValue const *v;
-	gnm_cell_eval (cell);
-	v = cell->value;
+	GnmValue const *v = gnm_cell_eval (cell);
 	return VALUE_IS_NUMBER (v) || VALUE_IS_EMPTY (v)
 		? value_get_as_float (v)
 		: gnm_nan;
@@ -1353,8 +1365,7 @@ gnm_solver_check_constraints (GnmSolver *solver)
 	}
 
 	target_cell = gnm_solver_param_get_target_cell (sp);
-	gnm_cell_eval (target_cell);
-	if (!target_cell || !VALUE_IS_NUMBER (target_cell->value))
+	if (!target_cell || !VALUE_IS_NUMBER (gnm_cell_eval (target_cell)))
 		return FALSE;
 
 	return TRUE;
@@ -1471,14 +1482,14 @@ cell_is_constant (GnmCell *cell, gnm_float *pc)
 	return gnm_finite (*pc);
 }
 
-#define SET_LOWER(l_)						\
-	do {							\
-		sol->min[idx] = MAX (sol->min[idx], (l_));	\
+#define SET_LOWER(l_)							\
+	do {								\
+		sol->min[idx] = MAX (sol->min[idx], (gnm_float)(l_));	\
 	} while (0)
 
-#define SET_UPPER(l_)						\
-	do {							\
-		sol->max[idx] = MIN (sol->max[idx], (l_));	\
+#define SET_UPPER(l_)							\
+	do {								\
+		sol->max[idx] = MIN (sol->max[idx], (gnm_float)(l_));	\
 	} while (0)
 
 
@@ -1601,7 +1612,7 @@ gnm_solver_update_derived (GnmSolver *sol)
 } while (0)
 
 #define AT_LIMIT(s_,l_) \
-  (gnm_finite (l_) ? gnm_abs ((s_) - (l_)) <= (gnm_abs ((s_)) + gnm_abs ((l_))) / 1e10 : (s_) == (l_))
+	(gnm_finite (l_) ? gnm_abs ((s_) - (l_)) <= (gnm_abs ((s_)) + gnm_abs ((l_))) / GNM_const(1e10) : (s_) == (l_))
 
 #define MARK_BAD(col_)						\
   do {								\
@@ -1638,16 +1649,15 @@ print_vector (const char *name, const gnm_float *v, int n)
 }
 
 static void
-gnm_solver_create_program_report (GnmSolver *solver, const char *name)
+gnm_solver_create_program_report (GnmSolver *solver, WorkbookControl *wbc, const char *name)
 {
 	GnmSolverParameters *params = solver->params;
 	int R = 0;
 	data_analysis_output_t *dao;
 	GSList *l;
 
-	dao = dao_init_new_sheet (NULL);
-	dao->sheet = params->sheet;
-	dao_prepare_output (NULL, dao, name);
+	dao = dao_init_new_sheet (params->sheet);
+	dao_prepare_output (wbc, dao, name);
 
 	/* ---------------------------------------- */
 
@@ -1781,7 +1791,7 @@ gnm_solver_create_program_report (GnmSolver *solver, const char *name)
 				break;
 			}
 			case GNM_SOLVER_BOOLEAN: {
-				gnm_float c = (cl > 0.5 ? 1 : 0);
+				gnm_float c = (cl > GNM_const(0.5) ? 1 : 0);
 				slack = 0 - gnm_abs (c - cl);
 				break;
 			}
@@ -1819,7 +1829,7 @@ gnm_solver_create_program_report (GnmSolver *solver, const char *name)
 }
 
 static void
-gnm_solver_create_sensitivity_report (GnmSolver *solver, const char *name)
+gnm_solver_create_sensitivity_report (GnmSolver *solver, WorkbookControl *wbc, const char *name)
 {
 	GnmSolverParameters *params = solver->params;
 	GnmSolverSensitivity *sols = solver->sensitivity;
@@ -1830,9 +1840,8 @@ gnm_solver_create_sensitivity_report (GnmSolver *solver, const char *name)
 	if (!sols)
 		return;
 
-	dao = dao_init_new_sheet (NULL);
-	dao->sheet = params->sheet;
-	dao_prepare_output (NULL, dao, name);
+	dao = dao_init_new_sheet (params->sheet);
+	dao_prepare_output (wbc, dao, name);
 
 	/* ---------------------------------------- */
 
@@ -1938,19 +1947,19 @@ gnm_solver_create_sensitivity_report (GnmSolver *solver, const char *name)
 }
 
 void
-gnm_solver_create_report (GnmSolver *solver, const char *base)
+gnm_solver_create_report (GnmSolver *solver, WorkbookControl *wbc, const char *base)
 {
 	GnmSolverParameters *params = solver->params;
 
 	if (params->options.program_report) {
 		char *name = g_strdup_printf (base, _("Program"));
-		gnm_solver_create_program_report (solver, name);
+		gnm_solver_create_program_report (solver, wbc, name);
 		g_free (name);
 	}
 
 	if (params->options.sensitivity_report) {
 		char *name = g_strdup_printf (base, _("Sensitivity"));
-		gnm_solver_create_sensitivity_report (solver, name);
+		gnm_solver_create_sensitivity_report (solver, wbc, name);
 		g_free (name);
 	}
 }
@@ -1984,7 +1993,7 @@ gnm_solver_set_var (GnmSolver *sol, int i, gnm_float x)
 		return;
 
 	gnm_cell_set_value (cell, value_new_float (x));
-	cell_queue_recalc (cell);
+	gnm_cell_queue_recalc (cell);
 }
 
 void
@@ -2030,7 +2039,7 @@ gnm_solver_restore_vars (GnmSolver *sol, GPtrArray *vals)
 	for (ui = 0; ui < sol->input_cells->len; ui++) {
 		GnmCell *cell = g_ptr_array_index (sol->input_cells, ui);
 		gnm_cell_set_value (cell, g_ptr_array_index (vals, ui));
-		cell_queue_recalc (cell);
+		gnm_cell_queue_recalc (cell);
 	}
 
 	g_ptr_array_free (vals, TRUE);
@@ -2138,7 +2147,7 @@ gnm_solver_compute_gradient (GnmSolver *sol, gnm_float const *xs)
 		 * error except, potentially, a single step that crosses an
 		 * integer power of 2.
 		 */
-		dx = 16 * (go_add_epsilon (x0) - x0);
+		dx = 16 * (gnm_add_epsilon (x0) - x0);
 		dy = 0;
 		for (j = -order; j <= order; j++) {
 			gnm_float y;
@@ -2490,7 +2499,7 @@ gnm_solver_pick_lp_coords (GnmSolver *sol,
  * @ycell: Cell for which to compute coefficients
  * @x1: first coordinate value
  * @x2: second coordinate value
- * @err: error location
+ * @err: (out) (nullable) (optional): location to store error
  *
  * Returns: xxx(transfer full) (nullable): coordinates, or %NULL in case of error.
  * Note: this function is not affected by the flip-sign property, even
@@ -2537,7 +2546,9 @@ gnm_solver_get_lp_coeffs (GnmSolver *sol, GnmCell *ycell,
 			if (!gnm_finite (y01))
 				goto fail_calc;
 
-			emax = dy == 0 ? 1e-10 : gnm_abs (dy) / 1e-10;
+			emax = dy == 0
+				? GNM_const(1e-10)
+				: gnm_abs (dy) / GNM_const(1e-10);  // ????
 			e = dy - 2 * (y01 - y0);
 			if (gnm_abs (e) > emax)
 				goto fail_linear;
@@ -3734,6 +3745,8 @@ gnm_solver_factory_finalize (GObject *obj)
 static void
 gnm_solver_factory_class_init (GObjectClass *object_class)
 {
+	debug_factory = gnm_debug_flag ("solver-factory");
+
 	gnm_solver_factory_parent_class =
 		g_type_class_peek_parent (object_class);
 
@@ -3808,6 +3821,10 @@ gnm_solver_factory_create (GnmSolverFactory *factory,
 			   GnmSolverParameters *param)
 {
 	g_return_val_if_fail (GNM_IS_SOLVER_FACTORY (factory), NULL);
+
+	if (debug_factory)
+		g_printerr ("Creating solver instance from %s\n",
+			    factory->id);
 	return factory->creator (factory, param, factory->data);
 }
 
@@ -3831,7 +3848,7 @@ cb_compare_factories (GnmSolverFactory *a, GnmSolverFactory *b)
 void
 gnm_solver_db_register (GnmSolverFactory *factory)
 {
-	if (gnm_solver_debug ())
+	if (debug_factory)
 		g_printerr ("Registering %s\n", factory->id);
 	g_object_ref (factory);
 	solvers = g_slist_insert_sorted (solvers, factory,
@@ -3841,7 +3858,7 @@ gnm_solver_db_register (GnmSolverFactory *factory)
 void
 gnm_solver_db_unregister (GnmSolverFactory *factory)
 {
-	if (gnm_solver_debug ())
+	if (debug_factory)
 		g_printerr ("Unregistering %s\n", factory->id);
 	solvers = g_slist_remove (solvers, factory);
 	g_object_unref (factory);

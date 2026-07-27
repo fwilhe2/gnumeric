@@ -1,4 +1,3 @@
-
 /*
  * dialog-goto-cell.c:  Implements the "goto cell/navigator" functionality
  *
@@ -36,7 +35,6 @@
 #include <sheet.h>
 #include <workbook.h>
 #include <workbook-view.h>
-#include <workbook-control.h>
 #include <selection.h>
 #include <parse-util.h>
 #include <sheet-view.h>
@@ -422,7 +420,7 @@ dialog_goto_init (GotoState *state)
 
 	dialog_goto_load_selection (state);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_dialog_goto_free);
 

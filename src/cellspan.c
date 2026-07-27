@@ -1,4 +1,3 @@
-
 /*
  * cellspan.c: Keep track of the columns on which a cell
  * displays information.
@@ -27,6 +26,7 @@
 #include <colrow.h>
 #include <value.h>
 #include <rendered-value.h>
+#include <ranges.h>
 
 static guint
 col_hash (gconstpointer key)
@@ -42,32 +42,30 @@ col_compare (gconstpointer a, gconstpointer b)
 	return 0;
 }
 
-static void
-free_hash_value (G_GNUC_UNUSED gpointer key, gpointer value,
-		 G_GNUC_UNUSED gpointer user_data)
-{
-	g_free (value);
-}
-
+/**
+ * row_destroy_span:
+ * @ri: (nullable): #ColRowInfo
+ *
+ * Destroys the span information associated with @ri.
+ **/
 void
 row_destroy_span (ColRowInfo *ri)
 {
 	if (ri == NULL || ri->spans == NULL)
 		return;
 
-	g_hash_table_foreach (ri->spans, free_hash_value, NULL);
 	g_hash_table_destroy (ri->spans);
 	ri->spans = NULL;
 }
 
-/*
- * cell_register_span
- * @cell:  The cell to register the span
- * @left:  the leftmost column used by the cell
- * @right: the rightmost column used by the cell
+/**
+ * cell_register_span:
+ * @cell: #GnmCell
+ * @left: leftmost column
+ * @right: rightmost column
  *
- * Registers the region
- */
+ * Registers the span for @cell from @left to @right.
+ **/
 void
 cell_register_span (GnmCell const *cell, int left, int right)
 {
@@ -84,7 +82,8 @@ cell_register_span (GnmCell const *cell, int left, int right)
 		return;
 
 	if (ri->spans == NULL)
-		ri->spans = g_hash_table_new (col_hash, col_compare);
+		ri->spans = g_hash_table_new_full (col_hash, col_compare,
+						   NULL, g_free);
 
 	for (i = left; i <= right; i++){
 		CellSpanInfo *spaninfo = g_new (CellSpanInfo, 1);
@@ -105,21 +104,17 @@ span_remove (G_GNUC_UNUSED gpointer key, gpointer value,
 	CellSpanInfo *span = (CellSpanInfo *)value;
 	GnmCell *cell = user_data;
 
-	if (cell == span->cell) {
-		g_free (span); /* free the span descriptor */
-		return TRUE;
-	}
-	return FALSE;
+	return (cell == span->cell);
 }
 
-/*
- * sheet_cell_unregister_span
- * @cell: The cell to remove from the span information
+/**
+ * cell_unregister_span:
+ * @cell: #GnmCell
  *
- * Remove all references to this cell in the span hashtable
- */
+ * Unregisters the span for @cell.
+ **/
 void
-cell_unregister_span (GnmCell const * const cell)
+cell_unregister_span (GnmCell const *cell)
 {
 	ColRowInfo *ri;
 
@@ -134,18 +129,16 @@ cell_unregister_span (GnmCell const * const cell)
 				     &span_remove, (gpointer)cell);
 }
 
-/*
- * row_span_get
- * @ri: The ColRowInfo for the row we are looking up
- * @col: the column position
+/**
+ * row_span_get:
+ * @ri: #ColRowInfo
+ * @col: column
  *
- * Returns SpanInfo of the spanning cell being display at the
- * column.  Including
- *   - the cell whose contents span.
- *   - The first and last col in the span.
- */
+ * Returns: (transfer none) (nullable): the #CellSpanInfo for the cell
+ * at @col in the row that @ri is associated with.
+ **/
 CellSpanInfo const *
-row_span_get (ColRowInfo const * const ri, int const col)
+row_span_get (ColRowInfo const *ri, int col)
 {
 	g_return_val_if_fail (ri != NULL, NULL);
 
@@ -154,14 +147,19 @@ row_span_get (ColRowInfo const * const ri, int const col)
 	return g_hash_table_lookup (ri->spans, GINT_TO_POINTER(col));
 }
 
-/* making CellSpanInfo a boxed type. As this objects are constant, no need
+/* making CellSpanInfo a boxed type. As these objects are constant, no need
  * to really copy free them. Right? */
-static const CellSpanInfo*
+static const CellSpanInfo *
 cell_span_info_copy (CellSpanInfo const *sp)
 {
 	return sp;
 }
 
+/**
+ * cell_span_info_get_type:
+ *
+ * Returns: the GType for #CellSpanInfo.
+ **/
 GType
 cell_span_info_get_type (void)
 {
@@ -213,14 +211,15 @@ cellspan_is_empty (int col, GnmCell const *ok_span_cell)
 		(VALUE_IS_EMPTY (tmp->value) && !gnm_cell_has_expr(tmp)));
 }
 
-/*
+/**
  * cell_calc_span:
- * @cell:   The cell we will examine
- * @col1:   return value: the first column used by this cell
- * @col2:   return value: the last column used by this cell
+ * @cell: #GnmCell
+ * @col1: (out): leftmost column
+ * @col2: (out): rightmost column
  *
- * This routine returns the column interval used by a GnmCell.
- */
+ * Calculates the column interval used by @cell and returns the results
+ * in @col1 and @col2.
+ **/
 void
 cell_calc_span (GnmCell const *cell, int *col1, int *col2)
 {
@@ -232,6 +231,7 @@ cell_calc_span (GnmCell const *cell, int *col1, int *col2)
 	ColRowInfo const *ci;
 	GnmRange const *merge_left;
 	GnmRange const *merge_right;
+	GnmRenderedValue *rv;
 
 	g_return_if_fail (cell != NULL);
 
@@ -239,10 +239,12 @@ cell_calc_span (GnmCell const *cell, int *col1, int *col2)
 	style = gnm_cell_get_effective_style (cell);
 	h_align = gnm_style_default_halign (style, cell);
 
-        /*
+	gnm_cell_eval ((GnmCell*)cell);
+
+	/*
 	 * Report only one column is used if
 	 *	- Cell is in a hidden col
-	 *	- Cell is a number
+	 *	- Cell is a not a string
 	 *	- Cell is the top left of a merged cell
 	 *	- The text fits inside column (for non center across selection)
 	 *	- The alignment mode are set to "justify"
@@ -255,15 +257,18 @@ cell_calc_span (GnmCell const *cell, int *col1, int *col2)
 		return;
 	}
 
+	rv = gnm_cell_fetch_rendered_value (cell, TRUE);
+
 	v_align = gnm_style_get_align_v (style);
 	indented_w = cell_width_pixel = gnm_cell_rendered_width (cell);
 	if (h_align == GNM_HALIGN_LEFT || h_align == GNM_HALIGN_RIGHT) {
-		GnmRenderedValue *rv = gnm_cell_get_rendered_value (cell);
-		char const *text = (rv)? pango_layout_get_text (rv->layout): NULL;
-		PangoDirection dir = (text && *text)? pango_find_base_dir (text, -1): PANGO_DIRECTION_LTR;
+		char const *text = gnm_rendered_value_get_text (rv);
+		PangoDirection dir = (text && *text)
+			? pango_find_base_dir (text, -1)
+			: PANGO_DIRECTION_LTR;
 		if (gnm_style_get_align_h (style) == GNM_HALIGN_GENERAL && dir == PANGO_DIRECTION_RTL)
 			h_align = GNM_HALIGN_RIGHT;
-		indented_w += gnm_cell_rendered_offset (cell);
+		indented_w += rv->indent_left + rv->indent_right;
 		if (sheet->text_is_rtl)
 			h_align = (h_align == GNM_HALIGN_LEFT) ? GNM_HALIGN_RIGHT : GNM_HALIGN_LEFT;
 	}
@@ -412,6 +417,14 @@ cell_calc_span (GnmCell const *cell, int *col1, int *col2)
 	} /* switch */
 }
 
+/**
+ * row_calc_spans:
+ * @ri: #ColRowInfo
+ * @row: row index
+ * @sheet: #Sheet
+ *
+ * Calculates the spans for the entire row @row in @sheet and updates @ri.
+ **/
 void
 row_calc_spans (ColRowInfo *ri, int row, Sheet const *sheet)
 {
@@ -432,9 +445,6 @@ row_calc_spans (ColRowInfo *ri, int row, Sheet const *sheet)
 				col++;
 			continue;
 		}
-
-		/* render as necessary */
-		(void)gnm_cell_fetch_rendered_value (cell, TRUE);
 
 		if (gnm_cell_is_merged (cell)) {
 			merged = gnm_sheet_merge_is_corner (sheet, &cell->pos);

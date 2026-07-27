@@ -9,15 +9,15 @@ use GnumericTest;
 
 $GnumericTest::default_corpus = 'random:20';
 my @sources = &GnumericTest::corpus();
+push @sources, &GnumericTest::corpus('/recalc/');
 # Must avoid volatile functions
 @sources = grep { !m{(^|/)(chart-tests\.gnumeric|datefuns\.xls|vba-725220\.xls|docs-samples\.gnumeric|numbermatch\.gnumeric)$} } @sources;
 # Avoid slow stuff
 @sources = grep { !m{(^|/)(address\.xls|bitwise\.xls|operator\.xls|linest\.xls)$} } @sources;
 @sources = grep { !m{(^|/)(amath\.gnumeric|gamma\.gnumeric|crlibm\.gnumeric|ilog\.gnumeric)$} } @sources;
 @sources = grep { !m{(^|/)(numtheory\.gnumeric)$} } @sources;
-# Currently fails, pending investigation
+# Currently fails due to TABLE, pending investigation
 @sources = grep { !m{(^|/)(arrays\.xls)$} } @sources;
-
 
 my $nskipped = 0;
 my $ngood = 0;

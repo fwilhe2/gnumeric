@@ -104,7 +104,7 @@ next_clicked (G_GNUC_UNUSED GtkWidget *widget, StfDialogData *data)
 
 	switch (gtk_notebook_get_current_page (data->notebook)) {
 	case DPG_MAIN:
-		stf_preview_set_lines (data->main.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->main.renderdata, NULL);
 		if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (data->main.main_separated))) {
 			newpos = DPG_CSV;
 		} else {
@@ -113,12 +113,12 @@ next_clicked (G_GNUC_UNUSED GtkWidget *widget, StfDialogData *data)
 		break;
 
 	case DPG_CSV:
-		stf_preview_set_lines (data->csv.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->csv.renderdata, NULL);
 		newpos = DPG_FORMAT;
 		break;
 
         case DPG_FIXED:
-		stf_preview_set_lines (data->fixed.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->fixed.renderdata, NULL);
 		newpos = DPG_FORMAT;
 		break;
 
@@ -140,7 +140,7 @@ back_clicked (G_GNUC_UNUSED GtkWidget *widget, StfDialogData *data)
 
 	switch (gtk_notebook_get_current_page (data->notebook)) {
 	case DPG_FORMAT:
-		stf_preview_set_lines (data->format.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->format.renderdata, NULL);
 		if (data->parseoptions->parsetype == PARSE_TYPE_CSV)
 			newpos = DPG_CSV;
 		else
@@ -148,12 +148,12 @@ back_clicked (G_GNUC_UNUSED GtkWidget *widget, StfDialogData *data)
 		break;
 
 	case DPG_FIXED:
-		stf_preview_set_lines (data->fixed.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->fixed.renderdata, NULL);
 		newpos = DPG_MAIN;
 		break;
 
 	case DPG_CSV:
-		stf_preview_set_lines (data->csv.renderdata, NULL, NULL);
+		stf_preview_set_lines (data->csv.renderdata, NULL);
 		newpos = DPG_MAIN;
 		break;
 
@@ -229,14 +229,19 @@ stf_dialog_editables_enter (StfDialogData *pagedata)
 
 /**
  * stf_dialog: (skip)
- * @wbcg: (nullable):
+ * @wbcg: (nullable): #WBCGtk
+ * @opt_encoding: (nullable): optional encoding
+ * @fixed_encoding: if %TRUE, use fixed encoding
+ * @opt_locale: (nullable): optional locale
+ * @fixed_locale: if %TRUE, use fixed locale
  * @source: name of the file we are importing (or data) in UTF-8
  * @data: the data itself
+ * @data_len: length of @data
  *
  * This will start the import.
- * (NOTE: you have to free the DialogStfResult_t that this function returns yourself)
+ * (NOTE: you have to free the DialogStfResult_t that this function returns)
  *
- * returns: A DialogStfResult_t struct on success, NULL otherwise.
+ * Returns: (transfer full) (nullable): A DialogStfResult_t struct on success, %NULL otherwise.
  **/
 DialogStfResult_t*
 stf_dialog (WBCGtk *wbcg,
@@ -306,7 +311,7 @@ stf_dialog (WBCGtk *wbcg,
 		dialogresult->text = pagedata.utf8_data;
 		*((char *)pagedata.cur_end) = 0;
 		if (dialogresult->text != pagedata.cur)
-			strcpy (dialogresult->text, pagedata.cur);
+			memmove (dialogresult->text, pagedata.cur, strlen (pagedata.cur) + 1);
 		pagedata.cur = pagedata.utf8_data = NULL;
 
 		dialogresult->encoding = pagedata.encoding;
@@ -351,14 +356,14 @@ stf_dialog (WBCGtk *wbcg,
 	g_free (pagedata.locale);
 	g_free (pagedata.utf8_data);
 	if (pagedata.parseoptions)
-		stf_parse_options_free (pagedata.parseoptions);
+		g_object_unref (pagedata.parseoptions);
 
 	return dialogresult;
 }
 
 /**
  * stf_dialog_result_free
- * @dialogresult: a dialogresult struct
+ * @dialogresult: a dialog result struct
  *
  * This routine will properly free the members of @dialogresult and
  * @dialogresult itself
@@ -368,7 +373,7 @@ stf_dialog_result_free (DialogStfResult_t *dialogresult)
 {
 	g_return_if_fail (dialogresult != NULL);
 
-	stf_parse_options_free (dialogresult->parseoptions);
+	g_object_unref (dialogresult->parseoptions);
 
 	g_free (dialogresult->text);
 	g_free (dialogresult->encoding);
@@ -378,7 +383,7 @@ stf_dialog_result_free (DialogStfResult_t *dialogresult)
 
 /**
  * stf_dialog_result_attach_formats_to_cr
- * @dialogresult: a dialogresult struct
+ * @dialogresult: a dialog result struct
  * @cr: a cell region
  *
  * Attach the formats of the dialogresult to the given cell region.

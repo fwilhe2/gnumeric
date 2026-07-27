@@ -3,8 +3,8 @@
 # Please keep this file sorted alphabetically.
 #
 [encoding: UTF-8]
-gnumeric.desktop.in
-gnumeric.appdata.xml.in
+org.gnumeric.gnumeric.desktop.in
+org.gnumeric.gnumeric.appdata.xml.in
 plugins/applix/applix-read.c
 plugins/applix/plugin.xml.in
 plugins/dif/dif.c
@@ -22,8 +22,6 @@ plugins/excel/xlsx-read-drawing.c
 plugins/excel/xlsx-read-pivot.c
 plugins/excel/xlsx-read.c
 plugins/excel/xlsx-write.c
-plugins/excelplugins/excelplugins.c
-plugins/excelplugins/plugin.xml.in
 plugins/fn-christian-date/functions.c
 plugins/fn-christian-date/plugin.xml.in
 plugins/fn-complex/functions.c
@@ -40,6 +38,8 @@ plugins/fn-erlang/functions.c
 plugins/fn-erlang/plugin.xml.in
 plugins/fn-financial/functions.c
 plugins/fn-financial/plugin.xml.in
+plugins/fn-flt/functions.c
+plugins/fn-flt/plugin.xml.in
 plugins/fn-hebrew-date/functions.c
 plugins/fn-hebrew-date/hdate_strings.c
 plugins/fn-hebrew-date/plugin.xml.in
@@ -355,15 +355,19 @@ src/tools/analysis-auto-expression.c
 src/tools/analysis-chi-squared.c
 src/tools/analysis-exp-smoothing.c
 src/tools/analysis-frequency.c
+src/tools/analysis-ftest.c
 src/tools/analysis-histogram.c
 src/tools/analysis-kaplan-meier.c
 src/tools/analysis-normality.c
 src/tools/analysis-one-mean-test.c
 src/tools/analysis-principal-components.c
+src/tools/analysis-regression.c
 src/tools/analysis-sign-test.c
 src/tools/analysis-signed-rank-test.c
 src/tools/analysis-tools.c
+src/tools/analysis-ttest.c
 src/tools/analysis-wilcoxon-mann-whitney.c
+src/tools/analysis-ztest.c
 src/tools/dao.c
 src/tools/data-shuffling.c
 src/tools/fill-series.c

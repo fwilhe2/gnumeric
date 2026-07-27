@@ -69,41 +69,33 @@ typedef struct {
  **/
 static void
 chi_squared_tool_ok_clicked_cb (G_GNUC_UNUSED GtkWidget *button,
-				 ChiSquaredIToolState *state)
+				ChiSquaredIToolState *state)
 {
 	data_analysis_output_t  *dao;
+	GnmAnalysisTool *tool;
+	GnmChiSquaredTool *ctool;
 	GtkWidget *w;
-	analysis_tools_data_chi_squared_t *data;
 
-	data = g_new0 (analysis_tools_data_chi_squared_t, 1);
-	dao  = parse_output ((GnmGenericToolState *)state, NULL);
+	tool = gnm_chi_squared_tool_new ();
+	ctool = GNM_CHI_SQUARED_TOOL (tool);
+	dao  = dao_parse_output ((GnmGenericToolState *)state);
 
-	data->input = gnm_expr_entry_parse_as_value
+	ctool->input = gnm_expr_entry_parse_as_value
 		(GNM_EXPR_ENTRY (state->base.input_entry),
 		 state->base.sheet);
 
-	data->wbc = GNM_WBC (state->base.wbcg);
+        ctool->labels = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (state->label));
 
-        data->labels = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (state->label));
-
-	data->alpha = gtk_spin_button_get_value
+	ctool->alpha = gtk_spin_button_get_value
 		(GTK_SPIN_BUTTON (state->alpha_entry));
 
 	w = go_gtk_builder_get_widget (state->base.gui, "test-of-independence");
-	data->independence = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (w));
+	ctool->independence = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (w));
 
-	data->n_c = (data->input->v_range.cell.b.col - data->input->v_range.cell.a.col + 1);
-	data->n_r = (data->input->v_range.cell.b.row - data->input->v_range.cell.a.row + 1);
-
-	if (data->labels)
-		data->n_c--, data->n_r--;
-
-
-	if (!cmd_analysis_tool (data->wbc, state->base.sheet,
-				dao, data, analysis_tool_chi_squared_engine,
-				TRUE))
+	if (!cmd_analysis_tool (GNM_WBC (state->base.wbcg), state->base.sheet, dao, tool))
 		gtk_widget_destroy (state->base.dialog);
 
+	g_object_unref (tool);
 	return;
 }
 
@@ -118,7 +110,8 @@ calc_min_size (GnmValue *input_range)
 
 /**
  * chi_squared_tool_update_sensitivity_cb:
- * @state:
+ * @dummy: #GtkWidget
+ * @state: #ChiSquaredIToolState
  *
  * Update the dialog widgets sensitivity.
  * We cannot use tool_update_sensitivity_cb
@@ -220,7 +213,7 @@ dialog_chi_square_tool (WBCGtk *wbcg, Sheet *sheet, gboolean independence)
 			      G_CALLBACK (chi_squared_tool_update_sensitivity_cb),
 			      GNM_EE_SINGLE_RANGE))
 	{
-		g_free(state);
+		g_free (state);
 		return 0;
 	}
 

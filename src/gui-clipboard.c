@@ -1,4 +1,3 @@
-/* VIM: set sw=8: -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
 /*
  * gui-clipboard.c: Implements the X11 based copy/paste operations
  *
@@ -68,6 +67,7 @@ enum {
 	ATOM_GOFFICE_GRAPH,
 	// ----------
 	ATOM_UTF8_STRING,
+	ATOM_TEXT_PLAIN_UTF8,
 	ATOM_STRING,
 	ATOM_COMPOUND_TEXT,
 	ATOM_TEXT_HTML,
@@ -102,6 +102,7 @@ static const char *const atom_names[] = {
 	"application/x-goffice-graph",
 	// ----------
 	"UTF8_STRING",
+	"text/plain;charset=utf-8",
 	"STRING",
 	"COMPOUND_TEXT",
 	"text/html",
@@ -342,7 +343,8 @@ text_content_received (GtkClipboard *clipboard, GtkSelectionData *sel,
 	/* Nothing on clipboard? */
 	if (sel_len < 0) {
 		;
-	} else if (target == atoms[ATOM_UTF8_STRING]) {
+	} else if (target == atoms[ATOM_UTF8_STRING] ||
+		   target == atoms[ATOM_TEXT_PLAIN_UTF8]) {
 		content = text_to_cell_region (wbcg, (const char *)gtk_selection_data_get_data (sel),
 					       sel_len, "UTF-8", TRUE);
 	} else if (target == atoms[ATOM_COMPOUND_TEXT]) {
@@ -383,10 +385,10 @@ utf8_content_received (GtkClipboard *clipboard, const gchar *text,
 	GnmCellRegion *content = NULL;
 
 	/* Nothing on clipboard? */
-	if (!text || strlen(text) == 0) {
+	if (!text || *text == 0) {
 		;
 	} else {
-		content = text_to_cell_region (wbcg, text, strlen(text), "UTF-8", TRUE);
+		content = text_to_cell_region (wbcg, text, strlen (text), "UTF-8", TRUE);
 	}
 	if (content) {
 		/*
@@ -450,7 +452,7 @@ table_cellregion_read (WorkbookControl *wbc, char const *reader_id,
 			// Make a guess.
 
 			GnmRange fullr;
-			GnmStyle **col_defaults =
+			GPtrArray *col_defaults =
 				sheet_style_most_common (tmpsheet, TRUE);
 
 			range_init_full_sheet (&fullr, tmpsheet);
@@ -459,7 +461,7 @@ table_cellregion_read (WorkbookControl *wbc, char const *reader_id,
 			sheet_style_get_nondefault_extent
 				(tmpsheet, &r, &fullr, col_defaults);
 
-			g_free (col_defaults);
+			g_ptr_array_free (col_defaults, TRUE);
 
 			// Just in case there was absolutely nothing in
 			// tmpsheet:
@@ -533,7 +535,7 @@ urilist_content_received (GtkClipboard *clipboard, GtkSelectionData *sel,
 			if (g_str_equal (uri, "copy"))
 				continue;
 			mime = go_get_mime_type (uri);
-			qimage = (strncmp (mime, "image/", 6) == 0);
+			qimage = (g_str_has_prefix (mime, "image/"));
 			g_free (mime);
 			if (!qimage)
 				continue;
@@ -758,6 +760,7 @@ x_targets_received (GtkClipboard *clipboard, GdkAtom *targets,
 	// In order of preference
 	static const int string_fmts[] = {
 		ATOM_UTF8_STRING,
+		ATOM_TEXT_PLAIN_UTF8,
 		ATOM_STRING,
 		ATOM_COMPOUND_TEXT
 	};
@@ -954,8 +957,7 @@ image_write (GnmCellRegion *cr, gchar const *mime_type, int *size)
 
 	*size = osize;
 	if (*size == osize) {
-		ret = g_malloc (*size);
-		memcpy (ret, gsf_output_memory_get_bytes (omem), *size);
+		ret = go_memdup (gsf_output_memory_get_bytes (omem), *size);
 	} else {
 		g_warning ("Overflow");	/* Far fetched! */
 	}
@@ -1161,6 +1163,13 @@ x_clipboard_clear_cb (GtkClipboard *clipboard, gpointer app_)
 	gnm_app_clipboard_clear (FALSE);
 }
 
+/**
+ * gnm_x_request_clipboard:
+ * @wbcg: #WBCGtk
+ * @pt: #GnmPasteTarget
+ *
+ * Requests the clipboard from the window system.
+ **/
 void
 gnm_x_request_clipboard (WBCGtk *wbcg, GnmPasteTarget const *pt)
 {
@@ -1206,6 +1215,7 @@ is_clipman_target (const char *target)
 		g_str_equal (target, atom_names[ATOM_GOFFICE_GRAPH]) ||
 		g_str_equal (target, atom_names[ATOM_TEXT_HTML]) ||
 		g_str_equal (target, atom_names[ATOM_UTF8_STRING]) ||
+		g_str_equal (target, atom_names[ATOM_TEXT_PLAIN_UTF8]) ||
 		g_str_equal (target, atom_names[ATOM_BIFF8_OO]) ||
 		g_str_equal (target, atom_names[ATOM_IMAGE_SVGXML]) ||
 		g_str_equal (target, atom_names[ATOM_IMAGE_XWMF]) ||
@@ -1253,6 +1263,16 @@ add_target_list (GArray *targets, GtkTargetList *src, AtomInfoType info)
 	gtk_target_table_free (entries, n);
 }
 
+/**
+ * gnm_x_claim_clipboard:
+ * @display: #GdkDisplay
+ *
+ * Claims the clipboard on the given @display, i.e., informs the
+ * window manager that we have a selection that can be pasted
+ * elsewhere.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gnm_x_claim_clipboard (GdkDisplay *display)
 {
@@ -1292,6 +1312,7 @@ gnm_x_claim_clipboard (GdkDisplay *display)
 #endif
 		}
 		add_target (targets, atom_names[ATOM_UTF8_STRING], 0, INFO_GENERIC_TEXT);
+		add_target (targets, atom_names[ATOM_TEXT_PLAIN_UTF8], 0, INFO_GENERIC_TEXT);
 		add_target (targets, atom_names[ATOM_COMPOUND_TEXT], 0, INFO_GENERIC_TEXT);
 		add_target (targets, atom_names[ATOM_STRING], 0, INFO_GENERIC_TEXT);
 	}
@@ -1314,7 +1335,7 @@ gnm_x_claim_clipboard (GdkDisplay *display)
 	 * PRIMARY */
 	ret = gtk_clipboard_set_with_owner (
 		gtk_clipboard_get_for_display (display, GDK_SELECTION_CLIPBOARD),
-		&g_array_index(targets,GtkTargetEntry,0), targets->len,
+		&g_array_index (targets,GtkTargetEntry,0), targets->len,
 		x_clipboard_get_cb,
 		x_clipboard_clear_cb,
 		app);
@@ -1326,7 +1347,7 @@ gnm_x_claim_clipboard (GdkDisplay *display)
 			for (ui = 0; ui < targets->len; ui++) {
 				g_printerr ("%s%s",
 					    (ui ? ", " : ""),
-					    g_array_index(targets,GtkTargetEntry,ui).target);
+					    g_array_index (targets,GtkTargetEntry,ui).target);
 			}
 			g_printerr ("\n");
 		}
@@ -1340,7 +1361,7 @@ gnm_x_claim_clipboard (GdkDisplay *display)
 		(void)gtk_clipboard_set_with_owner (
 			gtk_clipboard_get_for_display (display,
 						       GDK_SELECTION_PRIMARY),
-			&g_array_index(targets,GtkTargetEntry,0), targets->len,
+			&g_array_index (targets,GtkTargetEntry,0), targets->len,
 			x_clipboard_get_cb,
 			NULL,
 			app);
@@ -1354,6 +1375,11 @@ gnm_x_claim_clipboard (GdkDisplay *display)
 	return ret;
 }
 
+/**
+ * gnm_x_disown_clipboard:
+ *
+ * Disowns the clipboard.
+ **/
 void
 gnm_x_disown_clipboard (void)
 {
@@ -1373,9 +1399,13 @@ gnm_x_disown_clipboard (void)
 	g_slist_free (displays);
 }
 
-/* Hand clipboard off to clipboard manager. To be called before workbook
+/**
+ * gnm_x_store_clipboard_if_needed:
+ * @wb: #Workbook
+ *
+ * Hand clipboard off to clipboard manager. To be called before workbook
  * object is destroyed.
- */
+ **/
 void
 gnm_x_store_clipboard_if_needed (Workbook *wb)
 {
@@ -1405,6 +1435,12 @@ gnm_x_store_clipboard_if_needed (Workbook *wb)
 	}
 }
 
+/**
+ * gui_clipboard_test:
+ * @fmt: MIME type
+ *
+ * Returns: (transfer full) (nullable): the clipboard content as #GBytes.
+ **/
 GBytes *
 gui_clipboard_test (const char *fmt)
 {
@@ -1432,6 +1468,7 @@ gui_clipboard_test (const char *fmt)
 		info = INFO_GNUMERIC;
 		break;
 	case ATOM_UTF8_STRING:
+	case ATOM_TEXT_PLAIN_UTF8:
 	case ATOM_STRING:
 	case ATOM_COMPOUND_TEXT:
 		info = INFO_GENERIC_TEXT;
@@ -1486,6 +1523,8 @@ gui_clipboard_test (const char *fmt)
 
 /**
  * gui_clipboard_init: (skip)
+ *
+ * Initializes the clipboard system.
  */
 void
 gui_clipboard_init (void)
@@ -1508,6 +1547,8 @@ gui_clipboard_init (void)
 
 /**
  * gui_clipboard_shutdown: (skip)
+ *
+ * Shuts down the clipboard system.
  */
 void
 gui_clipboard_shutdown (void)

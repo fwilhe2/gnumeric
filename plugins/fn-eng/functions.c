@@ -69,7 +69,8 @@ val_to_base (GnmFuncEvalInfo *ei,
 	     Val2BaseFlags flags)
 {
 	int digit, min, max, places;
-	gnm_float v;
+	gnm_float v_float;
+	guint64 v;
 	GString *buffer;
 	GnmValue *vstring = NULL;
 
@@ -97,6 +98,7 @@ val_to_base (GnmFuncEvalInfo *ei,
 				value_release (vstring);
 				return value_new_error_VALUE (ei->pos);
 			}
+			v_float = vstring->v_float.val;
 		} else {
 			char const *str = value_peek_string (value);
 			size_t len;
@@ -123,11 +125,11 @@ val_to_base (GnmFuncEvalInfo *ei,
 					hsuffix = TRUE;
 			}
 
-			v = g_ascii_strtoll (str, &err, src_base);
+			v_float = (gnm_float) g_ascii_strtoll (str, &err, src_base);
 			if (err == str || err[hsuffix] != 0)
 				return value_new_error_NUM (ei->pos);
 
-			if (v < min_value || v > max_value)
+			if (v_float < min_value || v_float > max_value)
 				return value_new_error_NUM (ei->pos);
 
 			break;
@@ -146,7 +148,7 @@ val_to_base (GnmFuncEvalInfo *ei,
 			return value_new_error_NUM (ei->pos);
 
 		buf = g_strdup_printf ("%.0" GNM_FORMAT_f, val);
-		v = g_ascii_strtoll (buf, &err, src_base);
+		v_float = (gnm_float) g_ascii_strtoll (buf, &err, src_base);
 		fail = (*err != 0);
 		g_free (buf);
 
@@ -158,45 +160,51 @@ val_to_base (GnmFuncEvalInfo *ei,
 
 	if (src_base != 10) {
 		gnm_float b10 = gnm_pow (src_base, 10);
-		if (v >= b10 / 2) /* N's complement */
-			v = v - b10;
+		if (v_float >= b10 / 2) /* N's complement */
+			v_float = v_float - b10;
 	}
 
-	if (flags & V2B_NUMBER)
-		return value_new_float (v);
+	if (flags & V2B_NUMBER) {
+		value_release (vstring);
+		return value_new_float (v_float);
+	}
 
-	if (v < 0) {
+	if (v_float < 0) {
 		min = 1;
 		max = 10;
-		v += gnm_pow (dest_base, max);
+		v_float += gnm_pow (dest_base, max);
 	} else {
-		if (v == 0)
+		if (v_float == 0)
 			min = max = 1;
 		else
-			min = max = (int)(gnm_log (v + 0.5) /
+			min = max = (int)(gnm_log (v_float + GNM_const(0.5)) /
 					  gnm_log (dest_base)) + 1;
 	}
 
 	if (aplaces) {
 		gnm_float fplaces = value_get_as_float (aplaces);
-		if (fplaces < min || fplaces > 10)
+		if (fplaces < min || fplaces > 10) {
+			value_release (vstring);
 			return value_new_error_NUM (ei->pos);
+		}
 		places = (int)fplaces;
-		if (v >= 0 && places > max)
+		if (v_float >= 0 && places > max)
 			max = places;
 	} else
 		places = 1;
 
+	v = (guint64)(v_float + GNM_const(0.5));
 	buffer = g_string_sized_new (max);
 	g_string_set_size (buffer, max);
 
 	for (digit = max - 1; digit >= 0; digit--) {
-		int thisdigit = gnm_fmod (v + 0.5, dest_base);
-		v = gnm_floor ((v + 0.5) / dest_base);
+		int thisdigit = v % dest_base;
+		v /= dest_base;
 		buffer->str[digit] =
 			thisdigit["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"];
 	}
 
+	value_release (vstring);
 	return value_new_string_nocopy (g_string_free (buffer, FALSE));
 }
 
@@ -209,6 +217,7 @@ static GnmFuncHelp const help_base[] = {
         { GNM_FUNC_HELP_ARG, F_("length:minimum length of the resulting string") },
         { GNM_FUNC_HELP_DESCRIPTION, F_("BASE converts @{n} to its string representation in base @{b}. "
 					"Leading zeroes will be added to reach the minimum length given by @{length}.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BASE(255,16,4)" },
         { GNM_FUNC_HELP_SEEALSO, "DECIMAL" },
@@ -236,7 +245,7 @@ static GnmFuncHelp const help_bin2dec[] = {
         { GNM_FUNC_HELP_ARG, F_("x:a binary number, either as a string or as a number involving only the digits 0 and 1") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BIN2DEC(101)" },
-        { GNM_FUNC_HELP_SEEALSO, "DEC2BIN,BIN2OCT,BIN2HEX" },
+        { GNM_FUNC_HELP_SEEALSO, "DEC2BIN,BIN2OCT,BIN2HEX,BASE" },
         { GNM_FUNC_HELP_END}
 };
 
@@ -262,7 +271,7 @@ static GnmFuncHelp const help_bin2oct[] = {
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BIN2OCT(110111)" },
         { GNM_FUNC_HELP_EXAMPLES, "=BIN2OCT(110111,4)" },
-        { GNM_FUNC_HELP_SEEALSO, ("OCT2BIN,BIN2DEC,BIN2HEX") },
+        { GNM_FUNC_HELP_SEEALSO, ("OCT2BIN,BIN2DEC,BIN2HEX,BASE") },
         { GNM_FUNC_HELP_END}
 };
 
@@ -286,7 +295,7 @@ static GnmFuncHelp const help_bin2hex[] = {
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BIN2HEX(100111)" },
         { GNM_FUNC_HELP_EXAMPLES, "=BIN2HEX(110111,4)" },
-        { GNM_FUNC_HELP_SEEALSO, ("HEX2BIN,BIN2OCT,BIN2DEC") },
+        { GNM_FUNC_HELP_SEEALSO, ("HEX2BIN,BIN2OCT,BIN2DEC,BASE") },
         { GNM_FUNC_HELP_END}
 };
 
@@ -316,7 +325,7 @@ static GnmFuncHelp const help_dec2bin[] = {
 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=DEC2BIN(42,6)" },
         { GNM_FUNC_HELP_EXAMPLES, "=DEC2BIN(-42,6)" },
-        { GNM_FUNC_HELP_SEEALSO, ("BIN2DEC,DEC2OCT,DEC2HEX") },
+        { GNM_FUNC_HELP_SEEALSO, ("BIN2DEC,DEC2OCT,DEC2HEX,BASE") },
         { GNM_FUNC_HELP_END}
 };
 
@@ -340,7 +349,7 @@ static GnmFuncHelp const help_dec2oct[] = {
 					"exactly @{places} digits. If this is not possible, DEC2OCT returns #NUM!") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=DEC2OCT(42)" },
-        { GNM_FUNC_HELP_SEEALSO, ("OCT2DEC,DEC2BIN,DEC2HEX") },
+        { GNM_FUNC_HELP_SEEALSO, ("OCT2DEC,DEC2BIN,DEC2HEX,BASE") },
         { GNM_FUNC_HELP_END}
 };
 
@@ -363,7 +372,7 @@ static GnmFuncHelp const help_dec2hex[] = {
 					"exactly @{places} digits. If this is not possible, DEC2HEX returns #NUM!") },
 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=DEC2HEX(42)" },
-        { GNM_FUNC_HELP_SEEALSO, ("HEX2DEC,DEC2BIN,DEC2OCT") },
+        { GNM_FUNC_HELP_SEEALSO, ("HEX2DEC,DEC2BIN,DEC2OCT,BASE") },
         { GNM_FUNC_HELP_END}
 };
 
@@ -382,6 +391,7 @@ static GnmFuncHelp const help_decimal[] = {
         { GNM_FUNC_HELP_NAME, F_("DECIMAL:decimal representation of @{x}") },
         { GNM_FUNC_HELP_ARG, F_("x:number in base @{base}") },
         { GNM_FUNC_HELP_ARG, F_("base:base of @{x}, (2 \xe2\x89\xa4 @{base} \xe2\x89\xa4 36)") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=DECIMAL(\"A1\",16)" },
         { GNM_FUNC_HELP_EXAMPLES, "=DECIMAL(\"A1\",15)" },
@@ -549,10 +559,10 @@ gnumeric_hex2dec (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 static GnmFuncHelp const help_besseli[] = {
         { GNM_FUNC_HELP_NAME, F_("BESSELI:Modified Bessel function of the first kind of order @{\xce\xb1} at @{x}") },
-        { GNM_FUNC_HELP_ARG, F_("X:number") },
+        { GNM_FUNC_HELP_ARG, F_("x:number") },
         { GNM_FUNC_HELP_ARG, F_("\xce\xb1:order (any non-negative number)") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} or @{\xce\xb1} are not numeric, #VALUE! is returned. If @{\xce\xb1} < 0, #NUM! is returned.") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BESSELI(0.7,3)" },
         { GNM_FUNC_HELP_SEEALSO, "BESSELJ,BESSELK,BESSELY" },
 	{ GNM_FUNC_HELP_EXTREF, F_("wiki:en:Bessel_function") },
@@ -571,10 +581,10 @@ gnumeric_besseli (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 static GnmFuncHelp const help_besselk[] = {
         { GNM_FUNC_HELP_NAME, F_("BESSELK:Modified Bessel function of the second kind of order @{\xce\xb1} at @{x}") },
-        { GNM_FUNC_HELP_ARG, F_("X:number") },
+        { GNM_FUNC_HELP_ARG, F_("x:number") },
         { GNM_FUNC_HELP_ARG, F_("\xce\xb1:order (any non-negative number)") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} or @{\xce\xb1} are not numeric, #VALUE! is returned. If @{\xce\xb1} < 0, #NUM! is returned.") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BESSELK(3,9)" },
         { GNM_FUNC_HELP_SEEALSO, "BESSELI,BESSELJ,BESSELY" },
 	{ GNM_FUNC_HELP_EXTREF, F_("wiki:en:Bessel_function") },
@@ -594,11 +604,11 @@ gnumeric_besselk (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 static GnmFuncHelp const help_besselj[] = {
         { GNM_FUNC_HELP_NAME, F_("BESSELJ:Bessel function of the first kind of order @{\xce\xb1} at @{x}") },
-        { GNM_FUNC_HELP_ARG, F_("X:number") },
+        { GNM_FUNC_HELP_ARG, F_("x:number") },
         { GNM_FUNC_HELP_ARG, F_("\xce\xb1:order (any non-negative integer)") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} or @{\xce\xb1} are not numeric, #VALUE! is returned. "
 				 "If @{\xce\xb1} < 0, #NUM! is returned.") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BESSELJ(0.89,3)" },
         { GNM_FUNC_HELP_SEEALSO, "BESSELI,BESSELK,BESSELY" },
 	{ GNM_FUNC_HELP_EXTREF, F_("wiki:en:Bessel_function") },
@@ -617,11 +627,11 @@ gnumeric_besselj (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 static GnmFuncHelp const help_bessely[] = {
         { GNM_FUNC_HELP_NAME, F_("BESSELY:Bessel function of the second kind of order @{\xce\xb1} at @{x}") },
-        { GNM_FUNC_HELP_ARG, F_("X:number") },
+        { GNM_FUNC_HELP_ARG, F_("x:number") },
         { GNM_FUNC_HELP_ARG, F_("\xce\xb1:order (any non-negative integer)") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{x} or @{\xce\xb1} are not numeric, #VALUE! is returned. "
 				 "If @{\xce\xb1} < 0, #NUM! is returned.") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if only integer orders @{\xce\xb1} are used.") },
         { GNM_FUNC_HELP_EXAMPLES, "=BESSELY(4,2)" },
         { GNM_FUNC_HELP_SEEALSO, "BESSELI,BESSELJ,BESSELK" },
 	{ GNM_FUNC_HELP_EXTREF, F_("wiki:en:Bessel_function") },
@@ -828,8 +838,8 @@ static GnmFuncHelp const help_convert[] = {
 					"\t'Gi'  \tgibi \t\t\t2^30\n"
 					"\t'Mi'  \tmebi \t\t2^20\n"
 					"\t'ki'  \tkibi \t\t\t2^10") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible (except \"picapt\").") },
- 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible (except \"picapt\").") },
+	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=CONVERT(3,\"lbm\",\"g\")" },
         { GNM_FUNC_HELP_EXAMPLES, "=CONVERT(5.8,\"m\",\"in\")" },
         { GNM_FUNC_HELP_EXAMPLES, "=CONVERT(7.9,\"cal\",\"J\")" },
@@ -961,7 +971,7 @@ convert_temp (char const *from_unit, char const *to_unit, gnm_float n, GnmValue 
 	}
 
 	/* temperatures below 0K do not exist */
-	if (n < 0.) {
+	if (n < 0) {
 		*v = value_new_error_NUM (ep);
 		return TRUE;
 	}
@@ -1020,43 +1030,43 @@ gnumeric_convert (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 #define one_m_to_ang    GNM_const (1e10)
 #define one_m_to_ly     (1 / GNM_const (9.4607304725808E15))
 #define one_m_to_pc     (GNM_const (1e-16)/GNM_const (3.0856776))
-#define one_m_to_pica   236.2204724409449
+#define one_m_to_pica   GNM_const(236.2204724409449)
 #define one_m_to_Pica   one_m_to_pica * 12
 
 	/* Time constants */
-#define one_yr_to_day   365.25
+#define one_yr_to_day   GNM_const(365.25)
 #define one_yr_to_hr    (24 * one_yr_to_day)
 #define one_yr_to_mn    (60 * one_yr_to_hr)
 #define one_yr_to_sec   (60 * one_yr_to_mn)
 
 	/* Pressure constants */
-#define one_Pa_to_atm   0.9869233e-5
-#define one_Pa_to_mmHg  0.00750061708
-#define one_Pa_to_psi   0.000145037738
-#define one_Pa_to_Torr  (GNM_const (760)/GNM_const (101325))
+#define one_Pa_to_atm   GNM_const(0.9869233e-5)
+#define one_Pa_to_mmHg  GNM_const(0.00750061708)
+#define one_Pa_to_psi   GNM_const(0.000145037738)
+#define one_Pa_to_Torr  (GNM_const (760.)/GNM_const (101325.))
 
 	/* Force constants */
-#define one_N_to_dyn    100000
-#define one_N_to_lbf    0.224808924
-#define one_N_to_pond   0.00010197
+#define one_N_to_dyn    GNM_const(100000.)
+#define one_N_to_lbf    GNM_const(0.224808924)
+#define one_N_to_pond   GNM_const(0.00010197)
 
 
 	/* Power constants */
-#define one_HP_to_W     745.701
-#define one_PS_to_W     735.49875
+#define one_HP_to_W     GNM_const(745.701)
+#define one_PS_to_W     GNM_const(735.49875)
 
 	/* Energy constants */
-#define one_J_to_e      9999995.193
-#define one_J_to_c      0.239006249
-#define one_J_to_cal    0.238846191
-#define one_J_to_eV     6.2146e+18
+#define one_J_to_e      GNM_const(9999995.193)
+#define one_J_to_c      GNM_const(0.239006249)
+#define one_J_to_cal    GNM_const(0.238846191)
+#define one_J_to_eV     GNM_const(6.2146e+18)
 #define one_J_to_HPh    (GNM_const (1.0) / (3600 * one_HP_to_W))
 #define one_J_to_Wh     (GNM_const (1.0) / 3600)
-#define one_J_to_flb    23.73042222
-#define one_J_to_BTU    0.000947815
+#define one_J_to_flb    GNM_const(23.73042222)
+#define one_J_to_BTU    GNM_const(0.000947815)
 
 	/* Magnetism constants */
-#define one_T_to_ga     10000
+#define one_T_to_ga     GNM_const(10000.)
 
 	/* Liquid measure constants */
 #define one_l_to_uk_gal (GNM_const (1.0) / GNM_const (4.54609))
@@ -1359,13 +1369,10 @@ gnumeric_convert (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		{ NULL,0.0 }
 	};
 
-	gnm_float n;
-	char const *from_unit, *to_unit;
+	gnm_float n = value_get_as_float (argv[0]);
+	char const *from_unit = value_peek_string (argv[1]);
+	char const *to_unit = value_peek_string (argv[2]);
 	GnmValue *v;
-
-	n = value_get_as_float (argv[0]);
-	from_unit = value_peek_string (argv[1]);
-	to_unit = value_peek_string (argv[2]);
 
 	if (convert_temp (from_unit, to_unit, n, &v, ei->pos))
 	        return v;
@@ -1420,7 +1427,7 @@ static GnmFuncHelp const help_erf[] = {
         { GNM_FUNC_HELP_ARG, F_("lower:lower limit of the integral, defaults to 0") },
         { GNM_FUNC_HELP_ARG, F_("upper:upper limit of the integral") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ERF returns 2/sqrt(\xcf\x80)* integral from @{lower} to @{upper} of exp(-t*t) dt") },
-	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible if two arguments are supplied and neither is negative.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=ERF(0.4)" },
         { GNM_FUNC_HELP_EXAMPLES, "=ERF(6,10)" },
         { GNM_FUNC_HELP_EXAMPLES, "=ERF(1.6448536269515/SQRT(2))" },
@@ -1450,6 +1457,7 @@ static GnmFuncHelp const help_erfc[] = {
         { GNM_FUNC_HELP_NAME, F_("ERFC:Complementary Gauss error function") },
         { GNM_FUNC_HELP_ARG, F_("x:number") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("ERFC returns 2/sqrt(\xcf\x80)* integral from @{x} to \xe2\x88\x9e of exp(-t*t) dt") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=ERFC(6)" },
         { GNM_FUNC_HELP_SEEALSO, "ERF" },
 	{ GNM_FUNC_HELP_EXTREF, F_("wiki:en:Error_function") },
@@ -1472,7 +1480,7 @@ static GnmFuncHelp const help_delta[] = {
         { GNM_FUNC_HELP_ARG, F_("x1:number, defaults to 0") },
         { GNM_FUNC_HELP_DESCRIPTION, F_("DELTA  returns 1 if  @{x1} = @{x0} and 0 otherwise.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If either argument is non-numeric, #VALUE! is returned.") },
- 	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=DELTA(42.99,43)" },
         { GNM_FUNC_HELP_SEEALSO, "EXACT,GESTEP" },
         { GNM_FUNC_HELP_END}
@@ -1524,21 +1532,22 @@ static GnmValue *
 gnumeric_hexrep (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float x = value_get_as_float (argv[0]);
-	unsigned char data[sizeof(gnm_float)];
-	unsigned ui;
-	char res[2 * sizeof(gnm_float) + 1];
-	static const char hex[16] = "0123456789abcdef";
-
-	/* We don't have a long double version yet.  */
-	GSF_LE_SET_DOUBLE (data, x);
-	for (ui = 0; ui < G_N_ELEMENTS (data); ui++) {
-		unsigned char b = data[ui];
-		res[2 * ui] = hex[b >> 4];
-		res[2 * ui + 1] = hex[b & 0xf];
-	}
-	res[2 * ui] = 0;
-
-	return value_new_string (res);
+#if GNM_RADIX == 2
+	// "%a" is a perfect match for this task
+	char *rep = g_strdup_printf ("%a", x);
+	return value_new_string_nocopy (rep);
+#elif GNM_RADIX == 10
+	// Shortest representation in base 10 is probably ok
+	// (Not exactly hex, but the key here is a representation of all digits)
+	GString *res = g_string_new (NULL);
+	go_dtoa (res, "!^" GNM_FORMAT_g, x);
+	return value_new_string_nocopy (g_string_free (res, FALSE));
+#else
+	// No idea
+#error "HEXREP needs attention"
+	(void)x;
+	return value_new_error_NA (ei->pos);
+#endif
 }
 
 /***************************************************************************/
@@ -1595,7 +1604,7 @@ gnumeric_invsuminv (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 GnmFuncDescriptor const engineering_functions[] = {
         { "base",     "Sf|f",    help_base,
 	  gnumeric_base, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 
         { "besseli",     "ff",    help_besseli,
 	  gnumeric_besseli, NULL,
@@ -1634,7 +1643,7 @@ GnmFuncDescriptor const engineering_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "decimal",     "Sf",    help_decimal,
 	  gnumeric_decimal, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
 
         { "delta",       "f|f",   help_delta,
 	  gnumeric_delta, NULL,

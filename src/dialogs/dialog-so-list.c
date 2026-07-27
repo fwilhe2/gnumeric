@@ -1,4 +1,3 @@
-
 /*
  * dialog-so-list.c: A property dialog for lists and combos
  *
@@ -115,11 +114,11 @@ so_list_init (GnmDialogSOList *state, WBCGtk *wbcg, SheetObject *so)
 
 	texpr = sheet_widget_list_base_get_content_link (so);
 	state->content_entry = init_entry (state, gui, 1, 4, texpr);
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 
 	texpr = sheet_widget_list_base_get_result_link (so);
 	state->link_entry = init_entry (state, gui, 1, 0, texpr);
-	if (texpr) gnm_expr_top_unref (texpr);
+	gnm_expr_top_unref (texpr);
 
 	state->as_index_radio = go_gtk_builder_get_widget (gui, "as-index-radio");
 	gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (state->as_index_radio),
@@ -138,7 +137,7 @@ so_list_init (GnmDialogSOList *state, WBCGtk *wbcg, SheetObject *so)
 		"state", state, g_free);
 	go_gtk_nonmodal_dialog (wbcg_toplevel (state->wbcg),
 		GTK_WINDOW (state->dialog));
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	gtk_widget_show_all (GTK_WIDGET (state->dialog));
 	g_object_unref (gui);
 
@@ -152,7 +151,7 @@ dialog_so_list (WBCGtk *wbcg, GObject *so)
 
 	g_return_if_fail (wbcg != NULL);
 
-	if (wbc_gtk_get_guru (wbcg) ||
+	if (wbcg_get_guru (wbcg) ||
 	    gnm_dialog_raise_if_exists (wbcg, DIALOG_SO_LIST_KEY))
 		return;
 

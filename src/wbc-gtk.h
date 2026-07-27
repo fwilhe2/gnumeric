@@ -1,5 +1,5 @@
-#ifndef _GNM_WBC_GTK_H_
-# define _GNM_WBC_GTK_H_
+#ifndef GNM_WBC_GTK_H_
+#define GNM_WBC_GTK_H_
 
 #include <gnumeric.h>
 #include <gnumeric-fwd.h>
@@ -17,7 +17,7 @@ GType   wbc_gtk_get_type (void);
 WBCGtk *wbc_gtk_new (WorkbookView *optional_view,
 		     Workbook	  *optional_wb,
 		     GdkScreen	  *optional_screen,
-		     gchar	  *optional_geometry);
+		     const gchar  *optional_geometry);
 
 GtkWindow	*wbcg_toplevel	  (WBCGtk *wbcg);
 void	         wbcg_set_transient (WBCGtk *wbcg,
@@ -63,11 +63,11 @@ gboolean wbcg_edit_start  (WBCGtk *wbcg,
 void	    wbcg_insert_object		(WBCGtk *wbcg, SheetObject *so);
 void	    wbcg_insert_object_clear	(WBCGtk *wbcg);
 
-void	    wbc_gtk_detach_guru		(WBCGtk *wbcg);
-void	    wbc_gtk_attach_guru		(WBCGtk *wbcg, GtkWidget *guru);
-void	    wbc_gtk_attach_guru_with_unfocused_rs (WBCGtk *wbcg, GtkWidget *guru,
+void	    wbcg_detach_guru		(WBCGtk *wbcg);
+void	    wbcg_attach_guru		(WBCGtk *wbcg, GtkWidget *guru);
+void	    wbcg_attach_guru_with_unfocused_rs (WBCGtk *wbcg, GtkWidget *guru,
 						   GnmExprEntry *gee);
-GtkWidget  *wbc_gtk_get_guru		(WBCGtk const *wbcg);
+GtkWidget  *wbcg_get_guru		(WBCGtk const *wbcg);
 
 void	    wbcg_auto_complete_destroy  (WBCGtk *wbcg);
 char const *wbcg_edit_get_display_text	(WBCGtk *wbcg);
@@ -77,12 +77,12 @@ PangoAttrList *wbcg_edit_get_markup	(WBCGtk *wbcg, gboolean full);
 GtkEntry     *wbcg_get_entry		(WBCGtk const *wbcg);
 GnmExprEntry *wbcg_get_entry_logical	(WBCGtk const *wbcg);
 GtkWidget    *wbcg_get_entry_underlying	(WBCGtk const *wbcg);
-void	      wbcg_set_entry		(WBCGtk *wbc,
-					 GnmExprEntry *new_entry);
+void	      wbcg_set_entry		(WBCGtk *wbcg,
+					 GnmExprEntry *entry);
 gboolean      wbcg_entry_has_logical	(WBCGtk const *wbcg);
 
 void          wbcg_focus_current_cell_indicator (WBCGtk const *wbcg);
 
 G_END_DECLS
 
-#endif /* _GNM_WBC_GTK_H_ */
+#endif /* GNM_WBC_GTK_H_ */

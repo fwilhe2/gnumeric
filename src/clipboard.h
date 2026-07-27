@@ -1,5 +1,5 @@
-#ifndef _GNM_CLIPBOARD_H_
-# define _GNM_CLIPBOARD_H_
+#ifndef GNM_CLIPBOARD_H_
+#define GNM_CLIPBOARD_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
@@ -68,7 +68,7 @@ typedef struct {
 
 GType gnm_cell_copy_get_type (void);
 
-struct _GnmCellRegion {
+struct GnmCellRegion_ {
 	Sheet		*origin_sheet; /* can be NULL */
 	const GODateConventions *date_conv; /* can be NULL */
 	GnmCellPos	 base;
@@ -83,7 +83,7 @@ struct _GnmCellRegion {
 	unsigned	 ref_count;
 };
 
-struct _GnmPasteTarget {
+struct GnmPasteTarget_ {
 	Sheet      *sheet;
 	GnmRange    range;
 	GnmPasteFlags paste_flags;
@@ -123,4 +123,4 @@ void clipboard_shutdown (void);
 
 G_END_DECLS
 
-#endif /* _GNM_CLIPBOARD_H_ */
+#endif /* GNM_CLIPBOARD_H_ */

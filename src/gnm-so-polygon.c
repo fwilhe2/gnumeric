@@ -1,4 +1,3 @@
-
 /*
  * gnm-so-polygon.c: Polygons
  *
@@ -164,7 +163,7 @@ gnm_so_polygon_user_config (SheetObject *so, SheetControl *sc)
 
 static void
 gnm_so_polygon_draw_cairo (SheetObject const *so, cairo_t *cr,
-	double width, double height)
+			   double width, double height)
 {
 }
 
@@ -305,7 +304,7 @@ gnm_so_polygon_class_init (GObjectClass *gobject_class)
 static void
 gnm_so_polygon_init (GObject *obj)
 {
-	static double const initial_coords [] = {
+	static double const initial_coords[] = {
 		0., 0.,		1., 0.,
 		1., 1.,		0., 1.
 	};

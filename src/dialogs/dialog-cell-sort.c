@@ -152,15 +152,15 @@ col_row_name (Sheet *sheet, int col, int row, gboolean header, gboolean is_cols)
 
 
 static gboolean
-already_in_sort_fields(int index, SortFlowState *state)
+already_in_sort_fields (int index, SortFlowState *state)
 {
 	GtkTreeIter iter;
 	int item = 0;
 	gint number;
 
 	/* See if index is already in the sort fields */
-	while (gtk_tree_model_iter_nth_child  (GTK_TREE_MODEL (state->model),
-					       &iter, NULL, item)) {
+	while (gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (state->model),
+					      &iter, NULL, item)) {
 		gtk_tree_model_get (GTK_TREE_MODEL (state->model), &iter,
 				    ITEM_NUMBER, &number,
 				    -1);
@@ -176,11 +176,11 @@ already_in_sort_fields(int index, SortFlowState *state)
 }
 
 static gboolean
-range_already_in_sort_criteria(gint start, gint end, SortFlowState *state)
+range_already_in_sort_criteria (gint start, gint end, SortFlowState *state)
 {
 	gint i;
 	for (i=start; i<=end; i++) {
-		if (!already_in_sort_fields(i, state))
+		if (!already_in_sort_fields (i, state))
 			return FALSE;
 	}
 	return TRUE;
@@ -191,22 +191,22 @@ static void
 build_sort_field_menu (gint start, gint end, gint index, GtkWidget *menu, SortFlowState *state, int used);
 
 static void
-cb_sort_field_menu_activate(GtkWidget *item, AddSortFieldMenuState *menu_state)
+cb_sort_field_menu_activate (GtkWidget *item, AddSortFieldMenuState *menu_state)
 {
-	GtkWidget *menu = GTK_WIDGET (gtk_menu_item_get_submenu(GTK_MENU_ITEM (item)));
+	GtkWidget *menu = GTK_WIDGET (gtk_menu_item_get_submenu (GTK_MENU_ITEM (item)));
 
 	if (menu_state->done_submenu == FALSE) {
-		build_sort_field_menu(menu_state->start,
-				      menu_state->end,
-				      menu_state->index,
-				      menu,
-				      menu_state->state, 0);
+		build_sort_field_menu (menu_state->start,
+				       menu_state->end,
+				       menu_state->index,
+				       menu,
+				       menu_state->state, 0);
 		menu_state->done_submenu = TRUE;
 	}
 }
 
 static void
-set_button_sensitivity(SortFlowState *state)
+set_button_sensitivity (SortFlowState *state)
 {
 	int items;
 
@@ -259,14 +259,14 @@ append_data (SortFlowState *state, int i, int index)
 }
 
 static void
-cb_sort_field_selection(G_GNUC_UNUSED GtkWidget *item, AddSortFieldMenuState *menu_state)
+cb_sort_field_selection (G_GNUC_UNUSED GtkWidget *item, AddSortFieldMenuState *menu_state)
 {
-	append_data(menu_state->state,
-		    menu_state->start,
-		    menu_state->index);
+	append_data (menu_state->state,
+		     menu_state->start,
+		     menu_state->index);
 	/* Update sensitivity if this is the first sort item. */
 	if (menu_state->state->sort_items == 1)
-		set_button_sensitivity(menu_state->state);
+		set_button_sensitivity (menu_state->state);
 }
 
 static void
@@ -277,10 +277,6 @@ build_sort_field_menu (gint start, gint end, gint index, GtkWidget *menu, SortFl
 	GtkWidget *submenu;
 	int i;
 	int this_end;
-	char *str;
-	char *str_start;
-	char *str_end;
-	AddSortFieldMenuState *menu_state;
 	gint menu_size;
 
 	menu_size = 1 + end - start;
@@ -289,12 +285,16 @@ build_sort_field_menu (gint start, gint end, gint index, GtkWidget *menu, SortFl
 		gint balanced_submenu_size;
 
 		submenu_size = (menu_size + MAX_MENU_SIZE - 1) / MAX_MENU_SIZE;
-		balanced_submenu_size = sqrt((double)
-					     (menu_size + MAX_MENU_SIZE - 1));
+		balanced_submenu_size = sqrt ((double)
+					      (menu_size + MAX_MENU_SIZE - 1));
 		if (balanced_submenu_size > submenu_size)
 			submenu_size = balanced_submenu_size;
 
 		for (i = start; i <= end; i+=submenu_size) {
+			char *str;
+			char *str_start;
+			char *str_end;
+
 			this_end = i + submenu_size - 1;
 			if (this_end > end)
 				this_end = end;
@@ -302,7 +302,7 @@ build_sort_field_menu (gint start, gint end, gint index, GtkWidget *menu, SortFl
 			/* See if there are any fields in this range that aren't already
 			   in the sort.
 			*/
-			if (range_already_in_sort_criteria(i, this_end, state))
+			if (range_already_in_sort_criteria (i, this_end, state))
 				continue;
 
 			str_start = state->is_cols
@@ -313,44 +313,49 @@ build_sort_field_menu (gint start, gint end, gint index, GtkWidget *menu, SortFl
 				? col_row_name (sheet, this_end, index, state->header, TRUE)
 				: col_row_name (sheet, index, this_end, state->header, FALSE);
 
-			str = g_strdup_printf(_("%s to %s"), str_start, str_end);
-			g_free(str_start);
-			g_free(str_end);
+			str = g_strdup_printf (_("%s to %s"), str_start, str_end);
+			g_free (str_start);
+			g_free (str_end);
 
-			item = (GtkWidget *) gtk_menu_item_new_with_label(str);
+			item = (GtkWidget *) gtk_menu_item_new_with_label (str);
+			g_free (str);
 			gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 			gtk_widget_show (item);
 
-			menu_state = g_new(AddSortFieldMenuState, 1);
+			AddSortFieldMenuState *menu_state =
+				g_new (AddSortFieldMenuState, 1);
 			menu_state->start = i;
 			menu_state->end = this_end;
 			menu_state->index = index;
 			menu_state->state = state;
 			menu_state->done_submenu = FALSE;
-			submenu = gtk_menu_new();
-			gtk_menu_item_set_submenu(GTK_MENU_ITEM (item), submenu);
-			g_signal_connect (item, "activate",
-					  G_CALLBACK (cb_sort_field_menu_activate), menu_state);
+			submenu = gtk_menu_new ();
+			gtk_menu_item_set_submenu (GTK_MENU_ITEM (item), submenu);
+			g_signal_connect_data (item, "activate",
+					       G_CALLBACK (cb_sort_field_menu_activate), menu_state,
+					       (GClosureNotify)g_free, 0);
 		}
 	}  else {
 		for (i = start; i <= end; i++) {
-			if (FALSE == already_in_sort_fields(i, state)) {
-
-				str = state->is_cols
+			if (FALSE == already_in_sort_fields (i, state)) {
+				char *str = state->is_cols
 					? col_row_name (sheet, i, index, state->header, TRUE)
 					: col_row_name (sheet, index, i, state->header, FALSE);
-				item = (GtkWidget *) gtk_menu_item_new_with_label(str);
+				item = (GtkWidget *) gtk_menu_item_new_with_label (str);
+				g_free (str);
 				gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 				gtk_widget_show (item);
-				menu_state = g_new(AddSortFieldMenuState, 1);
+
+				AddSortFieldMenuState *menu_state =
+					g_new (AddSortFieldMenuState, 1);
 				menu_state->start = i;
 				menu_state->end = i;
 				menu_state->index = index;
 				menu_state->state = state;
 				menu_state->done_submenu = FALSE;
-				g_signal_connect (item, "activate",
-						  G_CALLBACK (cb_sort_field_selection),
-						  menu_state);
+				g_signal_connect_data (item, "activate",
+						       G_CALLBACK (cb_sort_field_selection),
+						       menu_state, (GClosureNotify)g_free, 0);
 			}
 		}
 	}
@@ -395,11 +400,11 @@ translate_range (GnmValue *range, SortFlowState *state)
 
 	value_release (state->sel);
 	state->sel = range;
-	load_model_data(state);
+	load_model_data (state);
 }
 
 static void
-cb_sort_header_check(SortFlowState *state)
+cb_sort_header_check (SortFlowState *state)
 {
 	state->header = gtk_toggle_button_get_active (
 		GTK_TOGGLE_BUTTON (state->cell_sort_header_check));
@@ -462,8 +467,8 @@ cb_dialog_ok_clicked (SortFlowState *state)
 	this_array_item = array;
 	base = (state->is_cols ? state->sel->v_range.cell.a.col : state->sel->v_range.cell.a.row);
 
-	while (gtk_tree_model_iter_nth_child  (GTK_TREE_MODEL (state->model),
-					       &iter, NULL, item)) {
+	while (gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (state->model),
+					      &iter, NULL, item)) {
 		gtk_tree_model_get (GTK_TREE_MODEL (state->model), &iter,
 				    ITEM_DESCENDING,&descending,
 				    ITEM_CASE_SENSITIVE, &case_sensitive,
@@ -480,10 +485,9 @@ cb_dialog_ok_clicked (SortFlowState *state)
 	}
 
 
-	data = g_new (GnmSortData, 1);
+	data = gnm_sort_data_new ();
 	data->sheet = state->sel->v_range.cell.a.sheet;
-	data->range = g_new (GnmRange, 1);
-	data->range = range_init (data->range, state->sel->v_range.cell.a.col
+	range_init (&data->range, state->sel->v_range.cell.a.col
 				  + ((state->header && !state->is_cols) ? 1 : 0),
 				  state->sel->v_range.cell.a.row
 				  + ((state->header && state->is_cols) ? 1 : 0),
@@ -500,10 +504,11 @@ cb_dialog_ok_clicked (SortFlowState *state)
 	text = gnm_expr_entry_get_text (state->range_entry);
 	gnm_sheet_add_sort_setup
 		(data->sheet,
-		 g_strdup((text != NULL && text[0] != '\0') ? text : "Other"),
+		 g_strdup ((text != NULL && text[0] != '\0') ? text : "Other"),
 		 data_copy);
 
-	cmd_sort (GNM_WBC (state->wbcg), data);
+	if (cmd_sort (GNM_WBC (state->wbcg), data))
+		g_object_unref (data);
 
 	gtk_widget_destroy (state->dialog);
 	return;
@@ -520,7 +525,6 @@ static void
 dialog_cell_sort_load_sort_setup (SortFlowState *state, GnmSortData const *data)
 {
 	int i;
-	GnmSortClause *this = data->clauses;
 	gint base, max, index;
 	Sheet *sheet = state->sel->v_range.cell.a.sheet;
 
@@ -566,9 +570,10 @@ dialog_cell_sort_load_sort_setup (SortFlowState *state, GnmSortData const *data)
 					    ITEM_MOVE_FORMAT, TRUE,
 					    ITEM_NUMBER, id,
 					    -1);
+			g_free (str);
+			g_free (header);
 			state->sort_items++;
 		}
-		this++;
 	}
 	set_button_sensitivity (state);
 }
@@ -671,7 +676,7 @@ move_cb (SortFlowState *state,
 		return;
 
 	iter = this_iter;
-	if (!mover (GTK_TREE_MODEL(state->model), &iter))
+	if (!mover (GTK_TREE_MODEL (state->model), &iter))
 		return;
 
 	gtk_list_store_swap (state->model, &this_iter, &iter);
@@ -752,9 +757,9 @@ build_sort_field_base_menu (SortFlowState *state)
 
 	if (items == NULL) {
 		GtkWidget *item;
-		item = (GtkWidget *) gtk_menu_item_new_with_label(state->is_cols ?
+		item = (GtkWidget *) gtk_menu_item_new_with_label (state->is_cols ?
 								  _("no available column"): _("no available row"));
-		gtk_widget_set_sensitive( GTK_WIDGET (item), FALSE);
+		gtk_widget_set_sensitive ( GTK_WIDGET (item), FALSE);
 		gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 		gtk_widget_show (item);
 	}
@@ -767,7 +772,7 @@ build_sort_field_base_menu (SortFlowState *state)
 static void
 show_add_menu (SortFlowState *state)
 {
-	gnumeric_popup_menu (build_sort_field_base_menu(state),
+	gnumeric_popup_menu (build_sort_field_base_menu (state),
 			     NULL);
 }
 
@@ -817,8 +822,8 @@ cb_add_clicked (SortFlowState *state)
 			gboolean found = FALSE;
 			gint number;
 
-			while (gtk_tree_model_iter_nth_child  (GTK_TREE_MODEL (state->model),
-							       &iter, NULL, item)) {
+			while (gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (state->model),
+							      &iter, NULL, item)) {
 				gtk_tree_model_get (GTK_TREE_MODEL (state->model), &iter,
 						    ITEM_NUMBER, &number,
 						    -1);
@@ -834,18 +839,18 @@ cb_add_clicked (SortFlowState *state)
 			}
 		}
 		if (!had_items && (state->sort_items > 0))
-			set_button_sensitivity(state);
+			set_button_sensitivity (state);
 	} else
 		show_add_menu (state);
 	gnm_expr_entry_load_from_text (GNM_EXPR_ENTRY (state->add_entry), "");
 }
 
 static gint
-cb_treeview_button_press(G_GNUC_UNUSED GtkWidget *w, GdkEvent *event, SortFlowState *state)
+cb_treeview_button_press (G_GNUC_UNUSED GtkWidget *w, GdkEvent *event, SortFlowState *state)
 {
 	if ((event->type == GDK_BUTTON_PRESS) &&
 	    (event->button.button == 3)) {
-		gnumeric_popup_menu (build_sort_field_base_menu(state),
+		gnumeric_popup_menu (build_sort_field_base_menu (state),
 				     event);
 		return TRUE;
 	}
@@ -1129,14 +1134,14 @@ dialog_init (SortFlowState *state)
 					   GNM_DIALOG_DESTROY_CURRENT_SHEET_REMOVED);
 
 	/* Finish dialog signals */
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 				"state", state, (GDestroyNotify) cb_dialog_destroy);
 
 	dialog_load_selection (state, &col_rb);
 
 	cb_sort_selection_changed (state);
-	gnm_expr_entry_grab_focus(GNM_EXPR_ENTRY (state->add_entry), TRUE);
+	gnm_expr_entry_grab_focus (GNM_EXPR_ENTRY (state->add_entry), TRUE);
 }
 
 /*

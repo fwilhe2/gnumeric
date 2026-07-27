@@ -528,7 +528,7 @@ oldnew_renderer_func (GtkTreeViewColumn *tree_column,
 	} else if (section == SEC_COLROW) {
 		ColRowInfo const *cr =
 			sheet_colrow_get_info (loc->a.sheet, e, is_cols);
-		text = g_strdup_printf (ngettext ("%d pixel", "%d pixels", cr->size_pixels), cr->size_pixels);
+		text = g_strdup_printf ("%.2f pt", cr->size_pts);
 	}
 
 done:
@@ -887,14 +887,14 @@ dialog_sheet_compare (WBCGtk *wbcg)
 
 	select_default_sheets (state);
 
-#define CONNECT(o,s,c) g_signal_connect(G_OBJECT(o),s,G_CALLBACK(c),state)
+#define CONNECT(o,s,c) g_signal_connect (G_OBJECT (o), s, G_CALLBACK (c), state)
 	CONNECT (state->cancel_btn, "clicked", cb_cancel_clicked);
 	CONNECT (state->compare_btn, "clicked", cb_compare_clicked);
 	CONNECT (state->results_view, "cursor-changed", cb_cursor_changed);
 #undef CONNECT
 
 	/* a candidate for merging into attach guru */
-	wbc_gtk_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
+	wbcg_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
 	g_object_set_data_full (G_OBJECT (state->dialog),
 				"state", state,
 				(GDestroyNotify) cb_sheet_compare_destroy);

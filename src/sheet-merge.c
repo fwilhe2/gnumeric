@@ -1,4 +1,3 @@
-
 /*
  * sheet-merge.c: merged cell support
  *
@@ -81,7 +80,7 @@ gnm_sheet_merge_add (Sheet *sheet, GnmRange const *r, gboolean clear,
 	test = gnm_sheet_merge_get_overlap (sheet, &r2);
 	if (test != NULL) {
 		if (cc != NULL)
-			go_cmd_context_error (cc, g_error_new (go_error_invalid(), 0,
+			go_cmd_context_error (cc, g_error_new (go_error_invalid (), 0,
 				_("There is already a merged region that intersects\n%s!%s"),
 				sheet->name_unquoted, range_as_string (&r2)));
 		g_slist_free (test);
@@ -250,10 +249,10 @@ gnm_sheet_merge_contains_pos (Sheet const *sheet, GnmCellPos const *pos)
  * gnm_sheet_merge_get_adjacent:
  * @sheet: The sheet to look in.
  * @pos: the cell to test for adjacent regions.
- * @left: the return for a region on the left
- * @right: the return for a region on the right
+ * @left: (out) (nullable) (transfer none): the return for a region on the left
+ * @right: (out) (nullable) (transfer none): the return for a region on the right
  *
- * Returns the nearest regions to either side of @pos.
+ * Determines the nearest regions to either side of @pos.
  */
 void
 gnm_sheet_merge_get_adjacent (Sheet const *sheet, GnmCellPos const *pos,

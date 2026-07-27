@@ -1,3 +1,36 @@
+2026-07-11  Morten Welinder  <terra@gnome.org>
+
+	* gnm-dao.c (tool_set_focus_output_range): Fix return type of
+	focus-in-event handler.
+
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.61
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.60
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.59
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.57
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.56
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.55
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.54
+
 2022-09-17  Morten Welinder <terra@gnome.org>
 
 	* Release 1.12.53
@@ -910,7 +943,7 @@
 2010-06-16  Morten Welinder  <terra@gnome.org>
 
 	* gnumeric-expr-entry.c (gee_set_tooltip): Use symbolic name for
-	unicode characters.  Add argument discription to tooltip.
+	unicode characters.  Add argument description to tooltip.
 	(gee_create_tooltip): Simplify using gnumeric_create_tooltip.
 
 2010-06-16  Andreas J. Guelzow <aguelzow@pyrshep.ca>

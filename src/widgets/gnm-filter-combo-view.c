@@ -98,6 +98,8 @@ fcombo_activate (SheetObject *so, GtkTreeView *list, WBCGtk *wbcg,
 			cmd_autofilter_set_condition
 				(GNM_WBC (wbcg),
 				 fcombo->filter, field_num, cond);
+
+		value_release (v);
 	}
 	return TRUE;
 }
@@ -351,7 +353,7 @@ filter_view_set_bounds (SheetObjectView *sov, double const *coords, gboolean vis
 		goc_item_set (sheet_object_view_get_item (sov),
 			/* put it inside the cell */
 			"x",	  ((coords[2] >= 0.) ? (coords[2] / scale - h + 1) : coords[0] / scale),
-			"y",	  coords [3] / scale - h + 1.,
+			"y",	  coords[3] / scale - h + 1.,
 			"width",  h,	/* force a square, use h for width too */
 			"height", h,
 			NULL);

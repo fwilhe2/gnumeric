@@ -1,12 +1,12 @@
-#ifndef _GNM_RENDERED_VALUE_H_
-# define _GNM_RENDERED_VALUE_H_
+#ifndef GNM_RENDERED_VALUE_H_
+#define GNM_RENDERED_VALUE_H_
 
 #include <gnumeric.h>
 #include <pango/pango.h>
 
 G_BEGIN_DECLS
 
-struct _GnmRenderedValue {
+struct GnmRenderedValue_ {
 	PangoLayout *layout;
 
 	/* In pango units:  */
@@ -30,7 +30,7 @@ struct _GnmRenderedValue {
 	signed int rotation : 10;
 };
 
-struct _GnmRenderedRotatedValue {
+struct GnmRenderedRotatedValue_ {
 	GnmRenderedValue rv;
 	guint sin_a_neg : 1;
 	int linecount;
@@ -46,15 +46,17 @@ GnmRenderedValue *gnm_rendered_value_new       (GnmCell const *cell,
 void              gnm_rendered_value_destroy   (GnmRenderedValue *rv);
 
 void              gnm_rendered_value_remeasure (GnmRenderedValue *rv);
+int               gnm_rendered_value_get_width (GnmRenderedValue const *rv);
+int               gnm_rendered_value_get_height (GnmRenderedValue const *rv);
 
-/* Return the value as a single string without format infomation.  */
+/* Return the value as a single string without format information.  */
 char const *gnm_rendered_value_get_text (GnmRenderedValue const * rv);
 
 GOColor gnm_rendered_value_get_color (GnmRenderedValue const * rv);
 
 /* ------------------------------------------------------------------------- */
 
-struct _GnmRenderedValueCollection {
+struct GnmRenderedValueCollection_ {
 	PangoContext *context;
 
 	gsize size;
@@ -71,6 +73,8 @@ void gnm_rvc_store (GnmRenderedValueCollection *rvc,
 		    GnmRenderedValue *rv);
 void gnm_rvc_remove (GnmRenderedValueCollection *rvc,
 		     GnmCell const *cell);
+void gnm_rvc_remove_range (GnmRenderedValueCollection *rvc,
+			   Sheet const *sheet, GnmRange const *range);
 
 /* ------------------------------------------------------------------------- */
 
@@ -79,4 +83,4 @@ void gnm_rendered_value_shutdown (void);
 
 G_END_DECLS
 
-#endif /* _GNM_RENDERED_VALUE_H_ */
+#endif /* GNM_RENDERED_VALUE_H_ */

@@ -91,7 +91,7 @@ static GnmFuncHelp const help_randdiscrete[] = {
         { GNM_FUNC_HELP_DESCRIPTION, F_("RANDDISCRETE returns one of the values in the @{val_range}. "
 					"The probabilities for each value are given in the @{prob_range}.") },
 	{ GNM_FUNC_HELP_NOTE, F_("If the sum of all values in @{prob_range} is not one, RANDDISCRETE returns #NUM!") },
- 	{ GNM_FUNC_HELP_NOTE, F_("If @{val_range} and @{prob_range} are not the same size, RANDDISCRETE returns #NUM!") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{val_range} and @{prob_range} are not the same size, RANDDISCRETE returns #NUM!") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{val_range} or @{prob_range} is not a range, RANDDISCRETE returns #VALUE!") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=RANDDISCRETE({1;3;5;7})" },
         { GNM_FUNC_HELP_EXAMPLES, "=RANDDISCRETE({1;3;5;7})" },
@@ -138,12 +138,12 @@ gnumeric_randdiscrete (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			goto error;
 
 		gnm_range_sum (probs, np, &psum);
-		if (gnm_abs (psum - 1) > 1e-10)
+		if (gnm_abs (psum - 1) > GNM_const(1e-10))
 			goto error;
 	}
 
-	p = random_01 ();
 	if (probs) {
+		p = random_01 ();
 		for (i = 0; i < np; i++) {
 			p -= probs[i];
 			if (p < 0)
@@ -151,7 +151,7 @@ gnumeric_randdiscrete (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		}
 	} else {
 		/* Uniform.  */
-		i = (int)gnm_floor (p * nv);
+		i = gnm_random_uniform_int (nv);
 	}
 
 	/* MIN is needed because of the sum grace.  */
@@ -256,7 +256,6 @@ gnumeric_randbetween (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float bottom = value_get_as_float (argv[0]);
 	gnm_float top = value_get_as_float (argv[1]);
-	gnm_float choices;
 
 	if (bottom > top)
 		return value_new_error_NUM (ei->pos);
@@ -267,11 +266,7 @@ gnumeric_randbetween (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	// the same thing.
 	bottom = gnm_ceil (bottom);
 	top = gnm_floor (top);
-
-	// Rounding alert: adding 1 could add 2 after rounding.
-	choices = gnm_ceil ((top - bottom) + 0.875);
-
-	return value_new_float (bottom + gnm_floor (choices * random_01 ()));
+	return value_new_float (gnm_random_uniform_integer (bottom, top));
 }
 
 /***************************************************************************/
@@ -729,7 +724,7 @@ static GnmFuncHelp const help_randlevy[] = {
 					"reduces to the Cauchy (or Lorentzian) distribution.") },
 	{ GNM_FUNC_HELP_DESCRIPTION, F_("For @{\xce\xb1} = 2, @{\xce\xb2}=0, the L\xc3\xa9vy distribution "
 					"reduces to the normal distribution.") },
- 	{ GNM_FUNC_HELP_NOTE, F_("If @{\xce\xb1} \xe2\x89\xa4 0 or @{\xce\xb1} > 2, RANDLEVY returns #NUM!") },
+	{ GNM_FUNC_HELP_NOTE, F_("If @{\xce\xb1} \xe2\x89\xa4 0 or @{\xce\xb1} > 2, RANDLEVY returns #NUM!") },
 	{ GNM_FUNC_HELP_NOTE, F_("If @{\xce\xb2} < -1 or @{\xce\xb2} > 1, RANDLEVY returns #NUM!") },
 	{ GNM_FUNC_HELP_EXAMPLES, "=RANDLEVY(0.5,0.1,1)" },
 	{ GNM_FUNC_HELP_EXAMPLES, "=RANDLEVY(0.5,0.1,1)" },
@@ -852,7 +847,8 @@ typedef struct {
 } simtable_t;
 
 static GnmValue *
-callback_function_simtable (GnmEvalPos const *ep, GnmValue const *value, void *closure)
+callback_function_simtable (GnmEvalPos const *ep, GnmValue const *value,
+			    gboolean direct, void *closure)
 {
 	simtable_t *p = closure;
 
@@ -935,7 +931,7 @@ gnumeric_randsnorm (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
        	if (stdev < 0)
 		return value_new_error_NUM (ei->pos);
 
-	result = ((alpha == 0.) ? random_normal () : random_skew_normal (alpha));
+	result = ((alpha == 0) ? random_normal () : random_skew_normal (alpha));
 
         return value_new_float (stdev * result + mean);
 }
@@ -959,9 +955,9 @@ static GnmValue *
 gnumeric_randstdist (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float nu = value_get_as_float (argv[0]);
-	gnm_float alpha = argv[1] ? value_get_as_float (argv[1]) : 0.;
+	gnm_float alpha = argv[1] ? value_get_as_float (argv[1]) : 0;
 
-	return ((alpha == 0.) ? value_new_float (random_tdist (nu))
+	return ((alpha == 0) ? value_new_float (random_tdist (nu))
 		: value_new_float (random_skew_tdist (nu, alpha)));
 }
 

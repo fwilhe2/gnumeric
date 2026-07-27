@@ -156,7 +156,7 @@ calculate_pmt (gnm_float rate, gnm_float nper, gnm_float pv, gnm_float fv,
 	pvif = calculate_pvif (rate, nper);
 	fvifa = calculate_fvifa (rate, nper);
 
-        return ((-pv * pvif - fv ) / ((1.0 + rate * type) * fvifa));
+        return ((-pv * pvif - fv ) / ((1 + rate * type) * fvifa));
 }
 
 static gnm_float
@@ -173,7 +173,7 @@ calculate_ipmt (gnm_float rate, gnm_float per, gnm_float nper,
 /***************************************************************************/
 
 /* Returns the number of days between issue date and maturity date
- * accoring to the day counting system specified by the 'basis'
+ * according to the day counting system specified by the 'basis'
  * argument.  Basis may have one of the following values:
  *
  *	0  for US 30/360 (days in a month/days in a year)
@@ -301,7 +301,7 @@ price (GDate *settlement, GDate *maturity, gnm_float rate, gnm_float yield,
 	e = go_coupdays (settlement, maturity, conv);
 	n = coupnum (settlement, maturity, conv);
 
-	den = 100.0 * rate / conv->freq;
+	den = 100 * rate / conv->freq;
 	basem1 = yield / conv->freq;
 	exponent = d / e;
 
@@ -312,7 +312,7 @@ price (GDate *settlement, GDate *maturity, gnm_float rate, gnm_float yield,
 	sum = den * pow1p (basem1, 1 - n - exponent) *
 		pow1pm1 (basem1, n) / basem1;
 
-	first_term = redemption / pow1p (basem1, (n - 1.0 + d / e));
+	first_term = redemption / pow1p (basem1, (n - 1 + d / e));
 	last_term = a / e * den;
 
 	return (first_term + sum - last_term);
@@ -396,11 +396,9 @@ gnumeric_accrint (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
         GDate      issue, first_interest, settlement;
 	gnm_float  rate, a, d, par, freq;
-	int        basis;
 	gboolean   calc_method;
 
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
 
         if (!datetime_value_to_g (&issue, argv[0], date_conv) ||
 	    !datetime_value_to_g (&first_interest, argv[1], date_conv) ||
@@ -413,11 +411,11 @@ gnumeric_accrint (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	rate           = value_get_as_float (argv[3]);
 	par            = argv[4] ? value_get_as_float (argv[4]) : 1000;
 	freq           = value_get_freq (argv[5]);
-	basis          = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
+	int basis = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
 	calc_method    = argv[6] ? value_get_as_int (argv[6]) : 1;
 
-        if (rate <= 0.	||
-	    par <= 0.	||
+        if (rate <= 0	||
+	    par <= 0	||
 	    !is_valid_freq (freq)	||
 	    !is_valid_basis (basis)	||
 	    g_date_compare (&issue, &settlement) >= 0)
@@ -462,17 +460,12 @@ static GnmFuncHelp const help_accrintm[] = {
 static GnmValue *
 gnumeric_accrintm (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float rate, a, d, par;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	rate  = value_get_as_float (argv[2]);
-	par   = argv[3] ? value_get_as_float (argv[3]) : 1000;
-	basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
-	a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
-	d = annual_year_basis (argv[0], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
+	gnm_float a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	gnm_float d = annual_year_basis (argv[0], basis, date_conv);
+	gnm_float rate = value_get_as_float (argv[2]);
+	gnm_float par = argv[3] ? value_get_as_float (argv[3]) : 1000;
 
 	if (a < 0 || d <= 0 || par <= 0 || rate <= 0
 	    || !is_valid_basis (basis))
@@ -500,17 +493,12 @@ static GnmFuncHelp const help_intrate[] = {
 static GnmValue *
 gnumeric_intrate (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float investment, redemption, a, d;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	investment = value_get_as_float (argv[2]);
-	redemption = value_get_as_float (argv[3]);
-	basis      = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
-	a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
-	d = annual_year_basis (argv[0], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
+	gnm_float a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	gnm_float d = annual_year_basis (argv[0], basis, date_conv);
+	gnm_float investment = value_get_as_float (argv[2]);
+	gnm_float redemption = value_get_as_float (argv[3]);
 
 	if (!is_valid_basis (basis) || a <= 0 || d <= 0 || investment == 0)
                 return value_new_error_NUM (ei->pos);
@@ -538,22 +526,17 @@ static GnmFuncHelp const help_received[] = {
 static GnmValue *
 gnumeric_received (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float investment, discount, a, d, n;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	investment = value_get_as_float (argv[2]);
-	discount   = value_get_as_float (argv[3]);
-	basis      = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
-	a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
-	d = annual_year_basis (argv[0], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float investment = value_get_as_float (argv[2]);
+	gnm_float discount = value_get_as_float (argv[3]);
+	int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
+	gnm_float a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	gnm_float d = annual_year_basis (argv[0], basis, date_conv);
 
 	if (a <= 0 || d <= 0 || !is_valid_basis (basis))
                 return value_new_error_NUM (ei->pos);
 
-	n = 1.0 - (discount * a/d);
+	gnm_float n = 1 - (discount * a/d);
 	if (n == 0)
 		return value_new_error_NUM (ei->pos);
 
@@ -578,17 +561,12 @@ static GnmFuncHelp const help_pricedisc[] = {
 static GnmValue *
 gnumeric_pricedisc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float discount, redemption, a, d;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	discount   = value_get_as_float (argv[2]);
-	redemption = value_get_as_float (argv[3]);
-	basis      = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
-	a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
-	d = annual_year_basis (argv[0], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float discount = value_get_as_float (argv[2]);
+	gnm_float redemption = value_get_as_float (argv[3]);
+	int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
+	gnm_float a = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	gnm_float d = annual_year_basis (argv[0], basis, date_conv);
 
 	if (a <= 0 || d <= 0 || !is_valid_basis (basis))
                 return value_new_error_NUM (ei->pos);
@@ -615,25 +593,20 @@ static GnmFuncHelp const help_pricemat[] = {
 static GnmValue *
 gnumeric_pricemat (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float discount, yield, a, b, dsm, dim, n;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	discount = value_get_as_float (argv[3]);
-	yield    = value_get_as_float (argv[4]);
-	basis    = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
-
-	dsm = days_monthly_basis (argv[0], argv[1], basis, date_conv);
-	dim = days_monthly_basis (argv[2], argv[1], basis, date_conv);
-	a   = days_monthly_basis (argv[2], argv[0], basis, date_conv);
-	b   = annual_year_basis (argv[0], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float discount = value_get_as_float (argv[3]);
+	gnm_float yield = value_get_as_float (argv[4]);
+	int basis = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
+	gnm_float dsm = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	gnm_float dim = days_monthly_basis (argv[2], argv[1], basis, date_conv);
+	gnm_float a = days_monthly_basis (argv[2], argv[0], basis, date_conv);
+	gnm_float b = annual_year_basis (argv[0], basis, date_conv);
 
 	if (a <= 0 || b <= 0 || dsm <= 0 || dim <= 0
 	    || !is_valid_basis (basis))
                 return value_new_error_NUM (ei->pos);
 
-	n = 1 + (dsm/b * yield);
+	gnm_float n = 1 + (dsm / b * yield);
 	if (n == 0)
 		return value_new_error_NUM (ei->pos);
 
@@ -660,17 +633,12 @@ static GnmFuncHelp const help_disc[] = {
 static GnmValue *
 gnumeric_disc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float par, redemption, dsm, b;
-	int basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
-
-	par        = value_get_as_float (argv[2]);
-	redemption = value_get_as_float (argv[3]);
-	basis      = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
-	b = annual_year_basis (argv[0], basis, date_conv);
-	dsm = days_monthly_basis (argv[0], argv[1], basis, date_conv);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float par = value_get_as_float (argv[2]);
+	gnm_float redemption = value_get_as_float (argv[3]);
+	int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
+	gnm_float b = annual_year_basis (argv[0], basis, date_conv);
+	gnm_float dsm = days_monthly_basis (argv[0], argv[1], basis, date_conv);
 
 	if (dsm <= 0 || b <= 0 || dsm <= 0 || !is_valid_basis (basis)
 	    || redemption == 0)
@@ -726,7 +694,7 @@ gnumeric_nominal (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (rate <= 0 || nper < 1)
                 return value_new_error_NUM (ei->pos);
 
-        return value_new_float (nper * pow1pm1 (rate, 1.0 / nper));
+        return value_new_float (nper * pow1pm1 (rate, 1 / nper));
 }
 
 /***************************************************************************/
@@ -746,11 +714,9 @@ static GnmFuncHelp const help_ispmt[] = {
 static GnmValue *
 gnumeric_ispmt (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float tmp;
-
 	gnm_float rate = value_get_as_float (argv[0]);
 	gnm_float per = value_get_as_int (argv[1]);
-	gnm_float nper = value_get_as_int (argv[2]);
+	int nper = value_get_as_int (argv[2]);
 	gnm_float pv = value_get_as_float (argv[3]);
 
 	/*
@@ -760,7 +726,7 @@ gnumeric_ispmt (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (per < 1 || per >= nper + 1)
                 return value_new_error_NUM (ei->pos);
 
-	tmp = -pv * rate;
+	gnm_float tmp = -pv * rate;
 
 	return value_new_float (tmp - (tmp / nper * per));
 }
@@ -782,31 +748,26 @@ static GnmFuncHelp const help_db[] = {
 static GnmValue *
 gnumeric_db (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float rate;
-	gnm_float cost, salvage, life, period, month;
-	gnm_float total;
-	int        i;
-
-	cost    = value_get_as_float (argv[0]);
-	salvage = value_get_as_float (argv[1]);
-	life    = value_get_as_float (argv[2]);
-	period  = value_get_as_float (argv[3]);
-	month   = argv[4] ? value_get_as_float (argv[4]) : 12;
+	gnm_float cost = value_get_as_float (argv[0]);
+	gnm_float salvage = value_get_as_float (argv[1]);
+	gnm_float life = value_get_as_float (argv[2]);
+	gnm_float period = value_get_as_float (argv[3]);
+	gnm_float month = argv[4] ? value_get_as_float (argv[4]) : 12;
 
 	/* The third disjunct is a bit of a guess -- MW.  */
 	if (cost == 0 || life <= 0 || salvage / cost < 0)
 		return value_new_error_NUM (ei->pos);
 
-	rate  = 1 - gnm_pow ((salvage / cost), (1 / life));
+	gnm_float rate = 1 - gnm_pow ((salvage / cost), (1 / life));
 	rate *= 1000;
-	rate  = gnm_floor (rate + 0.5) / 1000;
+	rate = gnm_round (rate) / 1000;
 
-	total = cost * rate * month / 12;
+	gnm_float total = cost * rate * month / 12;
 
         if (period == 1)
 	       return value_new_float (total);
 
-	for (i = 1; i < life; i++)
+	for (int i = 1; i < life; i++)
 	       if (i == period - 1)
 		       return value_new_float ((cost - total) * rate);
 	       else
@@ -832,14 +793,11 @@ static GnmFuncHelp const help_ddb[] = {
 static GnmValue *
 gnumeric_ddb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float cost, salvage, life, period, factor;
-	gnm_float f, prior, dep;
-
-	cost    = value_get_as_float (argv[0]);
-	salvage = value_get_as_float (argv[1]);
-	life    = value_get_as_float (argv[2]);
-	period  = value_get_as_float (argv[3]);
-	factor  = argv[4] ? value_get_as_float (argv[4]) : 2;
+	gnm_float cost = value_get_as_float (argv[0]);
+	gnm_float salvage = value_get_as_float (argv[1]);
+	gnm_float life = value_get_as_float (argv[2]);
+	gnm_float period = value_get_as_float (argv[3]);
+	gnm_float factor = argv[4] ? value_get_as_float (argv[4]) : 2;
 
 	if (cost < 0 || salvage < 0 || life <= 0 ||
 	    period <= 0 || period > life ||
@@ -855,9 +813,9 @@ gnumeric_ddb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			return value_new_float (cost - salvage);
 	}
 
-	f = factor / life;
-	prior = -cost * pow1pm1 (-f, period - 1);
-	dep = (cost - prior) * f;
+	gnm_float f = factor / life;
+	gnm_float prior = -cost * pow1pm1 (-f, period - 1);
+	gnm_float dep = (cost - prior) * f;
 
 	/* Depreciation cannot exceed book value.  */
 	dep = MIN (dep, MAX (0, cost - prior - salvage));
@@ -881,11 +839,9 @@ static GnmFuncHelp const help_sln[] = {
 static GnmValue *
 gnumeric_sln (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float cost,salvage_value,life;
-
-	cost          = value_get_as_float (argv[0]);
-	salvage_value = value_get_as_float (argv[1]);
-	life          = value_get_as_float (argv[2]);
+	gnm_float cost = value_get_as_float (argv[0]);
+	gnm_float salvage_value = value_get_as_float (argv[1]);
+	gnm_float life = value_get_as_float (argv[2]);
 
 	/* Life of an asset cannot be negative */
 	if (life <= 0)
@@ -911,12 +867,10 @@ static GnmFuncHelp const help_syd[] = {
 static GnmValue *
 gnumeric_syd (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float cost, salvage_value, life, period;
-
-	cost          = value_get_as_float (argv[0]);
-	salvage_value = value_get_as_float (argv[1]);
-	life          = value_get_as_float (argv[2]);
-	period        = value_get_as_float (argv[3]);
+	gnm_float cost = value_get_as_float (argv[0]);
+	gnm_float salvage_value = value_get_as_float (argv[1]);
+	gnm_float life = value_get_as_float (argv[2]);
+	gnm_float period = value_get_as_float (argv[3]);
 
 	/* Life of an asset cannot be negative */
 	if (life <= 0)
@@ -924,7 +878,7 @@ gnumeric_syd (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
         return value_new_float (((cost - salvage_value) *
 				 (life - period + 1) * 2) /
-				(life * (life + 1.0)));
+				(life * (life + 1)));
 }
 
 /***************************************************************************/
@@ -962,7 +916,7 @@ gnumeric_dollarde (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	 * For a power of 10, this is actually one less than the
 	 * number of digits.
 	 */
-	fdigits = 1 + gnm_floor (gnm_log10 (f - 0.5));
+	fdigits = 1 + gnm_floor (gnm_log10 (f - GNM_const(0.5)));
 
 	res = gnm_floor (x);
 
@@ -1010,7 +964,7 @@ gnumeric_dollarfr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	 * For a power of 10, this is actually one less than the
 	 * number of digits.
 	 */
-	fdigits = 1 + gnm_floor (gnm_log10 (f - 0.5));
+	fdigits = 1 + gnm_floor (gnm_log10 (f - GNM_const(0.5)));
 
 	res = gnm_floor (x);
 	res += (x - res) * f / gnm_pow10 (fdigits);
@@ -1036,22 +990,19 @@ static GnmFuncHelp const help_mirr[] = {
 static GnmValue *
 gnumeric_mirr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float frate, rrate, npv_neg, npv_pos;
-	gnm_float *values = NULL, res;
+	gnm_float frate = value_get_as_float (argv[1]);
+	gnm_float rrate = value_get_as_float (argv[2]);
 	GnmValue *result = NULL;
-	int i, n;
-
-	frate = value_get_as_float (argv[1]);
-	rrate = value_get_as_float (argv[2]);
-
-	values = collect_floats_value (argv[0], ei->pos,
-				       COLLECT_IGNORE_STRINGS |
-				       COLLECT_IGNORE_BLANKS,
-				       &n, &result);
+	int n;
+	gnm_float *values = collect_floats_value (argv[0], ei->pos,
+						  COLLECT_IGNORE_STRINGS |
+						  COLLECT_IGNORE_BLANKS,
+						  &n, &result);
 	if (result)
 		goto out;
 
-	for (i = 0, npv_pos = npv_neg = 0; i < n; i++) {
+	gnm_float npv_neg = 0, npv_pos = 0;
+	for (int i = 0; i < n; i++) {
 		gnm_float v = values[i];
 		if (v >= 0)
 			npv_pos += v / pow1p (rrate, i);
@@ -1069,8 +1020,8 @@ gnumeric_mirr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	 * the one Microsoft claims to use and it produces the results
 	 * that Excel does.  -- MW.
 	 */
-	res = gnm_pow ((-npv_pos * pow1p (rrate, n)) / (npv_neg * (1 + rrate)),
-		       (1.0 / (n - 1))) - 1.0;
+	gnm_float res = gnm_pow ((-npv_pos * pow1p (rrate, n)) / (npv_neg * (1 + rrate)),
+				 (GNM_const(1.0) / (n - 1))) - 1;
 
 	result = value_new_float (res);
 out:
@@ -1094,21 +1045,16 @@ static GnmFuncHelp const help_tbilleq[] = {
 static GnmValue *
 gnumeric_tbilleq (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float settlement, maturity, discount;
-	gnm_float dsm, divisor;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float settlement = datetime_value_to_serial (argv[0], date_conv);
+	gnm_float maturity = datetime_value_to_serial (argv[1], date_conv);
+	gnm_float discount = value_get_as_float (argv[2]);
 
-	settlement = datetime_value_to_serial (argv[0], date_conv);
-	maturity   = datetime_value_to_serial (argv[1], date_conv);
-	discount   = value_get_as_float (argv[2]);
-
-	dsm = maturity - settlement;
-
+	gnm_float dsm = maturity - settlement;
 	if (settlement > maturity || discount < 0 || dsm > 365)
                 return value_new_error_NUM (ei->pos);
 
-	divisor = 360 - discount * dsm;
+	gnm_float divisor = 360 - discount * dsm;
 	/* This test probably isn't right, but it is better that not checking
 	   at all.  --MW.  */
 	if (divisor == 0)
@@ -1132,21 +1078,16 @@ static GnmFuncHelp const help_tbillprice[] = {
 static GnmValue *
 gnumeric_tbillprice (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float settlement, maturity, discount;
-	gnm_float res, dsm;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float settlement = datetime_value_to_serial (argv[0], date_conv);
+	gnm_float maturity = datetime_value_to_serial (argv[1], date_conv);
+	gnm_float discount = value_get_as_float (argv[2]);
 
-	settlement = datetime_value_to_serial (argv[0], date_conv);
-	maturity   = datetime_value_to_serial (argv[1], date_conv);
-	discount   = value_get_as_float (argv[2]);
-
-	dsm = maturity - settlement;
-
+	gnm_float dsm = maturity - settlement;
 	if (settlement > maturity || discount < 0 || dsm > 365)
                 return value_new_error_NUM (ei->pos);
 
-	res = 100 * (1.0 - (discount * dsm) / 360.0);
+	gnm_float res = 100 * (1 - (discount * dsm) / 360);
 
 	return value_new_float (res);
 }
@@ -1166,21 +1107,17 @@ static GnmFuncHelp const help_tbillyield[] = {
 static GnmValue *
 gnumeric_tbillyield (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float settlement, maturity, pr;
-	gnm_float res, dsm;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float settlement = datetime_value_to_serial (argv[0], date_conv);
+	gnm_float maturity = datetime_value_to_serial (argv[1], date_conv);
+	gnm_float pr = value_get_as_float (argv[2]);
 
-	settlement = datetime_value_to_serial (argv[0], date_conv);
-	maturity   = datetime_value_to_serial (argv[1], date_conv);
-	pr         = value_get_as_float (argv[2]);
-
-	dsm = maturity - settlement;
+	gnm_float dsm = maturity - settlement;
 
 	if (pr <= 0 || dsm <= 0 || dsm > 365)
                 return value_new_error_NUM (ei->pos);
 
-	res = (100.0 - pr) / pr * (360.0 / dsm);
+	gnm_float res = (100 - pr) / pr * (360 / dsm);
 
 	return value_new_float (res);
 }
@@ -1211,7 +1148,7 @@ typedef struct {
 static GnmGoalSeekStatus
 gnumeric_rate_f (gnm_float rate, gnm_float *y, void *user_data)
 {
-	if (rate > -1.0 && rate != 0) {
+	if (rate > -1 && rate != 0) {
 		gnumeric_rate_t *data = user_data;
 
 		*y = data->pv * calculate_pvif (rate, data->nper) +
@@ -1227,7 +1164,7 @@ gnumeric_rate_f (gnm_float rate, gnm_float *y, void *user_data)
 static GnmGoalSeekStatus
 gnumeric_rate_df (gnm_float rate, gnm_float *y, void *user_data)
 {
-	if (rate > -1.0 && rate != 0.0) {
+	if (rate > -1 && rate != 0) {
 		gnumeric_rate_t *data = user_data;
 
 		*y = -data->pmt * calculate_fvifa (rate, data->nper) / rate +
@@ -1249,11 +1186,11 @@ gnumeric_rate (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	udata.nper = value_get_as_int (argv[0]);
 	/* YES ZERO, it's sick but it's XL compatible */
-	udata.pmt  = argv[1] ? value_get_as_float (argv[1]) : 0.0;
+	udata.pmt  = argv[1] ? value_get_as_float (argv[1]) : 0;
 	udata.pv   = value_get_as_float (argv[2]);
-	udata.fv   = argv[3] ? value_get_as_float (argv[3]) : 0.0;
+	udata.fv   = argv[3] ? value_get_as_float (argv[3]) : 0;
 	udata.type = value_get_paytype (argv[4]);
-	rate0      = argv[5] ? value_get_as_float (argv[5]) : 0.1;
+	rate0      = argv[5] ? value_get_as_float (argv[5]) : GNM_const(0.1);
 
 	if (udata.nper <= 0)
 		return value_new_error_NUM (ei->pos);
@@ -1267,9 +1204,11 @@ gnumeric_rate (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	goal_seek_initialize (&data);
 
 	data.xmin = MAX (data.xmin,
-			 -gnm_pow (DBL_MAX / 1e10, 1.0 / udata.nper) + 1);
+			 -gnm_pow (GNM_MAX / GNM_const(1e10),
+				   GNM_const(1.0) / udata.nper) + 1);
 	data.xmax = MIN (data.xmax,
-			 gnm_pow (DBL_MAX / 1e10, 1.0 / udata.nper) - 1);
+			 gnm_pow (GNM_MAX / GNM_const(1e10),
+				  GNM_const(1.0) / udata.nper) - 1);
 
 	/* Newton search from guess.  */
 	status = goal_seek_newton (&gnumeric_rate_f, &gnumeric_rate_df,
@@ -1319,18 +1258,16 @@ static GnmFuncHelp const help_rri[] = {
 static GnmValue *
 gnumeric_rri (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float      per, pv, fv;
-
-	per = value_get_as_float (argv[0]);
-	pv = value_get_as_float (argv[1]);
-	fv = value_get_as_float (argv[2]);
+	gnm_float per = value_get_as_float (argv[0]);
+	gnm_float pv = value_get_as_float (argv[1]);
+	gnm_float fv = value_get_as_float (argv[2]);
 
 	if (per < 0)
 		return value_new_error_NUM (ei->pos);
-        if (pv == 0. || per == 0.)
+        if (pv == 0 || per == 0)
 		return value_new_error_DIV0 (ei->pos);
 
-	return value_new_float (gnm_pow(fv/pv,1/per)-1.);
+	return value_new_float (gnm_pow (fv / pv, 1 / per) - 1);
 }
 
 
@@ -1401,7 +1338,7 @@ gnumeric_irr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnumeric_irr_t  p;
 	gnm_float      rate0;
 
-	rate0 = argv[1] ? value_get_as_float (argv[1]) : 0.1;
+	rate0 = argv[1] ? value_get_as_float (argv[1]) : GNM_const(0.1);
 
 	p.values = collect_floats_value (argv[0], ei->pos,
 					 COLLECT_IGNORE_STRINGS |
@@ -1416,7 +1353,8 @@ gnumeric_irr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	data.xmin = -1;
 	data.xmax = MIN (data.xmax,
-			 gnm_pow (DBL_MAX / 1e10, 1.0 / p.n) - 1);
+			 gnm_pow (GNM_MAX / GNM_const(1e10),
+				  GNM_const(1.0) / p.n) - 1);
 
 	status = goal_seek_newton (&irr_npv, &irr_npv_df, &data, &p, rate0);
 	if (status != GOAL_SEEK_OK) {
@@ -1487,7 +1425,7 @@ gnumeric_pv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (pvif == 0)
 		return value_new_error_DIV0 (ei->pos);
 
-        return value_new_float ((-fv - pmt * (1.0 + rate * type) * fvifa) /
+        return value_new_float ((-fv - pmt * (1 + rate * type) * fvifa) /
 				pvif);
 }
 
@@ -1530,7 +1468,9 @@ gnumeric_npv (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	return float_range_function (argc, argv, ei,
 				     range_npv,
 				     COLLECT_IGNORE_STRINGS |
+				     COLLECT_STRINGS_DIRECT_COMBO2 |
 				     COLLECT_IGNORE_BOOLS |
+				     COLLECT_BOOLS_DIRECT_COMBO1 |
 				     COLLECT_IGNORE_BLANKS,
 				     GNM_ERROR_DIV0);
 }
@@ -1581,7 +1521,7 @@ gnumeric_xnpv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	for (i = 0; i < p_n; i++)
 		sum += payments[i] /
-			pow1p (rate, (dates[i] - dates[0]) / 365.0);
+			pow1p (rate, (dates[i] - dates[0]) / 365);
 
 	result = value_new_float (sum);
  out:
@@ -1622,7 +1562,7 @@ xirr_npv (gnm_float rate, gnm_float *y, void *user_data)
 
 		if (d < 0)
 			return GOAL_SEEK_ERROR;
-		sum += p->values[i] / pow1p (rate, d / 365.0);
+		sum += p->values[i] / pow1p (rate, d / 365);
 	}
 
 	*y = sum;
@@ -1674,7 +1614,7 @@ gnm_range_xirr (gnm_float const *xs, const gnm_float *ys,
 static GnmValue *
 gnumeric_xirr (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float rate0 = argv[2] ? value_get_as_float (argv[2]) : 0.1;
+	gnm_float rate0 = argv[2] ? value_get_as_float (argv[2]) : GNM_const(0.1);
 
 	return float_range_function2d (argv[0], argv[1],
 				       ei,
@@ -1707,7 +1647,7 @@ gnumeric_fv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float rate = value_get_as_float (argv[0]);
 	gnm_float nper = value_get_as_float (argv[1]);
 	gnm_float pmt  = value_get_as_float (argv[2]);
-	gnm_float pv   = argv[3] ? value_get_as_float (argv[3]) : 0.;
+	gnm_float pv   = argv[3] ? value_get_as_float (argv[3]) : 0;
 	int type       = value_get_paytype (argv[4]);
 	gnm_float pvif, fvifa;
 
@@ -1718,7 +1658,7 @@ gnumeric_fv (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	fvifa = calculate_fvifa (rate, nper);
 
         return value_new_float (-((pv * pvif) + pmt *
-				  (1.0 + rate * type) * fvifa));
+				  (1 + rate * type) * fvifa));
 }
 
 /***************************************************************************/
@@ -1875,9 +1815,9 @@ gnumeric_nper (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (!is_valid_paytype (type))
 		return value_new_error_VALUE (ei->pos);
 
-	tmp = (pmt * (1.0 + rate * type) - fv * rate) /
-	  (pv * rate + pmt * (1.0 + rate * type));
-	if (tmp <= 0.0)
+	tmp = (pmt * (1 + rate * type) - fv * rate) /
+	  (pv * rate + pmt * (1 + rate * type));
+	if (tmp <= 0)
 		return value_new_error_VALUE (ei->pos);
 
         return value_new_float (gnm_log (tmp) / gnm_log1p (rate));
@@ -1905,26 +1845,23 @@ static GnmFuncHelp const help_duration[] = {
 static GnmValue *
 gnumeric_duration (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     nSettle, nMat;
-	gnm_float fCoup, fYield;
-        gnm_float fNumOfCoups;
 	GoCouponConvention conv;
-
 	conv.date_conv = sheet_date_conv (ei->pos->sheet);
 	conv.eom = TRUE;
 
-	fCoup      = value_get_as_float (argv[2]);
-	fYield     = value_get_as_float (argv[3]);
+	gnm_float fCoup = value_get_as_float (argv[2]);
+	gnm_float fYield = value_get_as_float (argv[3]);
 	conv.freq  = value_get_freq (argv[4]);
         conv.basis = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
 
+        GDate nSettle, nMat;
         if (!datetime_value_to_g (&nSettle, argv[0], conv.date_conv) ||
 	    !datetime_value_to_g (&nMat, argv[1], conv.date_conv) ||
 	    !is_valid_basis (conv.basis) ||
 	    !is_valid_freq (conv.freq))
 		return value_new_error_NUM (ei->pos);
 
-	fNumOfCoups = coupnum (&nSettle, &nMat, &conv);
+        gnm_float fNumOfCoups = coupnum (&nSettle, &nMat, &conv);
 	return get_duration (&nSettle, &nMat, fCoup, fYield, conv.freq,
 			     conv.basis, fNumOfCoups);
 }
@@ -1946,11 +1883,9 @@ static GnmFuncHelp const help_g_duration[] = {
 static GnmValue *
 gnumeric_g_duration (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float rate, pv, fv;
-
-	rate = value_get_as_float (argv[0]);
-	pv   = value_get_as_float (argv[1]);
-	fv   = value_get_as_float (argv[2]);
+	gnm_float rate = value_get_as_float (argv[0]);
+	gnm_float pv = value_get_as_float (argv[1]);
+	gnm_float fv = value_get_as_float (argv[2]);
 
 	if (rate <= 0)
 		return value_new_error_DIV0 (ei->pos);
@@ -1978,17 +1913,15 @@ static GnmFuncHelp const help_fvschedule[] = {
 static GnmValue *
 gnumeric_fvschedule (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float pv, *schedule = NULL;
 	GnmValue *result = NULL;
-	int i, n;
-
-	pv       = value_get_as_float (argv[0]);
-	schedule = collect_floats_value (argv[1], ei->pos,
-					 COLLECT_IGNORE_BLANKS, &n, &result);
+	int n;
+	gnm_float pv = value_get_as_float (argv[0]);
+	gnm_float *schedule = collect_floats_value (argv[1], ei->pos,
+						    COLLECT_IGNORE_BLANKS, &n, &result);
 	if (result)
 		goto out;
 
-	for (i = 0; i < n; i++)
+	for (int i = 0; i < n; i++)
 		pv *= 1 + schedule[i];
 
 	result = value_new_float (pv);
@@ -2039,65 +1972,65 @@ one_euro (char const *str)
 {
 	switch (*str) {
 	case 'A':
-		if (strncmp ("ATS", str, 3) == 0)
+		if (g_str_equal ("ATS", str))
 			return GNM_const (13.7603);
 		break;
 	case 'B':
-		if (strncmp ("BEF", str, 3) == 0)
+		if (g_str_equal ("BEF", str))
 			return GNM_const (40.3399);
 		break;
 	case 'C':
-		if (strncmp ("CYP", str, 3) == 0)
+		if (g_str_equal ("CYP", str))
 			return GNM_const (0.585274);
 		break;
 	case 'D':
-		if (strncmp ("DEM", str, 3) == 0)
+		if (g_str_equal ("DEM", str))
 			return GNM_const (1.95583);
 		break;
 	case 'E':
-		if (strncmp ("ESP", str, 3) == 0)
+		if (g_str_equal ("ESP", str))
 			return GNM_const (166.386);
-		else if (strncmp ("EEK", str, 3) == 0)
+		else if (g_str_equal ("EEK", str))
 			return GNM_const (15.6466);
-		else if (strncmp ("EUR", str, 3) == 0)
+		else if (g_str_equal ("EUR", str))
 			return GNM_const (1.0);
 		break;
 	case 'F':
-		if (strncmp ("FIM", str, 3) == 0)
+		if (g_str_equal ("FIM", str))
 			return GNM_const (5.94573);
-		else if (strncmp ("FRF", str, 3) == 0)
+		else if (g_str_equal ("FRF", str))
 			return GNM_const (6.55957);
 		break;
 	case 'G':
-		if (strncmp ("GRD", str, 3) == 0)
+		if (g_str_equal ("GRD", str))
 			return GNM_const (340.75);
 		break;
 	case 'I':
-		if (strncmp ("IEP", str, 3) == 0)
+		if (g_str_equal ("IEP", str))
 			return GNM_const (0.787564);
-		else if (strncmp ("ITL", str, 3) == 0)
+		else if (g_str_equal ("ITL", str))
 			return GNM_const (1936.27);
 		break;
 	case 'L':
-		if (strncmp ("LUF", str, 3) == 0)
+		if (g_str_equal ("LUF", str))
 			return GNM_const (40.3399);
 		break;
 	case 'M':
-		if (strncmp ("MTL", str, 3) == 0)
+		if (g_str_equal ("MTL", str))
 			return GNM_const (0.429300);
 		break;
 	case 'N':
-		if (strncmp ("NLG", str, 3) == 0)
+		if (g_str_equal ("NLG", str))
 			return GNM_const (2.20371);
 		break;
 	case 'P':
-		if (strncmp ("PTE", str, 3) == 0)
+		if (g_str_equal ("PTE", str))
 			return GNM_const (200.482);
 		break;
 	case 'S':
-		if (strncmp ("SIT", str, 3) == 0)
+		if (g_str_equal ("SIT", str))
 			return GNM_const (239.640);
-		else if (strncmp ("SKK", str, 3) == 0)
+		else if (g_str_equal ("SKK", str))
 			return GNM_const (30.1260);
 		break;
 	default:
@@ -2128,65 +2061,65 @@ euro_local_rounding (char const *str)
 {
 	switch (*str) {
 	case 'A':
-/* 		if (strncmp ("ATS", str, 3) == 0) */
+/* 		if (g_str_equal ("ATS", str)) */
 /* 			return 2; */
 		break;
 	case 'B':
-		if (strncmp ("BEF", str, 3) == 0)
+		if (g_str_equal ("BEF", str))
 			return 0;
 		break;
 	case 'C':
-/* 		if (strncmp ("CYP", str, 3) == 0) */
+/* 		if (g_str_equal ("CYP", str)) */
 /* 			return 2; /\*??*\/ */
 		break;
 	case 'D':
-/* 		if (strncmp ("DEM", str, 3) == 0) */
+/* 		if (g_str_equal ("DEM", str)) */
 /* 			return 2; */
 		break;
 	case 'E':
-		if (strncmp ("ESP", str, 3) == 0)
+		if (g_str_equal ("ESP", str))
 			return 0;
-/* 		else if (strncmp ("EEK", str, 3) == 0) */
+/* 		else if (g_str_equal ("EEK", str)) */
 /* 			return 2; */
-/* 		else if (strncmp ("EUR", str, 3) == 0) */
+/* 		else if (g_str_equal ("EUR", str)) */
 /* 			return 2; */
 		break;
 	case 'F':
-/* 		if (strncmp ("FIM", str, 3) == 0) */
+/* 		if (g_str_equal ("FIM", str)) */
 /* 			return 2 */
-/* 		else if (strncmp ("FRF", str, 3) == 0) */
+/* 		else if (g_str_equal ("FRF", str)) */
 /* 			return 2; */
 		break;
 	case 'G':
-		if (strncmp ("GRD", str, 3) == 0)
+		if (g_str_equal ("GRD", str))
 			return 0;
 		break;
 	case 'I':
-		if (strncmp ("ITL", str, 3) == 0)
+		if (g_str_equal ("ITL", str))
 			return 0;
-/* 		else if (strncmp ("IEP", str, 3) == 0) */
+/* 		else if (g_str_equal ("IEP", str)) */
 /* 			return 2; */
 		break;
 	case 'L':
-		if (strncmp ("LUF", str, 3) == 0)
+		if (g_str_equal ("LUF", str))
 			return 0;
 		break;
 	case 'M':
-/* 		if (strncmp ("MTL", str, 3) == 0) */
+/* 		if (g_str_equal ("MTL", str)) */
 /* 			return 2;  /\* ?? *\/ */
 		break;
 	case 'N':
-/* 		if (strncmp ("NLG", str, 3) == 0) */
+/* 		if (g_str_equal ("NLG", str)) */
 /* 			return 2; */
 		break;
 	case 'P':
-		if (strncmp ("PTE", str, 3) == 0)
+		if (g_str_equal ("PTE", str))
 			return 0;
 		break;
 	case 'S':
-/* 		if (strncmp ("SIT", str, 3) == 0) */
+/* 		if (g_str_equal ("SIT", str)) */
 /* 			return 2; */
-/* 		else if (strncmp ("SKK", str, 3) == 0) */
+/* 		else if (g_str_equal ("SKK", str)) */
 /* 			return 2;  /\* ?? *\/ */
 		break;
 	default:
@@ -2230,18 +2163,18 @@ gnumeric_euroconvert (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		gboolean err = FALSE;
 		if (argv[3] != NULL && argv[4] != NULL) {
 			int decimals = value_get_as_int (argv[4]);
-			if (decimals < 3 || decimals > GNM_MAX_EXP)
+			if (decimals < 3 || decimals > 100)
 				return value_new_error_VALUE (ei->pos);
 			else {
 				gnm_float p10 = gnm_pow10 (decimals);
-				inter = gnm_fake_trunc (inter * p10 + 0.5) / p10;
+				inter = gnm_fake_round (inter * p10) / p10;
 			}
 		}
 		inter = inter * c2;
 		if (argv[3] != NULL && !value_get_as_bool (argv[3], &err) && !err) {
 			int decimals = euro_local_rounding (value_peek_string (argv[2]));
 			gnm_float p10 = gnm_pow10 (decimals);
-			inter = gnm_fake_trunc (inter * p10 + 0.5) / p10;
+			inter = gnm_fake_round (inter * p10) / p10;
 		}
 		return value_new_float (inter);
 	} else
@@ -2291,7 +2224,7 @@ gnumeric_price (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
             || g_date_compare (&settlement, &maturity) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (rate < 0.0 || yield < 0.0 || redemption <= 0.0)
+        if (rate < 0 || yield < 0 || redemption <= 0)
                 return value_new_error_NUM (ei->pos);
 
 	return value_new_float (price (&settlement, &maturity, rate, yield,
@@ -2357,11 +2290,11 @@ gnumeric_yield (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
             || g_date_compare (&udata.settlement, &udata.maturity) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (udata.rate < 0.0 || udata.par < 0.0 || udata.redemption <= 0.0)
+        if (udata.rate < 0 || udata.par < 0 || udata.redemption <= 0)
 		return value_new_error_NUM (ei->pos);
 
 	n = coupnum (&udata.settlement, &udata.maturity, &udata.conv);
-	if (n <= 1.0) {
+	if (n <= 1) {
 		gnm_float a = go_coupdaybs (&udata.settlement, &udata.maturity,
 					 &udata.conv);
 		gnm_float d = go_coupdaysnc (&udata.settlement, &udata.maturity,
@@ -2370,11 +2303,11 @@ gnumeric_yield (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 					 &udata.conv);
 
 		gnm_float coeff = udata.conv.freq * e / d;
-		gnm_float num = (udata.redemption / 100.0  +
+		gnm_float num = (udata.redemption / 100  +
 				  udata.rate / udata.conv.freq)
-			- (udata.par / 100.0  +  (a / e  *
+			- (udata.par / 100  +  (a / e  *
 						  udata.rate / udata.conv.freq));
-		gnm_float den = udata.par / 100.0  +  (a / e  *  udata.rate /
+		gnm_float den = udata.par / 100  +  (a / e  *  udata.rate /
 							udata.conv.freq);
 
 		return value_new_float (num / den * coeff);
@@ -2425,17 +2358,12 @@ static GnmFuncHelp const help_yielddisc[] = {
 static GnmValue *
 gnumeric_yielddisc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     settlement, maturity;
-	gnm_float fPrice, fRedemp;
-	gint      basis;
-	gnm_float ret, yfrac;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+	gnm_float fPrice = value_get_as_float (argv[2]);
+	gnm_float fRedemp = value_get_as_float (argv[3]);
+        int basis = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
 
-	fPrice     = value_get_as_float (argv[2]);
-	fRedemp    = value_get_as_float (argv[3]);
-        basis      = value_get_basis (argv[4], GO_BASIS_MSRB_30_360);
-
+        GDate settlement, maturity;
         if (!is_valid_basis (basis) ||
 	    !datetime_value_to_g (&settlement, argv[0], date_conv) ||
 	    !datetime_value_to_g (&maturity, argv[1], date_conv))
@@ -2446,8 +2374,8 @@ gnumeric_yielddisc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	    g_date_compare (&settlement, &maturity) >= 0)
 		return value_new_error_NUM (ei->pos);
 
-        ret = (fRedemp / fPrice) - 1;
-	yfrac = yearfrac (&settlement, &maturity, basis);
+        gnm_float ret = (fRedemp / fPrice) - 1;
+	gnm_float yfrac = yearfrac (&settlement, &maturity, basis);
 
 	return value_new_float (ret / yfrac);
 }
@@ -2471,16 +2399,12 @@ static GnmFuncHelp const help_yieldmat[] = {
 static GnmValue *
 gnumeric_yieldmat (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     nSettle, nMat, nIssue;
-	gnm_float fRate, fPrice;
-	gint      basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	gnm_float fRate = value_get_as_float (argv[3]);
+	gnm_float fPrice = value_get_as_float (argv[4]);
+        int basis = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
 
-	fRate      = value_get_as_float (argv[3]);
-	fPrice     = value_get_as_float (argv[4]);
-        basis      = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
-
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+        GDate nSettle, nMat, nIssue;
         if (!is_valid_basis (basis) ||
 	    fRate < 0 ||
 	    !datetime_value_to_g (&nSettle, argv[0], date_conv) ||
@@ -2539,8 +2463,9 @@ date_ratio (GDate const *d1, const GDate *d2, const GDate *d3,
 		if (!g_date_valid (&next_coupon))
 			return gnm_nan;
 		if (g_date_compare (&next_coupon, d2) >= 0) {
-			res += go_date_days_between_basis (&prev_coupon, d2, conv->basis) /
+			gnm_float delta = go_date_days_between_basis (&prev_coupon, d2, conv->basis) /
 				go_coupdays (&prev_coupon, &next_coupon, conv);
+			res += delta;
 			return res;
 		}
 		res += 1;
@@ -2559,8 +2484,8 @@ calc_oddfprice (const GDate *settlement, const GDate *maturity,
 	gnm_float df = go_date_days_between_basis (issue, first_coupon, conv->basis);
 	gnm_float e = go_coupdays (settlement, maturity, conv);
 	int n = (int)coupnum (settlement, maturity, conv);
-	gnm_float scale = 100.0 * rate / conv->freq;
-	gnm_float f = 1.0 + yield / conv->freq;
+	gnm_float scale = 100 * rate / conv->freq;
+	gnm_float f = 1 + yield / conv->freq;
 	gnm_float sum, term1, term2;
 
 	if (ds > e) {
@@ -2593,7 +2518,7 @@ calc_oddfprice (const GDate *settlement, const GDate *maturity,
 		}
 	}
 
-	term1 = redemption / gnm_pow (f, n - 1.0 + ds / e);
+	term1 = redemption / gnm_pow (f, n - 1 + ds / e);
 	term2 = (df / e) / gnm_pow (f, ds / e);
 	sum = gnm_pow (f, -ds / e) *
 		(gnm_pow (f, -n) - 1 / f) / (1 / f - 1);
@@ -2632,7 +2557,7 @@ gnumeric_oddfprice (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	    || g_date_compare (&first_coupon, &maturity) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (rate < 0.0 || yield < 0.0 || redemption <= 0.0)
+        if (rate < 0 || yield < 0 || redemption <= 0)
                 return value_new_error_NUM (ei->pos);
 
 	return value_new_float
@@ -2710,7 +2635,7 @@ gnumeric_oddfyield (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	    || g_date_compare (&udata.first_coupon, &udata.maturity) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (udata.rate < 0.0 || udata.price <= 0.0 || udata.redemption <= 0.0)
+        if (udata.rate < 0 || udata.price <= 0 || udata.redemption <= 0)
                 return value_new_error_NUM (ei->pos);
 
 	goal_seek_initialize (&data);
@@ -2806,7 +2731,7 @@ gnumeric_oddlprice (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	    g_date_compare (&last_interest, &settlement) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (rate < 0.0 || yield < 0.0 || redemption <= 0.0)
+        if (rate < 0 || yield < 0 || redemption <= 0)
                 return value_new_error_NUM (ei->pos);
 
 	return value_new_float
@@ -2884,7 +2809,7 @@ gnumeric_oddlyield (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	    g_date_compare (&last_interest, &settlement) > 0)
 		return value_new_error_NUM (ei->pos);
 
-        if (rate < 0.0 || price <= 0.0 || redemption <= 0.0)
+        if (rate < 0 || price <= 0 || redemption <= 0)
                 return value_new_error_NUM (ei->pos);
 
 	return value_new_float
@@ -2927,18 +2852,14 @@ static GnmFuncHelp const help_amordegrc[] = {
 static GnmValue *
 gnumeric_amordegrc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     nDate, nFirstPer;
-	gnm_float fRestVal, fRate, fCost;
-	gint      basis, nPer;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	gnm_float fCost = value_get_as_float (argv[0]);
+	gnm_float fRestVal = value_get_as_float (argv[3]);
+        int nPer = value_get_as_int (argv[4]);
+	gnm_float fRate = value_get_as_float (argv[5]);
+        int basis = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
 
-	fCost      = value_get_as_float (argv[0]);
-	fRestVal   = value_get_as_float (argv[3]);
-        nPer       = value_get_as_int (argv[4]);
-	fRate      = value_get_as_float (argv[5]);
-        basis      = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
-
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+        GDate nDate, nFirstPer;
         if (!is_valid_basis (basis) ||
 	    fRate < 0 ||
 	    !datetime_value_to_g (&nDate, argv[1], date_conv) ||
@@ -2973,18 +2894,14 @@ static GnmFuncHelp const help_amorlinc[] = {
 static GnmValue *
 gnumeric_amorlinc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     nDate, nFirstPer;
-	gnm_float fCost, fRestVal, fRate;
-	gint      nPer, basis;
-	GODateConventions const *date_conv =
-		sheet_date_conv (ei->pos->sheet);
+	gnm_float fCost = value_get_as_float (argv[0]);
+	gnm_float fRestVal = value_get_as_float (argv[3]);
+        gnm_float nPer = value_get_as_int (argv[4]);
+	gnm_float fRate = value_get_as_float (argv[5]);
+        int basis = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
 
-	fCost      = value_get_as_float (argv[0]);
-	fRestVal   = value_get_as_float (argv[3]);
-        nPer       = value_get_as_int (argv[4]);
-	fRate      = value_get_as_float (argv[5]);
-        basis      = value_get_basis (argv[6], GO_BASIS_MSRB_30_360);
-
+	GODateConventions const *date_conv = sheet_date_conv (ei->pos->sheet);
+        GDate nDate, nFirstPer;
         if (!is_valid_basis (basis) ||
 	    fRate < 0 ||
 	    !datetime_value_to_g (&nDate, argv[1], date_conv) ||
@@ -3162,17 +3079,14 @@ static GnmFuncHelp const help_cumipmt[] = {
 static GnmValue *
 gnumeric_cumipmt (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float fRate, fVal;
-	gint       nNumPeriods, nStartPer, nEndPer, nPayType;
+	gnm_float fRate = value_get_as_float (argv[0]);
+        int nNumPeriods = value_get_as_int (argv[1]);
+	gnm_float fVal = value_get_as_float (argv[2]);
+        int nStartPer = value_get_as_int (argv[3]);
+        int nEndPer = value_get_as_int (argv[4]);
+        int nPayType = value_get_paytype (argv[5]);
+
 	GnmValue      *result;
-
-	fRate       = value_get_as_float (argv[0]);
-        nNumPeriods = value_get_as_int (argv[1]);
-	fVal        = value_get_as_float (argv[2]);
-        nStartPer   = value_get_as_int (argv[3]);
-        nEndPer     = value_get_as_int (argv[4]);
-        nPayType    = value_get_paytype (argv[5]);
-
         if ( nStartPer < 1 || nEndPer < nStartPer || fRate <= 0
 	     || nEndPer > nNumPeriods || nNumPeriods <= 0
 	     || fVal <= 0 || !is_valid_paytype (nPayType) ) {
@@ -3183,7 +3097,7 @@ gnumeric_cumipmt (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	result = get_cumipmt (fRate, nNumPeriods, fVal, nStartPer, nEndPer,
 			      nPayType);
 
- out:
+out:
 	return result;
 }
 
@@ -3206,17 +3120,14 @@ static GnmFuncHelp const help_cumprinc[] = {
 static GnmValue *
 gnumeric_cumprinc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float fRate, fVal;
-	gint       nNumPeriods, nStartPer, nEndPer, nPayType;
+	gnm_float fRate = value_get_as_float (argv[0]);
+        int nNumPeriods = value_get_as_int (argv[1]);
+	gnm_float fVal = value_get_as_float (argv[2]);
+        int nStartPer = value_get_as_int (argv[3]);
+        int nEndPer = value_get_as_int (argv[4]);
+        int nPayType = value_get_paytype (argv[5]);
+
 	GnmValue      *result;
-
-	fRate       = value_get_as_float (argv[0]);
-        nNumPeriods = value_get_as_int (argv[1]);
-	fVal        = value_get_as_float (argv[2]);
-        nStartPer   = value_get_as_int (argv[3]);
-        nEndPer     = value_get_as_int (argv[4]);
-        nPayType    = value_get_paytype (argv[5]);
-
         if ( nStartPer < 1 || nEndPer < nStartPer || fRate <= 0
 	     || nEndPer > nNumPeriods || nNumPeriods <= 0
 	     || fVal <= 0 || !is_valid_paytype (nPayType)) {
@@ -3253,27 +3164,25 @@ static GnmFuncHelp const help_mduration[] = {
 static GnmValue *
 gnumeric_mduration (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-        GDate     nSettle, nMat;
-	gnm_float fCoup, fYield;
-        gnm_float fNumOfCoups;
 	GoCouponConvention conv;
 
 	conv.date_conv = sheet_date_conv (ei->pos->sheet);
 	conv.eom = TRUE;
 
-	fCoup      = value_get_as_float (argv[2]);
-	fYield     = value_get_as_float (argv[3]);
+	gnm_float fCoup = value_get_as_float (argv[2]);
+	gnm_float fYield = value_get_as_float (argv[3]);
 	conv.freq  = value_get_freq (argv[4]);
         conv.basis = value_get_basis (argv[5], GO_BASIS_MSRB_30_360);
         conv.eom   = FALSE;
 
+        GDate  nSettle, nMat;
         if (!is_valid_basis (conv.basis) ||
 	    !is_valid_freq (conv.freq) ||
 	    !datetime_value_to_g (&nSettle, argv[0], conv.date_conv) ||
 	    !datetime_value_to_g (&nMat, argv[1], conv.date_conv))
 		return value_new_error_NUM (ei->pos);
 
-	fNumOfCoups = coupnum (&nSettle, &nMat, &conv);
+	gnm_float fNumOfCoups = coupnum (&nSettle, &nMat, &conv);
 	return get_mduration (&nSettle, &nMat, fCoup, fYield, conv.freq,
 			      conv.basis, fNumOfCoups);
 }
@@ -3298,16 +3207,13 @@ static GnmFuncHelp const help_vdb[] = {
 static GnmValue *
 gnumeric_vdb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	gnm_float cost, salvage, life, factor, start_period, end_period;
-	gboolean   bflag;
-
-	cost         = value_get_as_float (argv[0]);
-	salvage      = value_get_as_float (argv[1]);
-	life         = value_get_as_float (argv[2]);
-	start_period = value_get_as_float (argv[3]);
-	end_period   = value_get_as_float (argv[4]);
-	factor       = argv[5] ? value_get_as_float (argv[5]) : 2;
-        bflag        = argv[6] ? value_get_as_int (argv[6]) : 0;
+	gnm_float cost = value_get_as_float (argv[0]);
+	gnm_float salvage = value_get_as_float (argv[1]);
+	gnm_float life = value_get_as_float (argv[2]);
+	gnm_float start_period = value_get_as_float (argv[3]);
+	gnm_float end_period = value_get_as_float (argv[4]);
+	gnm_float factor = argv[5] ? value_get_as_float (argv[5]) : 2;
+        gboolean bflag = argv[6] ? value_get_as_checked_bool (argv[6]) : FALSE;
 
         if ( start_period < 0 || end_period < start_period
 	     || end_period > life || cost < 0 || salvage > cost

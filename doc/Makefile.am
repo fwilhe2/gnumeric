@@ -1,13 +1,17 @@
 ## Process this file with automake to produce Makefile.in.
 
 SUBDIRS =
-EXTRA_DIST=make-func-list.pl
+EXTRA_DIST=make-func-list.pl C/gnumeric-docbook-2-htmlhelp.xsl
 noinst_DATA=
 DISTCLEANFILES=
 
 @YELP_HELP_RULES@
 
 HELP_ID=gnumeric
+
+REALITSTOOL=@ITSTOOL@
+ITSTOOLWRAPPER=$(abs_top_srcdir)/tools/itstoolwrapper
+ITSTOOL=$(PERL) $(ITSTOOLWRAPPER) "$(REALITSTOOL)"
 
 ## Unfortunately, I have to turn off "cs" translations.  I am unable to
 ## release without.  The cause is an itstool and/or libxml2 bug that causes
@@ -28,7 +32,8 @@ HELP_ID=gnumeric
 HELP_LINGUAS=de es sv
 HELP_FILES=gnumeric.xml
 
-HELP_EXTRA=					\
+HELP_EXTRA=                                    \
+	gnumeric.xml				\
 	about-authors.xml			\
 	about-history.xml			\
 	about-license.xml			\
@@ -579,6 +584,14 @@ noinst_DATA += gnumeric.pdf
 EXTRA_DIST += gnumeric.pdf
 endif
 
+html:
+	mkdir -p C/html
+	(cd C && 							\
+	 xmllint --noent -o gnumeric-tmp.xml gnumeric.xml &&		\
+	 yelp-build html -o html gnumeric-tmp.xml &&			\
+	 rm -f gnumeric-tmp.xml)
+
+
 if ENABLE_PDF_VIA_DBCONTEXT
 gnumeric.pdf:
 	(cd C && env TEXINPUTS=$(srcdir):.: dbcontext -t tex -Pfo.setup=1 -I . \
@@ -602,7 +615,9 @@ gnumeric.pdf:
 		-P latex.encoding=utf8 \
 		-P latex.output.revhistory=0 \
 		-o ../gnumeric.tex $(srcdir)/gnumeric.xml)
-	sed -i -e 's/\xE2\xA8\x89/\\ensuremath{\\times}/' gnumeric.tex
+	sed -i -e 's/T2A,T2D,T1/T2A,T2D,LGR,T1/' gnumeric.tex
+	sed -i -e 's/utf8x/utf8/' gnumeric.tex
+	sed -i -f utf8.sed gnumeric.tex
 	sed -i -e 's/\\begin{verbatim}\([^_]*\)\\end{verbatim}/\\texttt{\1}/g' gnumeric.tex
 	sed -i -e 's/\texttt{\emph{\small{\(.*\)}}}:/\texttt{\emph{\1}}:/g' gnumeric.tex
 	sed -i -e 's/ *>{} */\\ensuremath{{}>{}}/g' gnumeric.tex
@@ -616,7 +631,7 @@ endif
 
 manpagedir   = $(mandir)/man1
 manpage_DATA = gnumeric.1 ssconvert.1 ssindex.1 ssgrep.1 ssdiff.1
-EXTRA_DIST += $(manpage_DATA)
+EXTRA_DIST += $(manpage_DATA) utf8.sed
 
 winhelp_DATA =
 winhelpdir=$(gnumeric_datadir)/$(subdir)

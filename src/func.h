@@ -1,5 +1,5 @@
-#ifndef _GNM_FUNC_H_
-# define _GNM_FUNC_H_
+#ifndef GNM_FUNC_H_
+#define GNM_FUNC_H_
 
 #include <gnumeric.h>
 #include <dependent.h>
@@ -15,7 +15,7 @@ GPtrArray *gnm_func_enumerate (void);
 /******************************************************************************/
 /* Function group support */
 
-struct _GnmFuncGroup {
+struct GnmFuncGroup_ {
 	GOString *internal_name, *display_name;
 	gboolean has_translation;
 	GSList *functions;
@@ -161,7 +161,7 @@ typedef struct {
     char const		*text;
 } GnmFuncHelp;
 
-struct _GnmFuncDescriptor {
+struct GnmFuncDescriptor_ {
 	char const *name;
 	char const *arg_spec;
 	GnmFuncHelp const *help;
@@ -215,6 +215,7 @@ void        gnm_func_dispose         (GnmFunc *func);
 GnmFunc	   *gnm_func_inc_usage	     (GnmFunc *func);
 void	    gnm_func_dec_usage	     (GnmFunc *func);
 gboolean    gnm_func_get_in_use      (GnmFunc *func);
+GnmFunc	   *gnm_func_get_and_use      (char const *name);
 
 char const *gnm_func_get_translation_domain (GnmFunc const *func);
 void        gnm_func_set_translation_domain (GnmFunc *func,
@@ -270,7 +271,7 @@ char const *gnm_func_get_description (GnmFunc const *func);
 void        gnm_func_count_args    (GnmFunc const *func, gint *min, int *max);
 char        gnm_func_get_arg_type  (GnmFunc const *func, gint arg_idx);
 char const *gnm_func_get_arg_type_string  (GnmFunc const *func, gint arg_idx);
-char       *gnm_func_get_arg_name  (GnmFunc const *func, guint arg_idx);
+char const *gnm_func_get_arg_name  (GnmFunc const *func, guint arg_idx);
 char const *gnm_func_get_arg_description (GnmFunc const *func, guint arg_idx);
 char       *gnm_func_convert_markup_to_pango (char const *desc,
 					      GtkWidget *target);
@@ -278,25 +279,12 @@ char       *gnm_func_convert_markup_to_pango (char const *desc,
 /*************************************************************************/
 
 GnmValue *function_call_with_exprs	(GnmFuncEvalInfo *ei);
-GnmValue *function_call_with_values     (GnmEvalPos const *ep, char const *name,
-					 int argc, GnmValue const * const *values);
 GnmValue *function_def_call_with_values (GnmEvalPos const *ep, GnmFunc const *fn,
 					 int argc, GnmValue const * const *values);
 
-/* Utilies to interate through ranges and argument lists */
-typedef GnmValue * (*FunctionIterateCB) (GnmEvalPos const *ep, GnmValue const *value,
-					 gpointer user_data);
-GnmValue *function_iterate_argument_values (GnmEvalPos const *ep,
-					    FunctionIterateCB callback,
-					    gpointer callback_closure,
-					    int argc,
-					    GnmExprConstPtr const *argv,
-					    gboolean strict,
-					    CellIterFlags iter_flags);
-
 /*************************************************************************/
 
-struct _GnmFuncEvalInfo {
+struct GnmFuncEvalInfo_ {
 	GnmEvalPos const *pos;
 	GnmExprFunction const *func_call;
 	GnmExprEvalFlags flags;
@@ -314,4 +302,4 @@ GnmExpr const *gnm_func_derivative (GnmFunc *func,
 
 G_END_DECLS
 
-#endif /* _GNM_FUNC_H_ */
+#endif /* GNM_FUNC_H_ */

@@ -81,6 +81,7 @@
 				<function name="munit"/>
 				<function name="odd"/>
 				<function name="odf.sumproduct"/>
+				<function name="percentof"/>
 				<function name="pi"/>
 				<function name="pochhammer"/>
 				<function name="power"/>

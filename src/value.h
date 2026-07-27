@@ -1,5 +1,5 @@
-#ifndef _GNM_VALUE_H_
-# define _GNM_VALUE_H_
+#ifndef GNM_VALUE_H_
+#define GNM_VALUE_H_
 
 #include <gnumeric.h>
 #include <position.h>
@@ -35,39 +35,39 @@ typedef struct {
 	GnmValueType const type;
 	GOFormat const *fmt;
 } GnmValueAny;
-struct _GnmValueBool {
+struct GnmValueBool_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	gboolean val;
 };
-struct _GnmValueFloat {
+struct GnmValueFloat_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	gnm_float val;
 };
-struct _GnmValueErr {
+struct GnmValueErr_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	GOString   *mesg;
 };
-struct _GnmValueStr {
+struct GnmValueStr_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	GOString   *val;
 };
-struct _GnmValueRange {
+struct GnmValueRange_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	GnmRangeRef cell;
 };
-struct _GnmValueArray {
+struct GnmValueArray_ {
 	GnmValueType const type;
 	GOFormat *fmt;
 	int x, y;
 	GnmValue ***vals;  /* Array [x][y] */
 };
 
-union _GnmValue {
+union GnmValue_ {
 	GnmValueAny	v_any;
 	GnmValueBool	v_bool;
 	GnmValueFloat	v_float;
@@ -112,6 +112,7 @@ GnmValue *value_new_error_REF        (GnmEvalPos const *pos);
 GnmValue *value_new_error_NAME       (GnmEvalPos const *pos);
 GnmValue *value_new_error_NUM        (GnmEvalPos const *pos);
 GnmValue *value_new_error_NA         (GnmEvalPos const *pos);
+GnmValue *value_new_error_SPILL      (GnmEvalPos const *pos);
 GnmValue *value_new_string           (char const *str);
 GnmValue *value_new_string_nocopy    (char *str);
 GnmValue *value_new_string_str       (GOString *str);
@@ -184,6 +185,9 @@ GnmValue const *value_area_fetch_x_y  (GnmValue const *v, int x, int y,
 				       GnmEvalPos const *ep);
 GnmValue const *value_area_get_x_y    (GnmValue const *v, int x, int y,
 				       GnmEvalPos const *ep);
+GnmValue       *value_area_slice      (GnmValue const *v,
+				       int x0, int y0, int x1, int y1,
+				       GnmEvalPos const *ep);
 
 /* A zero integer, not to be freed or changed.  */
 extern GnmValue const *value_zero;
@@ -199,4 +203,4 @@ void value_shutdown (void);
 
 G_END_DECLS
 
-#endif /* _GNM_VALUE_H_ */
+#endif /* GNM_VALUE_H_ */

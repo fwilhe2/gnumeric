@@ -8,7 +8,9 @@ use GnumericTest;
 # See test_importer comments for mode definitions.
 my $mode = ((shift @ARGV) || "check");
 
+my $args = { 'mode' => $mode, 'nofont' => 1 };
+
 &message ("Check the sylk importer.");
-&test_importer ("$samples/sylk/test.sylk", "a3ac97c57ab78f01daf3ac9a8dc593f0f610d360", $mode);
-&test_importer ("$samples/sylk/encoding.sylk", "72c3358523817b1fb8e04173fb860a1e32c87ca8", $mode);
-&test_importer ("$samples/sylk/app_b2.sylk", "d0a8fb5fec00092c6a477a898be7f3e404872c2b", $mode);
+&test_importer ("$samples/sylk/test.sylk", "e776338d8366eda1daaf5fb7af14befcb0a50ac6", $args);
+&test_importer ("$samples/sylk/encoding.sylk", "811348c9ca4a2c1424fd923527c6c8531ae197ae", $args);
+&test_importer ("$samples/sylk/app_b2.sylk", "db154e3188aae004981f3d2ce1a5b69692ad5460", $args);

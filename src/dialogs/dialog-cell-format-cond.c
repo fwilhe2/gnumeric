@@ -49,7 +49,7 @@
 #define CELL_FORMAT_KEY "cell-format-cond-dialog"
 #define CELL_FORMAT_DEF_KEY "cell-format-cond-def-dialog"
 
-typedef struct _CFormatState {
+typedef struct {
 	GtkBuilder	*gui;
 	WBCGtk	        *wbcg;
 	GtkDialog	*dialog;
@@ -171,16 +171,14 @@ c_fmt_dialog_set_sensitive (CFormatState *state)
 								NULL, FALSE,
 								GNM_EXPR_PARSE_UNKNOWN_NAMES_ARE_STRINGS);
 		ok = (texpr != NULL);
-		if (texpr)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 	if (ok && gtk_widget_get_sensitive (state->editor.expr_y)) {
 		GnmExprTop const *texpr = gnm_expr_entry_parse (GNM_EXPR_ENTRY (state->editor.expr_y), &pp,
 								NULL, FALSE,
 								GNM_EXPR_PARSE_UNKNOWN_NAMES_ARE_STRINGS);
 		ok = (texpr != NULL);
-		if (texpr)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 	}
 
 	gtk_widget_set_sensitive (state->editor.add_button, ok);
@@ -605,9 +603,9 @@ c_fmt_dialog_chooser_load_combo (CFormatState *state)
 						   1, cond_types[i].type,
 						   2, cond_types[i].n_expressions,
 						   -1);
-	cell = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(state->editor.combo), cell, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(state->editor.combo), cell, "text", 0, NULL);
+	cell = gtk_cell_renderer_text_new ();
+	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->editor.combo), cell, TRUE);
+	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (state->editor.combo), cell, "text", 0, NULL);
 	if (gtk_tree_model_get_iter_first
 	    (GTK_TREE_MODEL (state->editor.typestore), &iter))
 		gtk_combo_box_set_active_iter (GTK_COMBO_BOX (state->editor.combo), &iter);
@@ -664,7 +662,7 @@ c_fmt_dialog_condition_setter_tiled (G_GNUC_UNUSED SheetView *sv, GnmRange const
 		gnm_style_unref (state->action.old_style);
 		state->action.old_style = NULL;
 	}
-	style_list_free (list);
+	sheet_style_list_free (list);
 	return TRUE;
 }
 
@@ -1055,7 +1053,7 @@ c_fmt_dialog_condition_collector (G_GNUC_UNUSED SheetView *sv, GnmRange const *r
 			(sr->style, range_as_string (&r), state);
 	}
 
-	style_list_free (list);
+	sheet_style_list_free (list);
 	return TRUE;
 
 }
@@ -1172,7 +1170,7 @@ c_fmt_dialog_init_editor_page (CFormatState *state)
 	state->editor.expr_x = GTK_WIDGET (gnm_expr_entry_new (state->wbcg, TRUE));
 	gtk_grid_attach (grid, state->editor.expr_x, 1, 2, 2, 1);
 	gtk_widget_set_hexpand (state->editor.expr_x, TRUE);
-	gtk_widget_show(state->editor.expr_x);
+	gtk_widget_show (state->editor.expr_x);
 	gnm_expr_entry_set_flags (GNM_EXPR_ENTRY (state->editor.expr_x),
 				  GNM_EE_SHEET_OPTIONAL |
 				  GNM_EE_CONSTANT_ALLOWED,
@@ -1181,7 +1179,7 @@ c_fmt_dialog_init_editor_page (CFormatState *state)
 	state->editor.expr_y = GTK_WIDGET (gnm_expr_entry_new (state->wbcg, TRUE));
 	gtk_grid_attach (grid, state->editor.expr_y, 1, 3, 2, 1);
 	gtk_widget_set_hexpand (state->editor.expr_y, TRUE);
-	gtk_widget_show(state->editor.expr_y);
+	gtk_widget_show (state->editor.expr_y);
 	gnm_expr_entry_set_flags (GNM_EXPR_ENTRY (state->editor.expr_y),
 				  GNM_EE_SHEET_OPTIONAL |
 				  GNM_EE_CONSTANT_ALLOWED,
@@ -1273,7 +1271,7 @@ c_fmt_dialog_init_conditions_page (CFormatState *state)
 			      (GnmSelectionFunc)cb_c_format_dialog_range,
 			      str);
 	g_string_truncate (str, str->len -2);
-	gtk_label_set_text(hl, str->str);
+	gtk_label_set_text (hl, str->str);
 	g_string_free (str, TRUE);
 
 	g_signal_connect (G_OBJECT (state->selection), "changed",
@@ -1338,7 +1336,7 @@ dialog_cell_format_cond (WBCGtk *wbcg)
 					   GNM_DIALOG_DESTROY_CURRENT_SHEET_REMOVED);
 
 	/* a candidate for merging into attach guru */
-	wbc_gtk_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
+	wbcg_attach_guru (state->wbcg, GTK_WIDGET (state->dialog));
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify)cb_c_fmt_dialog_dialog_destroy);
 	g_signal_connect (G_OBJECT (dialog), "destroy",

@@ -3,6 +3,7 @@
  *			like wrappers in libgsf
  *
  * Copyright (C) 2003-2007 Jody Goldberg (jody@gnome.org)
+ * Copyright (C) 2024 Morten Welinder <terra@gnome.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -90,7 +91,7 @@ gnm_xml_out_add_gocolor (GsfXMLOut *o, char const *id, GOColor c)
 	 * 0 to FFFF.
 	 *
 	 * Note, that while go_xml_out_add_color exists, we cannot use
-	 * it as it using a 0-255 scaling and always includes alpha.
+	 * it as it is using a 0-255 scaling and always includes alpha.
 	 */
 	unsigned r, g, b, a;
 	char buf[4 * 4 * sizeof (unsigned int) + 1];
@@ -670,7 +671,7 @@ xml_write_style (GnmOutputXML *state, GnmStyle const *style)
 			}
 
 			gsf_xml_out_start_element (state->output,
-				border_names [i - MSTYLE_BORDER_TOP]);
+				border_names[i - MSTYLE_BORDER_TOP]);
 			gsf_xml_out_add_int (state->output, "Style", t);
 			gnm_xml_out_add_color (state->output, "Color", col);
 			gsf_xml_out_end_element (state->output);
@@ -720,7 +721,7 @@ xml_write_styles (GnmOutputXML *state)
 		for (ptr = styles; ptr; ptr = ptr->next)
 			xml_write_style_region (state, ptr->data);
 		gsf_xml_out_end_element (state->output);
-		style_list_free (styles);
+		sheet_style_list_free (styles);
 	}
 }
 
@@ -981,7 +982,7 @@ xml_write_filter_expr (GnmOutputXML *state,
 {
 	static char const *filter_cond_name[] = { "eq", "gt", "lt", "gte", "lte", "ne" };
 	/*
-	 * WARNING WARNING WARING
+	 * WARNING WARNING WARNING
 	 * Value and ValueType are _reversed !!!
 	 */
 	static struct { char const *op, *valtype, *val; } filter_expr_attrs[] = {
@@ -992,7 +993,7 @@ xml_write_filter_expr (GnmOutputXML *state,
 	GString *text = g_string_new (NULL);
 	value_get_as_gstring (cond->value[i], text, state->convs);
 	gsf_xml_out_add_cstr_unchecked (state->output,
-		filter_expr_attrs[i].op, filter_cond_name [cond->op[i]]);
+		filter_expr_attrs[i].op, filter_cond_name[cond->op[i]]);
 	gsf_xml_out_add_int (state->output,
 		filter_expr_attrs[i].valtype, cond->value[i]->v_any.type);
 	gsf_xml_out_add_cstr (state->output,
@@ -1024,9 +1025,11 @@ xml_write_filter_field (GnmOutputXML *state,
 	case GNM_FILTER_OP_TOP_N:
 		gsf_xml_out_add_cstr_unchecked (state->output, "Type", "bucket");
 		gsf_xml_out_add_bool (state->output, "top",
-			cond->op[0] & 1 ? TRUE : FALSE);
+				      !(cond->op[0] & GNM_FILTER_OP_BOTTOM_MASK));
 		gsf_xml_out_add_bool (state->output, "items",
-			cond->op[0] & 2 ? TRUE : FALSE);
+				      !(cond->op[0] & GNM_FILTER_OP_PERCENT_MASK));
+		gsf_xml_out_add_bool (state->output, "rel_range",
+				      !(cond->op[0] & GNM_FILTER_OP_REL_N_MASK));
 		go_xml_out_add_double (state->output, "count", cond->count);
 		break;
 	}
@@ -1309,8 +1312,8 @@ xml_write_objects (GnmOutputXML *state, GSList *objects)
 					      GNM_SHEET_OBJECT_ANCHOR_MODE_TYPE,
 					      so->anchor.mode);
 		snprintf (buffer, sizeof (buffer), "%.3g %.3g %.3g %.3g",
-			  so->anchor.offset [0], so->anchor.offset [1],
-			  so->anchor.offset [2], so->anchor.offset [3]);
+			  so->anchor.offset[0], so->anchor.offset[1],
+			  so->anchor.offset[2], so->anchor.offset[3]);
 		gsf_xml_out_add_cstr (state->output, "ObjectOffset", buffer);
 
 		gsf_xml_out_add_int (state->output, "Direction",
@@ -1442,7 +1445,7 @@ xml_write_number_system (GnmOutputXML *state)
 	 * number system of the loading Gnumeric is different from the
 	 * number system of the saving Gnumeric.
 	 */
-	gsf_xml_out_add_int (state->output, "FloatRadix", FLT_RADIX);
+	gsf_xml_out_add_int (state->output, "FloatRadix", GNM_RADIX);
 	gsf_xml_out_add_int (state->output, "FloatDigits", GNM_MANT_DIG);
 }
 
@@ -1457,7 +1460,7 @@ xml_write_calculation (GnmOutputXML *state)
 		"EnableIteration",	state->wb->iteration.enabled);
 	gsf_xml_out_add_int (state->output,
 		"MaxIterations",	state->wb->iteration.max_number);
-	go_xml_out_add_double (state->output,
+	gnm_xml_out_add_gnm_float (state->output,
 		"IterationTolerance",	state->wb->iteration.tolerance);
 	xml_write_date_conventions_as_attr (state,
 					    workbook_date_conv (state->wb));
@@ -1465,11 +1468,16 @@ xml_write_calculation (GnmOutputXML *state)
 	gsf_xml_out_end_element (state->output); /* </gnm:Calculation> */
 }
 
+/**
+ * gnm_xml_io_conventions:
+ *
+ * Returns: (transfer full): new #GnmConventions suitable for import/export
+ * to the gnumeric format.
+ */
 GnmConventions *
 gnm_xml_io_conventions (void)
 {
 	GnmConventions *res = gnm_conventions_new ();
-	gnm_float l10;
 
 	res->decimal_sep_dot	= TRUE;
 	res->input.range_ref	= rangeref_parse;
@@ -1479,10 +1487,14 @@ gnm_xml_io_conventions (void)
 	res->array_col_sep	= ',';
 	res->array_row_sep	= ';';
 	res->output.translated	= FALSE;
+	res->output.uppercase_E = FALSE;
 
-	l10 = gnm_log10 (FLT_RADIX);
-	res->output.decimal_digits = (int)gnm_ceil (GNM_MANT_DIG * l10) +
-		(l10 == (int)l10 ? 0 : 1);
+	if (!gnm_shortest_rep_in_files ()) {
+		gnm_float l10 = gnm_log10 (GNM_RADIX);
+		res->output.decimal_digits =
+			(int)gnm_ceil (GNM_MANT_DIG * l10) +
+			(l10 == (int)l10 ? 0 : 1);
+	}
 
 	return res;
 }
@@ -1553,7 +1565,7 @@ gnm_xml_file_save_full (G_GNUC_UNUSED GOFileSaver const *fs,
 
 	g_hash_table_destroy (state.expr_map);
 	g_string_free (state.cell_str, TRUE);
-	gnm_conventions_unref (state.convs);
+	g_clear_object (&state.convs);
 	g_object_unref (state.output);
 
 	if (gzout) {
@@ -1717,7 +1729,7 @@ gnm_cellregion_to_xml (GnmCellRegion const *cr)
 
 	g_hash_table_destroy (state.state.expr_map);
 	g_string_free (state.state.cell_str, TRUE);
-	gnm_conventions_unref (state.state.convs);
+	g_clear_object (&state.state.convs);
 	g_object_unref (state.state.output);
 
 	gsf_output_close (buf);

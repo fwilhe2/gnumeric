@@ -44,8 +44,8 @@ so_component_view_set_bounds (SheetObjectView *sov, double const *coords, gboole
 		GOComponent *component = sheet_object_component_get_component (sheet_object_view_get_so (sov));
 		double width, height;
 		goc_item_set (GOC_ITEM (sov),
-			"x", MIN (coords [0], coords[2]) / scale,
-			"y", MIN (coords [3], coords[1]) / scale,
+			"x", MIN (coords[0], coords[2]) / scale,
+			"y", MIN (coords[3], coords[1]) / scale,
 			NULL);
 		if (component && ! go_component_is_resizable (component)) {
 			go_component_get_size (component, &width, &height);
@@ -56,8 +56,8 @@ so_component_view_set_bounds (SheetObjectView *sov, double const *coords, gboole
 				NULL);
 		} else
 			goc_item_set (item,
-				"width", (fabs (coords [2] - coords [0]) + 1.) / scale,
-				"height", (fabs (coords [3] - coords [1]) + 1.) / scale,
+				"width", (fabs (coords[2] - coords[0]) + 1.) / scale,
+				"height", (fabs (coords[3] - coords[1]) + 1.) / scale,
 				NULL);
 
 		goc_item_show (item);
@@ -381,7 +381,7 @@ gnm_soc_user_config (SheetObject *so, SheetControl *sc)
 		data->wbc = GNM_WBC (scg_wbcg (GNM_SCG (sc)));
 		data->signal = g_signal_connect (new_comp, "changed", G_CALLBACK (component_changed_cb), data);
 		g_object_set_data_full (G_OBJECT (w), "editor", data, (GDestroyNotify) destroy_cb);
-		wbc_gtk_attach_guru (scg_wbcg (GNM_SCG (sc)), w);
+		wbcg_attach_guru (scg_wbcg (GNM_SCG (sc)), w);
 	}
 }
 

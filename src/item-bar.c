@@ -30,7 +30,7 @@
 
 #include <string.h>
 
-struct _GnmItemBar {
+struct GnmItemBar_ {
 	GocItem	 base;
 
 	GnmPane		*pane;
@@ -162,17 +162,10 @@ ib_reload_sizing_style (GnmItemBar *ib)
 		GtkStyleContext *context;
 
 		g_clear_object (&ib->styles[ui]);
-#if GTK_CHECK_VERSION(3,20,0)
 		context = go_style_context_from_selector (NULL, selection_styles[ui]);
-#else
-		context = g_object_ref (goc_item_get_style_context (item));
-#endif
 
 		ib->styles[ui] = context;
 		gtk_style_context_save (context);
-#if !GTK_CHECK_VERSION(3,20,0)
-		gtk_style_context_set_state (context, state);
-#endif
 		gtk_style_context_get (context, state, "font", &desc, NULL);
 		pango_font_description_set_size (desc,
 						 zoom_factor * pango_font_description_get_size (desc));
@@ -238,7 +231,7 @@ ib_reload_sizing_style (GnmItemBar *ib)
  *
  * Scale fonts and sizes by the pixels_per_unit of the associated sheet.
  *
- * Returns : the size of the fixed dimension.
+ * Returns: the size of the fixed dimension.
  **/
 int
 gnm_item_bar_calc_size (GnmItemBar *ib)
@@ -297,11 +290,11 @@ item_bar_update_bounds (GocItem *item)
 	item->x0 = 0;
 	item->y0 = 0;
 	if (ib->is_col_header) {
-		item->x1 = G_MAXINT64/2;
+		item->x1 = GNM_CANVAS_INF;
 		item->y1 = (ib->cell_height + ib->indent);
 	} else {
 		item->x1 = (ib->cell_width  + ib->indent);
-		item->y1 = G_MAXINT64/2;
+		item->y1 = GNM_CANVAS_INF;
 	}
 }
 
@@ -349,9 +342,6 @@ ib_draw_cell (GnmItemBar const * const ib, cairo_t *cr,
 	cairo_save (cr);
 
 	gtk_style_context_save (ctxt);
-#if !GTK_CHECK_VERSION(3,20,0)
-	gtk_style_context_set_state (ctxt, selection_type_flags[type]);
-#endif
 	gtk_render_background (ctxt, cr, rect->x, rect->y,
 			       rect->width + 1, rect->height + 1);
 
@@ -783,7 +773,7 @@ item_bar_distance (GocItem *item, double x, double y,
  * NOTE : this could easily be optimized.  We need not start at 0 every time.
  *        We could potentially use the routines in gnm-pane.
  *
- * Returns non-%NULL if point (@x,@y) is on a division
+ * Returns: non-%NULL if point (@x,@y) is on a division
  **/
 static ColRowInfo const *
 is_pointer_on_division (GnmItemBar const *ib, gint64 x, gint64 y,
@@ -824,7 +814,7 @@ is_pointer_on_division (GnmItemBar const *ib, gint64 x, gint64 y,
 			WBCGtk *wbcg = scg_wbcg (ib->pane->simple.scg);
 			total += cri->size_pixels;
 
-			if (wbc_gtk_get_guru (wbcg) == NULL &&
+			if (wbcg_get_guru (wbcg) == NULL &&
 			    !wbcg_is_editing (wbcg) &&
 			    (total - 4 < major) && (major < total + 4)) {
 				if (the_total)
@@ -872,7 +862,7 @@ colrow_tip_setlabel (GnmItemBar *ib, gboolean const is_cols, int size_pixels)
 		pixels = g_strdup_printf (ngettext ("(%d pixel)", "(%d pixels)", size_pixels),
 					  size_pixels);
 
-		if (size_points == gnm_floor (size_points))
+		if (size_points == floor (size_points))
 			/* xgettext: This is input to ngettext based on the integer number of points. */
 			points = g_strdup_printf (ngettext (_("%d.00 pt"), _("%d.00 pts"), (int) gnm_floor (size_points)),
 						  (int) gnm_floor (size_points));
@@ -884,7 +874,7 @@ colrow_tip_setlabel (GnmItemBar *ib, gboolean const is_cols, int size_pixels)
 		g_free (pixels);
 		g_free (points);
 		gtk_label_set_text (GTK_LABEL (ib->tip), buffer);
-		g_free(buffer);
+		g_free (buffer);
 	}
 }
 
@@ -970,7 +960,7 @@ item_bar_button_pressed (GocItem *item, int button, double x_, double y_)
 	if (button > 3)
 		return FALSE;
 
-	if (wbc_gtk_get_guru (wbcg) == NULL)
+	if (wbcg_get_guru (wbcg) == NULL)
 		scg_mode_edit (scg);
 
 	cri = is_pointer_on_division (ib, x, y,
@@ -981,7 +971,7 @@ item_bar_button_pressed (GocItem *item, int button, double x_, double y_)
 		return outline_button_press (ib, element, minor_pos);
 
 	if (button == 3) {
-		if (wbc_gtk_get_guru (wbcg) != NULL)
+		if (wbcg_get_guru (wbcg) != NULL)
 			return TRUE;
 		/* If the selection does not contain the current row/col
 		 * then clear the selection and add it.
@@ -1023,7 +1013,7 @@ item_bar_button_pressed (GocItem *item, int button, double x_, double y_)
 			gtk_widget_show_all (gtk_widget_get_toplevel (ib->tip));
 		}
 	} else {
-		if (wbc_gtk_get_guru (wbcg) != NULL &&
+		if (wbcg_get_guru (wbcg) != NULL &&
 		    !wbcg_entry_has_logical (wbcg))
 			return TRUE;
 
@@ -1214,13 +1204,6 @@ gnm_item_bar_init (GnmItemBar *ib)
 	ib->has_resize_guides = FALSE;
 	ib->pango.item = NULL;
 	ib->pango.glyphs = pango_glyph_string_new ();
-
-#if !GTK_CHECK_VERSION(3,20,0)
-	/* Style-wise we are a button.  */
-	gtk_style_context_add_class
-		(goc_item_get_style_context (GOC_ITEM (ib)),
-		 GTK_STYLE_CLASS_BUTTON);
-#endif
 }
 
 static void

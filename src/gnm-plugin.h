@@ -1,5 +1,5 @@
-#ifndef _GNM_PLUGIN_H_
-# define _GNM_PLUGIN_H_
+#ifndef GNM_PLUGIN_H_
+#define GNM_PLUGIN_H_
 
 #include <gnumeric.h>
 #include <goffice/goffice.h>
@@ -57,7 +57,7 @@ typedef struct {
 
 /**************************************************************************/
 #define GNM_PLUGIN_MODULE_HEADER					\
-G_MODULE_EXPORT GOPluginModuleDepend const go_plugin_depends [] = {	\
+G_MODULE_EXPORT GOPluginModuleDepend const go_plugin_depends[] = {	\
 	{ "goffice",	GOFFICE_API_VERSION },				\
 	{ "gnumeric",	GNM_VERSION_FULL }				\
 };	\
@@ -71,4 +71,4 @@ void gnm_plugins_init (GOCmdContext *c);
 
 G_END_DECLS
 
-#endif /* _GNM_PLUGIN_H_ */
+#endif /* GNM_PLUGIN_H_ */

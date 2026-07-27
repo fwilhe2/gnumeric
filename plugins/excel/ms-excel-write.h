@@ -8,8 +8,8 @@
  * (C) 1998-2001 Michael Meeks
  * (C) 2002-2005 Jody Goldberg
  **/
-#ifndef GNM_MS_EXCEL_WRITE_H
-#define GNM_MS_EXCEL_WRITE_H
+#ifndef GNM_MS_EXCEL_WRITE_H_
+#define GNM_MS_EXCEL_WRITE_H_
 
 #include "ms-biff.h"
 #include "ms-excel-biff.h"
@@ -46,7 +46,7 @@ typedef struct {
 	guint32		 boundsheetPos;
 	gint32		 max_col, max_row;
 	guint16		*col_xf;
-	GnmStyle	**col_style;
+	GPtrArray       *col_style;
 	GnmStyleList	*conditions, *hlinks, *validations;
 	GSList          *blips, *objects, *graphs, *comments;
 	GHashTable	*commentshash;
@@ -77,7 +77,7 @@ typedef struct {
 	GHashTable *pivot_caches;
 } XLExportBase;
 
-struct _XLSExporter {
+struct XLSExporter_ {
 	XLExportBase	base;
 
 	GOIOContext     *io_context;
@@ -159,7 +159,8 @@ int excel_write_map_errcode (GnmValue const *v);
 
 GHashTable *excel_collect_pivot_caches (Workbook const *wb);
 
-void excel_sheet_extent (Sheet const *sheet, GnmRange *extent, GnmStyle **col_styles,
+void excel_sheet_extent (Sheet const *sheet, GnmRange *extent,
+			 GPtrArray *col_styles,
 			 int maxcols, int maxrows, GOIOContext *io_context);
 
 int excel_font_from_go_font (XLExportBase *ewb, GOFont const *font);
@@ -169,4 +170,4 @@ void xls_write_pivot_caches (ExcelWriteState *ewb, GsfOutfile *outfile,
 
 int excel_write_add_object_format (ExcelWriteState *ewb, GOFormat *format);
 
-#endif /* GNM_MS_EXCEL_WRITE_H */
+#endif /* GNM_MS_EXCEL_WRITE_H_ */

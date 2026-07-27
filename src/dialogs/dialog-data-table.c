@@ -1,4 +1,3 @@
-
 /*
  * dialog-data-table.c: Create a Data Table
  *
@@ -114,7 +113,7 @@ data_table_init (GnmDialogDataTable *state, WBCGtk *wbcg)
 	go_gtk_nonmodal_dialog (wbcg_toplevel (state->wbcg),
 		GTK_WINDOW (state->dialog));
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify)cb_data_table_destroy);
 
@@ -134,7 +133,7 @@ dialog_data_table (WBCGtk *wbcg)
 
 	g_return_if_fail (wbcg != NULL);
 
-	if (wbc_gtk_get_guru (wbcg) ||
+	if (wbcg_get_guru (wbcg) ||
 	    gnm_dialog_raise_if_exists (wbcg, DIALOG_DATA_TABLE_KEY))
 		return;
 
@@ -143,7 +142,7 @@ dialog_data_table (WBCGtk *wbcg)
 	if (NULL == r)
 		return;
 	if (range_width	(r) <= 1 || range_height (r) <= 1) {
-		GError *msg = g_error_new (go_error_invalid(), 0,
+		GError *msg = g_error_new (go_error_invalid (), 0,
 			_("The selection must have more than 1 column and row to create a Data Table."));
 		go_cmd_context_error (GO_CMD_CONTEXT (wbcg), msg);
 		g_error_free (msg);

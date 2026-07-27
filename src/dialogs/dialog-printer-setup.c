@@ -92,7 +92,7 @@ typedef struct {
 } HFPreviewInfo;
 
 
-typedef struct _PrinterSetupState PrinterSetupState;
+typedef struct PrinterSetupState_ PrinterSetupState;
 typedef struct {
 	double     value;
 	GtkSpinButton *spin;
@@ -102,7 +102,7 @@ typedef struct {
 	PrinterSetupState *state;
 } UnitInfo;
 
-struct _PrinterSetupState {
+struct PrinterSetupState_ {
 	WBCGtk  *wbcg;
 	Sheet            *sheet;
 	GtkBuilder       *gui;
@@ -166,10 +166,10 @@ struct _PrinterSetupState {
 	} comment_display;
 };
 
-typedef struct _HFCustomizeState HFCustomizeState;
+typedef struct HFCustomizeState_ HFCustomizeState;
 
-typedef struct _HFDTFormatState HFDTFormatState;
-struct _HFDTFormatState {
+typedef struct HFDTFormatState_ HFDTFormatState;
+struct HFDTFormatState_ {
 	GtkWidget        *dialog;
 	GtkBuilder       *gui;
 	HFCustomizeState *hf_state;
@@ -177,7 +177,7 @@ struct _HFDTFormatState {
 	GtkWidget        *format_sel;
 };
 
-struct _HFCustomizeState {
+struct HFCustomizeState_ {
 	GtkWidget        *dialog;
 	GtkBuilder       *gui;
 	PrinterSetupState *printer_setup_state;
@@ -201,8 +201,8 @@ typedef enum {
 	HF_FIELD_CELL
 } HFFieldType;
 
-typedef struct _HFMarkInfo HFMarkInfo;
-struct _HFMarkInfo {
+typedef struct HFMarkInfo_ HFMarkInfo;
+struct HFMarkInfo_ {
 	GtkTextMark *mark;
 	HFFieldType type;
 	char *options;
@@ -442,7 +442,7 @@ margin_preview_page_available_size (PrinterSetupState *state,
 					 NULL);
 
 		/* Determine the requisition size for the widget */
-		gtk_widget_get_preferred_size (GTK_WIDGET(child_widget), &requisition, NULL);
+		gtk_widget_get_preferred_size (GTK_WIDGET (child_widget), &requisition, NULL);
 
 		/* Find largest widget in each table column */
 		/* Exclude widgets that expand across more than one grid cells
@@ -476,8 +476,8 @@ margin_preview_page_available_size (PrinterSetupState *state,
 		available_size->height = available_size->height + heights[i];
 	}
 
-	g_free(widths);
-	g_free(heights);
+	g_free (widths);
+	g_free (heights);
 
 	/* Account for the spacing between table cells */
 	available_size->width = available_size->width +
@@ -807,9 +807,9 @@ do_setup_margin (PrinterSetupState *state)
 		state->unit_selector = gtk_combo_box_new_with_model (GTK_TREE_MODEL (list_store));
 		state->unit_model    = GTK_TREE_MODEL (list_store);
 		text_renderer = gtk_cell_renderer_text_new ();
-		gtk_cell_layout_pack_start (GTK_CELL_LAYOUT(state->unit_selector),
+		gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->unit_selector),
 					    text_renderer, TRUE);
-		gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT(state->unit_selector),
+		gtk_cell_layout_add_attribute (GTK_CELL_LAYOUT (state->unit_selector),
 					       text_renderer, "text", 0);
 
 		gtk_combo_box_set_active_iter (GTK_COMBO_BOX (state->unit_selector), &current);
@@ -900,7 +900,7 @@ display_hf_preview (PrinterSetupState *state, gboolean header)
 	goc_item_set (pi->right, "text", text ? text : "", NULL);
 	g_free (text);
 
-	gnm_print_hf_render_info_destroy (hfi);
+	gnm_print_hf_render_info_free (hfi);
 }
 
 static void
@@ -1034,7 +1034,7 @@ fill_hf (PrinterSetupState *state, GtkComboBox *om, GCallback callback, gboolean
 	gtk_combo_box_set_active (om, idx);
 	g_signal_connect (G_OBJECT (om), "changed", callback, state);
 
-	gnm_print_hf_render_info_destroy (hfi);
+	gnm_print_hf_render_info_free (hfi);
 }
 
 static void
@@ -1435,15 +1435,15 @@ add_named_tags (GtkTextBuffer *buffer)
 	GtkTextTag *tag;
 
 	tag = gtk_text_tag_new (HF_TAG_NAME);
-	g_object_set(tag,
-		     "editable", FALSE,
-		     "underline", TRUE,
-		     "underline-set", TRUE,
-		     "weight", PANGO_WEIGHT_BOLD,
-		     "weight-set", TRUE,
-		     "stretch", PANGO_STRETCH_CONDENSED,
-		     "stretch-set", TRUE,
-		     NULL);
+	g_object_set (tag,
+		      "editable", FALSE,
+		      "underline", TRUE,
+		      "underline-set", TRUE,
+		      "weight", PANGO_WEIGHT_BOLD,
+		      "weight-set", TRUE,
+		      "stretch", PANGO_STRETCH_CONDENSED,
+		      "stretch-set", TRUE,
+		      NULL);
 
 	gtk_text_tag_table_add (gtk_text_buffer_get_tag_table (buffer), tag);
 }
@@ -1559,6 +1559,7 @@ free_hf_state (HFCustomizeState *hf_state)
 	g_return_if_fail (hf_state != NULL);
 
 	g_list_free_full (hf_state->marks, (GDestroyNotify) free_hf_mark_info);
+	g_object_unref (hf_state->gui);
 	g_free (hf_state);
 }
 
@@ -1593,7 +1594,7 @@ hf_attach_insert_date_menu (GtkMenuToolButton *button, HFCustomizeState* hf_stat
 	g_signal_connect
 		(G_OBJECT (item),
 		 "activate", G_CALLBACK (hf_insert_date_cb), hf_state);
-	g_object_set_data_full (G_OBJECT (item), "options", g_strdup("YYYY/MM/DD"), g_free);
+	g_object_set_data_full (G_OBJECT (item), "options", g_strdup ("YYYY/MM/DD"), g_free);
 	gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 	gtk_menu_tool_button_set_menu (button, menu);
@@ -1631,7 +1632,7 @@ hf_attach_insert_time_menu (GtkMenuToolButton *button, HFCustomizeState* hf_stat
 	g_signal_connect
 		(G_OBJECT (item),
 		 "activate", G_CALLBACK (hf_insert_time_cb), hf_state);
-	g_object_set_data_full (G_OBJECT (item), "options", g_strdup("HH:MM:SS"), g_free);
+	g_object_set_data_full (G_OBJECT (item), "options", g_strdup ("HH:MM:SS"), g_free);
 	gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 	gtk_menu_tool_button_set_menu (button, menu);
@@ -1654,21 +1655,21 @@ hf_attach_insert_cell_menu (GtkMenuToolButton *button, HFCustomizeState* hf_stat
 	g_signal_connect
 		(G_OBJECT (item),
 		 "activate", G_CALLBACK (hf_insert_cell_cb), hf_state);
-	g_object_set_data_full (G_OBJECT (item), "options", g_strdup("A1"), g_free);
+	g_object_set_data_full (G_OBJECT (item), "options", g_strdup ("A1"), g_free);
 	gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 	item = gtk_menu_item_new_with_label (_("$A$1 (first cell of this worksheet)"));
 	g_signal_connect
 		(G_OBJECT (item),
 		 "activate", G_CALLBACK (hf_insert_cell_cb), hf_state);
-	g_object_set_data_full (G_OBJECT (item), "options", g_strdup("$A$1"), g_free);
+	g_object_set_data_full (G_OBJECT (item), "options", g_strdup ("$A$1"), g_free);
 	gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 	item = gtk_menu_item_new_with_label (_("First Printed Cell Of The Page"));
 	g_signal_connect
 		(G_OBJECT (item),
 		 "activate", G_CALLBACK (hf_insert_cell_cb), hf_state);
-	g_object_set_data_full (G_OBJECT (item), "options", g_strdup("rep|A1"), g_free);
+	g_object_set_data_full (G_OBJECT (item), "options", g_strdup ("rep|A1"), g_free);
 	gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
 
 	gtk_menu_tool_button_set_menu (button, menu);
@@ -1987,7 +1988,7 @@ create_hf_preview_canvas (PrinterSetupState *state, gboolean header)
 
 	pi->canvas = GTK_WIDGET (g_object_new (GOC_TYPE_CANVAS, NULL));
 
- 	gostyle = go_styled_object_get_style (
+	gostyle = go_styled_object_get_style (
 		GO_STYLED_OBJECT (goc_item_new (goc_canvas_get_root (GOC_CANVAS (pi->canvas)),
 			GOC_TYPE_RECTANGLE,
 			"x",		1. + shadow,
@@ -2041,7 +2042,7 @@ create_hf_preview_canvas (PrinterSetupState *state, gboolean header)
 		"anchor",	header ? GO_ANCHOR_NORTH : GO_ANCHOR_SOUTH,
 		"text",		"Center",
 		NULL);
-	gostyle = go_styled_object_get_style (GO_STYLED_OBJECT (pi->left));
+	gostyle = go_styled_object_get_style (GO_STYLED_OBJECT (pi->middle));
 	go_style_set_font_desc (gostyle, pango_font_description_copy (font_desc));
 
 	pi->right =  goc_item_new (
@@ -2052,7 +2053,7 @@ create_hf_preview_canvas (PrinterSetupState *state, gboolean header)
 		"anchor",	header ? GO_ANCHOR_NORTH_EAST : GO_ANCHOR_SOUTH_EAST,
 		"text",		"Right",
 		NULL);
-	gostyle = go_styled_object_get_style (GO_STYLED_OBJECT (pi->left));
+	gostyle = go_styled_object_get_style (GO_STYLED_OBJECT (pi->right));
 	go_style_set_font_desc (gostyle, pango_font_description_copy (font_desc));
 
 	pango_font_description_free (font_desc);
@@ -2091,13 +2092,13 @@ do_setup_hf (PrinterSetupState *state)
 	g_return_if_fail (state != NULL);
 
 	header = GTK_COMBO_BOX (go_gtk_builder_get_widget (state->gui, "option-menu-header"));
-	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new();
+	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new ();
 	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (header), renderer, TRUE);
 	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (header), renderer,
                                         "text", 0,
                                         NULL);
 	footer = GTK_COMBO_BOX (go_gtk_builder_get_widget (state->gui, "option-menu-footer"));
-	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new();
+	renderer = (GtkCellRenderer*) gtk_cell_renderer_text_new ();
 	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (footer), renderer, TRUE);
 	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (footer), renderer,
                                         "text", 0,
@@ -2191,10 +2192,10 @@ do_setup_error_display (PrinterSetupState *state)
 		if (display_types[i].type == state->pi->error_display)
 			item = i;
 	}
-	cell = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(state->error_display.combo), cell, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(state->error_display.combo),
-				       cell, "text", 0, NULL);
+	cell = gtk_cell_renderer_text_new ();
+	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->error_display.combo), cell, TRUE);
+	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (state->error_display.combo),
+					cell, "text", 0, NULL);
 	if (gtk_tree_model_iter_nth_child
 	    (GTK_TREE_MODEL (state->error_display.store), &iter, NULL, item))
 		gtk_combo_box_set_active_iter (GTK_COMBO_BOX (state->error_display.combo), &iter);
@@ -2226,9 +2227,9 @@ do_setup_comment_display (PrinterSetupState *state)
 		if (display_types[i].type == state->pi->comment_placement)
 			item = i;
 	}
-	cell = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(state->comment_display.combo), cell, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(state->comment_display.combo), cell, "text", 0, NULL);
+	cell = gtk_cell_renderer_text_new ();
+	gtk_cell_layout_pack_start (GTK_CELL_LAYOUT (state->comment_display.combo), cell, TRUE);
+	gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (state->comment_display.combo), cell, "text", 0, NULL);
 	if (gtk_tree_model_iter_nth_child
 	    (GTK_TREE_MODEL (state->comment_display.store), &iter, NULL, item))
 		gtk_combo_box_set_active_iter (GTK_COMBO_BOX (state->comment_display.combo), &iter);
@@ -2794,7 +2795,7 @@ do_setup_main_dialog (PrinterSetupState *state)
 
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_do_print_destroy);
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 }
 
 static PrinterSetupState *
@@ -3009,7 +3010,7 @@ dialog_printer_setup (WBCGtk *wbcg, Sheet *sheet)
 	PrinterSetupState *state;
 
 	/* Only one guru per workbook. */
-	if (wbc_gtk_get_guru (wbcg))
+	if (wbcg_get_guru (wbcg))
 		return;
 
 	/* Only pop up one copy per workbook */

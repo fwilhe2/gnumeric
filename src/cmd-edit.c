@@ -42,7 +42,7 @@
 
 /**
  * sv_select_cur_row:
- * @sv: The sheet
+ * @sv: The sheet view
  *
  * Selects an entire row
  */
@@ -64,7 +64,7 @@ sv_select_cur_row (SheetView *sv)
 
 /**
  * sv_select_cur_col:
- * @sv: The sheet
+ * @sv: The sheet view
  *
  * Selects an entire column
  */
@@ -86,7 +86,7 @@ sv_select_cur_col (SheetView *sv)
 
 /**
  * sv_select_cur_array:
- * @sv: The sheet
+ * @sv: The sheet view
  *
  * If the editpos is part of an array clear the selection and select the array.
  **/
@@ -124,38 +124,38 @@ cb_compare_deps (gconstpointer a, gconstpointer b)
 	return cell_a->pos.col - cell_b->pos.col;
 }
 
-static void
-cb_collect_deps (GnmDependent *dep, gpointer user)
+static GList *
+drop_non_cell_deps (GPtrArray *deps)
 {
-	if (dependent_is_cell (dep)) {
-		GList **list = (GList **)user;
-		*list = g_list_prepend (*list, dep);
+	GList *res = NULL;
+
+	for (size_t i = 0; i < deps->len; i++) {
+		GnmDependent *dep = g_ptr_array_index (deps, i);
+		if (dependent_is_cell (dep))
+			res = g_list_prepend (res, dep);
 	}
+
+	return res;
 }
+
 
 /**
  * sv_select_cur_depends:
- * @sv: The sheet
+ * @sv: The sheet view
  *
  * Select all cells that depend on the expression in the current cell.
  */
 void
 sv_select_cur_depends (SheetView *sv)
 {
-	GnmCell  *cur_cell, dummy;
-	GList *deps = NULL, *ptr = NULL;
+	GList *deps, *ptr = NULL;
 
 	g_return_if_fail (GNM_IS_SHEET_VIEW (sv));
 
-	cur_cell = sheet_cell_get (sv->sheet,
-		sv->edit_pos.col, sv->edit_pos.row);
-	if (cur_cell == NULL) {
-		dummy.base.sheet = sv_sheet (sv);
-		dummy.pos = sv->edit_pos;
-		cur_cell = &dummy;
-	}
-
-	cell_foreach_dep (cur_cell, cb_collect_deps, &deps);
+	GPtrArray *alldeps = g_ptr_array_new ();
+	gnm_dep_deps_of_cellpos (sv->sheet, sv->edit_pos.col, sv->edit_pos.row, alldeps);
+	deps = drop_non_cell_deps (alldeps);
+	g_ptr_array_unref (alldeps);
 	if (deps == NULL)
 		return;
 
@@ -214,18 +214,20 @@ sv_select_cur_depends (SheetView *sv)
 		}
 
 		/* now select the ranges */
-		while (ptr) {
-			sv_selection_add_range (sv, ptr->data);
-			g_free (ptr->data);
-			ptr = g_list_remove (ptr, ptr->data);
+		for (GList *p = ptr; p; p = p->next) {
+			GnmRange *r = p->data;
+			g_printerr ("select %s\n", range_as_string (r));
+			sv_selection_add_range (sv, r);
+			g_free (r);
 		}
+		g_list_free (ptr);
 	}
 	sheet_update (sv->sheet);
 }
 
 /**
  * sv_select_cur_inputs:
- * @sv: The sheet
+ * @sv: The sheet view
  *
  * Select all cells that are direct potential inputs to the
  * current cell.
@@ -356,7 +358,8 @@ cmd_paste (WorkbookControl *wbc, GnmPasteTarget const *pt)
 
 /**
  * cmd_paste_to_selection:
- * @dest_sv: The sheet into which things should be pasted
+ * @wbc: workbook control
+ * @dest_sv: (transfer none): The sheet into which things should be pasted
  * @paste_flags: special paste flags (eg transpose)
  *
  * Using the current selection as a target
@@ -380,12 +383,12 @@ cmd_paste_to_selection (WorkbookControl *wbc, SheetView *dest_sv, int paste_flag
 
 /**
  * cmd_shift_rows:
- * @wbc:	The error context.
- * @sheet	the sheet
- * @col		column marking the start of the shift
- * @start_row	first row
- * @end_row	end row
- * @count	numbers of columns to shift.  negative numbers will
+ * @wbc: The error context.
+ * @sheet: the sheet
+ * @col: column marking the start of the shift
+ * @start_row: first row
+ * @end_row: end row
+ * @count: numbers of columns to shift.  negative numbers will
  *		delete count columns, positive number will insert
  *		count columns.
  *

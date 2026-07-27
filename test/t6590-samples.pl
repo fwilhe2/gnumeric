@@ -6,8 +6,7 @@ use lib ($0 =~ m|^(.*/)| ? $1 : ".");
 use GnumericTest;
 $GnumericTest::default_subtests = '*,-biff7';
 
-my $csvfile = "samples.csv";
-&GnumericTest::junkfile ($csvfile);
+my $csvfile = &GnumericTest::invent_junkfile ("samples.csv");
 {
     my $cmd = "$sstest --samples-file=$csvfile";
     print STDERR "# $cmd\n" if $GnumericTest::verbose;
@@ -18,8 +17,7 @@ my $csvfile = "samples.csv";
     }
 }
 
-my $file = "samples.gnumeric";
-&GnumericTest::junkfile ($file);
+my $file = &GnumericTest::invent_junkfile ("samples.gnumeric");
 {
     my $cmd = "$ssconvert $csvfile $file";
     print STDERR "# $cmd\n" if $GnumericTest::verbose;
@@ -31,6 +29,7 @@ my $file = "samples.gnumeric";
 }
 &GnumericTest::removejunk ($csvfile);
 
+my $nostyle_filter = "$PERL -p -e '\$_ = \"\" if (m{<gnm:Styles>} .. m{</gnm:Styles>});'";
 
 if (&subtest ("gnumeric")) {
     &message ("Check documentation samples gnumeric roundtrip.");
@@ -50,7 +49,8 @@ if (&subtest ("ods")) {
 		     'format' => 'Gnumeric_OpenCalc:odf',
 		     'ext' => "ods",
 		     'filter0' => "$bool_func_filter | $concat_filter",
-		     'filter2' => 'std:drop_generator',
+		     'filter1' => $nostyle_filter,
+		     'filter2' => "std:drop_generator | $nostyle_filter",
 		     'ignore_failure' => 1);
 }
 
@@ -79,10 +79,25 @@ if (&subtest ("xlsx")) {
     # Don't care about cum argument being required in XL.
     my $hypgeom_filter = "$PERL -p -e 'if (/\\bhypgeomdist\\b/) { s{,FALSE\\)}{)}'}";
 
+    # We have 2+ names for these
+    my %clones = ('r.qlnorm' => 'loginv',
+		  'r.qnorm' => 'norminv',
+		  'r.qgamma' => 'gammainv',
+		  'r.qbeta' => 'betainv'
+	);
+    my $clone_filter = "$PERL -p -e '" .
+	join (" ", map {
+	    my $src = $_;
+	    my $dst = $clones{$src};
+	    $src =~ s/\./\\./g;
+	    "s{\\b${src}\\b}{$dst}g;";
+	      } (sort keys %clones)) .
+	"'";
+
     &test_roundtrip ($file,
 		     'format' => 'Gnumeric_Excel:xlsx',
 		     'ext' => "xlsx",
 		     'resize' => '1048576x16384',
-		     'filter' => $hypgeom_filter,
+		     'filter' => "$hypgeom_filter | $clone_filter | $nostyle_filter",
 		     'ignore_failure' => 1);
 }

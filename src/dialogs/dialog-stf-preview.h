@@ -12,8 +12,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef GNUMERIC_DIALOG_STF_PREVIEW_H
-#define GNUMERIC_DIALOG_STF_PREVIEW_H
+#ifndef GNM_DIALOG_STF_PREVIEW_H_
+#define GNM_DIALOG_STF_PREVIEW_H_
 
 #include <gnumeric-fwd.h>
 #include <stf.h>
@@ -24,8 +24,7 @@
 
 typedef struct {
 	GtkWidget        *data_container;
-	GStringChunk     *lines_chunk;
-	GPtrArray        *lines;
+	GnmStfParsedLines *pl;
 	GtkTreeView      *tree_view;
 
 	int              colcount;
@@ -43,9 +42,8 @@ RenderData_t*      stf_preview_new                       (GtkWidget *data_contai
 void               stf_preview_free                      (RenderData_t *data);
 
 /* These are for manipulation */
-void               stf_preview_set_lines                 (RenderData_t *data,
-							  GStringChunk *lines_chunk,
-							  GPtrArray *lines);
+void               stf_preview_set_lines                 (RenderData_t *renderdata,
+							  GnmStfParsedLines *pl);
 
 void               stf_preview_colformats_clear          (RenderData_t *renderdata);
 void               stf_preview_colformats_add            (RenderData_t *renderdata, GOFormat *format);
@@ -56,4 +54,4 @@ GtkCellRenderer   *stf_preview_get_cell_renderer         (RenderData_t *renderda
 
 void               stf_preview_find_column               (RenderData_t *renderdata, int x, int *pcol, int *dx);
 
-#endif /* GNUMERIC_DIALOG_STF_PREVIEW_H */
+#endif /* GNM_DIALOG_STF_PREVIEW_H_ */

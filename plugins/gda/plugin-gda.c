@@ -77,20 +77,20 @@ gnm_value_new_from_gda (GValue const *gval,
 	}
 
 	switch (t) {
-	case G_TYPE_BOOLEAN :
+	case G_TYPE_BOOLEAN:
 		return value_new_bool (g_value_get_boolean (gval));
 
-	case G_TYPE_DOUBLE :
+	case G_TYPE_DOUBLE:
 		return value_new_float (g_value_get_double (gval));
-	case G_TYPE_FLOAT :
+	case G_TYPE_FLOAT:
 		return value_new_float (g_value_get_float (gval));
 #if 0
-	case G_TYPE_INT64 : /* g_value_get_int64 (gval) */
-	case G_TYPE_UINT64 : /* g_value_get_uint64 (gval) */
+	case G_TYPE_INT64: /* g_value_get_int64 (gval) */
+	case G_TYPE_UINT64: /* g_value_get_uint64 (gval) */
 #endif
-	case G_TYPE_INT :
+	case G_TYPE_INT:
 		return value_new_int (g_value_get_int (gval));
-	case G_TYPE_UINT :
+	case G_TYPE_UINT:
 		return value_new_int (g_value_get_uint (gval));
 
 #if 0
@@ -100,7 +100,7 @@ gnm_value_new_from_gda (GValue const *gval,
 #if 0
 	/* Do we want to consider nested arrays ??
 	 * The rest of the system is not strong enough yet. */
-	case GDA_TYPE_LIST : {
+	case GDA_TYPE_LIST: {
 		GList const *ptr;
 		for (ptr = gda_value_get_list (gval) ; NULL != ptr ; ptr = ptr->next) {
 		}
@@ -110,16 +110,16 @@ gnm_value_new_from_gda (GValue const *gval,
 
 #if 0
 	/* Use the default gvalue conversions for these */
-	case G_TYPE_CHAR :
-	case G_TYPE_UCHAR :
-	case G_TYPE_STRING :
-	case GDA_TYPE_GEOMETRIC_POINT :
-	case GDA_TYPE_BINARY :
+	case G_TYPE_CHAR:
+	case G_TYPE_UCHAR:
+	case G_TYPE_STRING:
+	case GDA_TYPE_GEOMETRIC_POINT:
+	case GDA_TYPE_BINARY:
 
 	/* this is stored as a string, let gda handle it */
-	case GDA_TYPE_NUMERIC :
+	case GDA_TYPE_NUMERIC:
 #endif
-	default :
+	default:
 		break;
 	}
 
@@ -258,12 +258,12 @@ query_connection_info (const gchar *dsn, const gchar *user, const gchar *passwor
 	gboolean    retval = FALSE;
 
 	/* FIXME: pass a pointer to parent window */
-	dialog = gtk_dialog_new_with_buttons(_("Database Connection"),
-					     NULL,
-					     GTK_DIALOG_MODAL,
-					     GNM_STOCK_OK, GTK_RESPONSE_ACCEPT,
-					     GNM_STOCK_CANCEL, GTK_RESPONSE_REJECT,
-					     NULL);
+	dialog = gtk_dialog_new_with_buttons (_("Database Connection"),
+					      NULL,
+					      GTK_DIALOG_MODAL,
+					      GNM_STOCK_OK, GTK_RESPONSE_ACCEPT,
+					      GNM_STOCK_CANCEL, GTK_RESPONSE_REJECT,
+					      NULL);
 
 	login = gdaui_login_new (NULL);
 
@@ -327,7 +327,7 @@ open_connection (const gchar *dsn, const gchar *user, const gchar *password, Gda
 		gchar *chosen_dsn = NULL, *auth_string = NULL;
 
 		if (query_connection_info (dsn, user, password, &chosen_dsn, &auth_string) && chosen_dsn) {
-			cnc = gda_connection_open_from_dsn (chosen_dsn, auth_string, options, &error);
+			cnc = gda_connection_open_from_dsn_name (chosen_dsn, auth_string, options, &error);
 			if (!cnc) {
 				g_warning ("Libgda error: %s\n", error->message);
 				g_error_free (error);
@@ -360,7 +360,7 @@ static GnmValue *
 conn_error (GnmFuncEvalInfo *ei, const gchar *dsn_name)
 {
 	gchar    *tmp = g_strdup_printf (_("Error: could not open connection to %s"), dsn_name);
-	GnmValue *ret = value_new_error(ei->pos, tmp);
+	GnmValue *ret = value_new_error (ei->pos, tmp);
 	g_free (tmp);
 	return ret;
 }

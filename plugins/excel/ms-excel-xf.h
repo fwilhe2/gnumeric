@@ -8,8 +8,8 @@
  * (C) 1998-2001 Michael Meeks
  * (C) 2002-2005 Jody Goldberg
  **/
-#ifndef GNM_MS_EXCEL_XF_H
-#define GNM_MS_EXCEL_XF_H
+#ifndef GNM_MS_EXCEL_XF_H_
+#define GNM_MS_EXCEL_XF_H_
 
 #include <style.h>
 #include <style-border.h>
@@ -24,7 +24,7 @@
 
 #define STYLE_ORIENT_MAX 6
 
-typedef struct _BiffXFData {
+typedef struct {
 	guint16 font_idx;
 	guint16 format_idx;
 	GOFormat const *style_format;
@@ -52,4 +52,4 @@ typedef struct _BiffXFData {
 	GnmStyle *mstyle;
 } BiffXFData;
 
-#endif /* GNM_MS_EXCEL_XF_H */
+#endif /* GNM_MS_EXCEL_XF_H_ */

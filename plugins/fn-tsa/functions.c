@@ -70,21 +70,12 @@ enum {
 	INTERPOLATION_SPLINE_AVG,
 };
 
-#ifdef GNM_WITH_LONG_DOUBLE
-#	define GnmCSpline GOCSplinel
-#	define gnm_cspline_init go_cspline_initl
-#	define gnm_cspline_destroy go_cspline_destroyl
-#	define gnm_cspline_get_value go_cspline_get_valuel
-#	define gnm_cspline_get_values go_cspline_get_valuesl
-#	define gnm_cspline_get_integrals go_cspline_get_integralsl
-#else
-#	define GnmCSpline GOCSpline
-#	define gnm_cspline_init go_cspline_init
-#	define gnm_cspline_destroy go_cspline_destroy
-#	define gnm_cspline_get_value go_cspline_get_value
-#	define gnm_cspline_get_values go_cspline_get_values
-#	define gnm_cspline_get_integrals go_cspline_get_integrals
-#endif
+#define GnmCSpline GNM_SUFFIX(GOCSpline)
+#define gnm_cspline_init GNM_SUFFIX(go_cspline_init)
+#define gnm_cspline_destroy GNM_SUFFIX(go_cspline_destroy)
+#define gnm_cspline_get_value GNM_SUFFIX(go_cspline_get_value)
+#define gnm_cspline_get_values GNM_SUFFIX(go_cspline_get_values)
+#define gnm_cspline_get_integrals GNM_SUFFIX(go_cspline_get_integrals)
 
 #define INTERPOLATIONMETHODS { GNM_FUNC_HELP_DESCRIPTION, F_("Possible interpolation methods are:\n" \
 							     "0: linear;\n" \
@@ -204,7 +195,7 @@ linear_averaging (const gnm_float *absc, const gnm_float *ord, int nb_knots,
 	while (j < jmax && targets[0] > absc[j])
 		j++;
 	k = j - 1;
-	slope = (ord[j] - ord[k]) / (absc[j] - absc[k]) / 2.;
+	slope = (ord[j] - ord[k]) / (absc[j] - absc[k]) / 2;
 	for (i = 1; i <= nb_targets; i++) {
 		if (targets[i] < absc[j] || j == jmax) {
 			x0 = targets[i - 1] - absc[k];
@@ -221,12 +212,12 @@ linear_averaging (const gnm_float *absc, const gnm_float *ord, int nb_knots,
 		while (j < jmax && targets[i] > absc[++j]) {
 			k++;
 			x0 = absc[j] - absc[k];
-			slope = (ord[j] - ord[k]) / x0 / 2.;
+			slope = (ord[j] - ord[k]) / x0 / 2;
 			res[i - 1] += x0 * (slope * x0 + ord[k]);
 		}
 		if (j > k + 1) {
 			k = j - 1;
-			slope = (ord[j] - ord[k]) / (absc[j] - absc[k]) / 2.;
+			slope = (ord[j] - ord[k]) / (absc[j] - absc[k]) / 2;
 		} else
 			k = j;
 		x0 = targets[i] - absc[k];
@@ -521,8 +512,6 @@ gnumeric_interpolation (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 		res = value_new_array_non_init (1 , n2);
 		i = 0;
 
-		res->v_array.vals[0] = g_new (GnmValue *, n2);
-
 		fres = interpproc (vals0, vals1, n0, vals2, n);
 		missing = missing2;
 		if (fres) {
@@ -714,7 +703,7 @@ gnumeric_periodogram (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			break;
 		case INTERPOLATION_LINEAR_AVG:
 			interpproc = linear_averaging;
-			start = absc[0] - incr / 2.;
+			start = absc[0] - incr / 2;
 			n2 = n1 + 1;
 			break;
 		case INTERPOLATION_STAIRCASE:
@@ -724,7 +713,7 @@ gnumeric_periodogram (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			break;
 		case INTERPOLATION_STAIRCASE_AVG:
 			interpproc = staircase_averaging;
-			start = absc[0] - incr / 2.;
+			start = absc[0] - incr / 2;
 			n2 = n1 + 1;
 			break;
 		case INTERPOLATION_SPLINE:
@@ -734,7 +723,7 @@ gnumeric_periodogram (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 			break;
 		case INTERPOLATION_SPLINE_AVG:
 			interpproc = spline_averaging;
-			start = absc[0] - incr / 2.;
+			start = absc[0] - incr / 2;
 			n2 = n1 + 1;
 			break;
 		default:
@@ -771,19 +760,19 @@ no_absc:
 		gnm_float factor;
 		switch (filter) {
 		case FILTER_BARTLETT:
-			factor = n0 / 2.;
+			factor = n0 / 2;
 			for (i = 0; i < n0; i++)
-				ord[i] *= 1. - gnm_abs ((i / factor - 1));
+				ord[i] *= 1 - gnm_abs ((i / factor - 1));
 			break;
 		case FILTER_HANN:
-			factor = 2. * M_PIgnum / n0;
+			factor = 2 * M_PIgnum / n0;
 			for (i = 0; i < n0; i++)
-				ord[i] *= 0.5 * (1 - gnm_cos (factor * i));
+				ord[i] *= GNM_const(0.5) * (1 - gnm_cos (factor * i));
 			break;
 		case FILTER_WELCH:
-			factor = n0 / 2.;
+			factor = n0 / 2;
 			for (i = 0; i < n0; i++)
-				ord[i] *= 1. - (i / factor - 1.) * (i / factor - 1.);
+				ord[i] *= 1 - (i / factor - 1) * (i / factor - 1);
 			break;
 		}
 	}
@@ -799,7 +788,6 @@ no_absc:
 	nb /= 2;
 	if (out && nb > 0) {
 		res = value_new_array_non_init (1 , nb);
-		res->v_array.vals[0] = g_new (GnmValue *, nb);
 		for (i = 0; i < nb; i++)
 			res->v_array.vals[0][i] =
 				value_new_float (gnm_sqrt (
@@ -927,81 +915,81 @@ static GnmFuncHelp const help_hpfilter[] = {
 static void
 gnm_hpfilter (gnm_float *data, int n, gnm_float lambda, int *err)
 {
- 	gnm_float *a, *b, *c;
- 	int i;
- 	gnm_float lambda6 = 6 * lambda + 1;
- 	gnm_float lambda4 = -4 * lambda;
- 	gnm_float h[5] = {0,0,0,0,0};
- 	gnm_float g[5] = {0,0,0,0,0};
- 	gnm_float j[2] = {0,0};
- 	gnm_float h_b, h_c, denom;
+	gnm_float *a, *b, *c;
+	int i;
+	gnm_float lambda6 = 6 * lambda + 1;
+	gnm_float lambda4 = -4 * lambda;
+	gnm_float h[5] = {0,0,0,0,0};
+	gnm_float g[5] = {0,0,0,0,0};
+	gnm_float j[2] = {0,0};
+	gnm_float h_b, h_c, denom;
 
- 	g_return_if_fail (n > 5);
- 	g_return_if_fail (data != NULL);
- 	g_return_if_fail (err != NULL);
+	g_return_if_fail (n > 5);
+	g_return_if_fail (data != NULL);
+	g_return_if_fail (err != NULL);
 
- 	/* Initializing arrays a, b, and c */
+	/* Initializing arrays a, b, and c */
 
- 	a = g_new (gnm_float, n);
- 	b = g_new (gnm_float, n);
- 	c = g_new (gnm_float, n);
+	a = g_new (gnm_float, n);
+	b = g_new (gnm_float, n);
+	c = g_new (gnm_float, n);
 
- 	a[0] = lambda + 1;
- 	b[0] = -2 * lambda;
- 	c[0] = lambda;
+	a[0] = lambda + 1;
+	b[0] = -2 * lambda;
+	c[0] = lambda;
 
- 	for (i = 1; i < n - 2; i++) {
- 		a[i] = lambda6;
- 		b[i] = lambda4;
- 		c[i] = lambda;
- 	}
+	for (i = 1; i < n - 2; i++) {
+		a[i] = lambda6;
+		b[i] = lambda4;
+		c[i] = lambda;
+	}
 
- 	a[n - 2] = a[1] = lambda6 - lambda;
- 	a[n - 1] = a[0];
- 	b[n - 2] = b[0];
- 	b[n - 1] = 0;
- 	c[n - 2] = 0;
- 	c[n - 1] = 0;
+	a[n - 2] = a[1] = lambda6 - lambda;
+	a[n - 1] = a[0];
+	b[n - 2] = b[0];
+	b[n - 1] = 0;
+	c[n - 2] = 0;
+	c[n - 1] = 0;
 
- 	/* Forward */
- 	for (i = 0; i < n; i++) {
- 		denom = a[i]- h[3]*h[0] - g[4]*g[1];
- 		if (denom == 0) {
- 			*err = GNM_ERROR_DIV0;
- 			goto done;
- 		}
+	/* Forward */
+	for (i = 0; i < n; i++) {
+		denom = a[i]- h[3]*h[0] - g[4]*g[1];
+		if (denom == 0) {
+			*err = GNM_ERROR_DIV0;
+			goto done;
+		}
 
- 		h_b = b[i];
- 		g[0] = h[0];
- 		b[i] = h[0] = (h_b - h[3] * h[1])/denom;
+		h_b = b[i];
+		g[0] = h[0];
+		b[i] = h[0] = (h_b - h[3] * h[1])/denom;
 
- 		h_c = c[i];
- 		g[1] = h[1];
- 		c[i] = h[1] = h_c/denom;
+		h_c = c[i];
+		g[1] = h[1];
+		c[i] = h[1] = h_c/denom;
 
- 		a[i] = (data[i] - g[2]*g[4] - h[2]*h[3])/denom;
+		a[i] = (data[i] - g[2]*g[4] - h[2]*h[3])/denom;
 
- 		g[2] = h[2];
- 		h[2] = a[i];
- 		h[3] = h_b - h[4] * g[0];
- 		g[4] = h[4];
- 		h[4] = h_c;
- 	}
+		g[2] = h[2];
+		h[2] = a[i];
+		h[3] = h_b - h[4] * g[0];
+		g[4] = h[4];
+		h[4] = h_c;
+	}
 
- 	data[n - 1] = j[0] = a[n - 1];
+	data[n - 1] = j[0] = a[n - 1];
 
- 	/* Backwards */
- 	for (i = n - 1; i > 0; i--) {
- 		data[i - 1] = a[i - 1] - b[i - 1] * j[0] - c[i - 1] * j[1];
- 		j[1] = j[0];
- 		j[0] = data[i - 1];
- 	}
+	/* Backwards */
+	for (i = n - 1; i > 0; i--) {
+		data[i - 1] = a[i - 1] - b[i - 1] * j[0] - c[i - 1] * j[1];
+		j[1] = j[0];
+		j[0] = data[i - 1];
+	}
 
  done:
- 	g_free (a);
- 	g_free (b);
- 	g_free (c);
- 	return;
+	g_free (a);
+	g_free (b);
+	g_free (c);
+	return;
 }
 
 static GnmValue *

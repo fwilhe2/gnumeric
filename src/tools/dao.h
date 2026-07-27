@@ -1,4 +1,3 @@
-
 /*
  * dao.h:
  *
@@ -23,8 +22,8 @@
  * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef GNUMERIC_DAO_H
-#define GNUMERIC_DAO_H
+#ifndef GNM_DAO_H_
+#define GNM_DAO_H_
 
 #include <gnumeric.h>
 #include <numbers.h>
@@ -35,12 +34,16 @@
 #include <graph.h>
 
 typedef enum {
-        NewSheetOutput, NewWorkbookOutput, RangeOutput, InPlaceOutput
+        GNM_DAO_OUTPUT_NEWSHEET,
+	GNM_DAO_OUTPUT_NEWWORKBOOK,
+	GNM_DAO_OUTPUT_RANGE,
+	GNM_DAO_OUTPUT_INPLACE
 } data_analysis_output_type_t;
 
-typedef struct {
-        data_analysis_output_type_t type;
-        Sheet                       *sheet;
+typedef struct data_analysis_output_t_ {
+	data_analysis_output_type_t type;
+	Sheet                       *ref_sheet;
+	Sheet                       *dst_sheet;
         int                         start_col, cols;
         int                         start_row, rows;
 	int                         offset_col, offset_row;
@@ -50,38 +53,35 @@ typedef struct {
 	gboolean                    retain_format;
 	gboolean                    retain_comments;
 	gboolean                    put_formulas;
-	WorkbookControl             *wbc;
 	GSList                      *sos;
 	gboolean                    omit_so;
-	gboolean                    use_gfree;
 } data_analysis_output_t;
 
-data_analysis_output_t *dao_init (data_analysis_output_t *dao,
-				  data_analysis_output_type_t type);
-data_analysis_output_t *dao_init_new_sheet (data_analysis_output_t *dao);
-data_analysis_output_t *dao_load_from_value (data_analysis_output_t *dao,
-					     GnmValue *output_range);
+data_analysis_output_t *dao_init (data_analysis_output_type_t type);
+data_analysis_output_t *dao_init_new_sheet (Sheet *ref_sheet);
+void dao_load_from_value (data_analysis_output_t *dao,
+			  GnmValue const *output_range);
 void dao_free (data_analysis_output_t *dao);
 
-void dao_autofit_columns      (data_analysis_output_t *dao);
+void dao_autofit_columns       (data_analysis_output_t *dao);
 void dao_autofit_these_columns (data_analysis_output_t *dao, int from_col, int to_col);
 
-void dao_autofit_rows      (data_analysis_output_t *dao);
-void dao_autofit_these_rows (data_analysis_output_t *dao, int from_row, int to_row);
+void dao_autofit_rows          (data_analysis_output_t *dao);
+void dao_autofit_these_rows    (data_analysis_output_t *dao, int from_row, int to_row);
 
-gboolean dao_cell_is_visible      (data_analysis_output_t *dao, int col, int row);
-void dao_set_bold             (data_analysis_output_t *dao, int col1, int row1,
-			       int col2, int row2);
-void dao_set_italic           (data_analysis_output_t *dao, int col1, int row1,
-			       int col2, int row2);
-void dao_set_percent          (data_analysis_output_t *dao, int col1, int row1,
-			       int col2, int row2);
-void dao_set_date             (data_analysis_output_t *dao, int col1, int row1,
-			       int col2, int row2);
-void dao_set_format             (data_analysis_output_t *dao, int col1, int row1,
-				 int col2, int row2, char const *format);
-void dao_set_merge          (data_analysis_output_t *dao, int col1, int row1,
-			       int col2, int row2);
+gboolean dao_cell_is_visible   (data_analysis_output_t *dao, int col, int row);
+void dao_set_bold              (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2);
+void dao_set_italic            (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2);
+void dao_set_format_percent    (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2);
+void dao_set_format_date       (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2);
+void dao_set_format            (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2, char const *format);
+void dao_set_merge             (data_analysis_output_t *dao, int col1, int row1,
+				int col2, int row2);
 
 void dao_set_colors (data_analysis_output_t *dao, int col1, int row1,
 		     int col2, int row2,
@@ -123,10 +123,14 @@ void dao_set_sheet_object (data_analysis_output_t *dao, int col, int row, SheetO
 
 void dao_prepare_output       (WorkbookControl *wbc,
 			       data_analysis_output_t *dao, char const *name);
-gboolean dao_format_output    (data_analysis_output_t *dao, char const *cmd);
-char *dao_command_descriptor (data_analysis_output_t *dao, char const *format,
-			      gpointer result);
+gboolean dao_format_output    (WorkbookControl *wbc,
+			       data_analysis_output_t *dao, char const *cmd);
+char *dao_command_descriptor (data_analysis_output_t *dao,
+				char const *format);
 void dao_adjust           (data_analysis_output_t *dao, gint cols, gint rows);
+
+GODateConventions const *dao_get_date_conv (data_analysis_output_t *dao);
+GnmSheetSize const *dao_get_sheet_size (data_analysis_output_t *dao);
 
 ColRowStateList *dao_get_colrow_state_list (data_analysis_output_t *dao,
 					    gboolean is_cols);

@@ -6,8 +6,8 @@
  *
  * (C) 1999-2005 Jon K Hellan
  **/
-#ifndef GNM_MS_EXCEL_UTIL_H
-#define GNM_MS_EXCEL_UTIL_H
+#ifndef GNM_MS_EXCEL_UTIL_H_
+#define GNM_MS_EXCEL_UTIL_H_
 
 #include <glib.h>
 #include <stdlib.h>
@@ -33,15 +33,13 @@
 #define XL_CHECK_CONDITION(cond) XL_CHECK_CONDITION_FULL(cond,return;)
 #define XL_CHECK_CONDITION_VAL(cond,val) XL_CHECK_CONDITION_FULL(cond,return val;)
 
-typedef struct _TwoWayTable   TwoWayTable;
-
-struct _TwoWayTable {
+typedef struct {
 	GHashTable *all_keys;
 	GHashTable *unique_keys;
 	GPtrArray  *idx_to_key;
 	gint       base;	/* Indices assigned consecutively from base */
 	GDestroyNotify key_destroy_func;
-};
+} TwoWayTable;
 
 typedef void (*AfterPutFunc) (gconstpointer key,
 			      gboolean      was_added,
@@ -125,4 +123,4 @@ GHashTable *xls_collect_validations  (GnmStyleList *ptr,
 
 /*****************************************************************************/
 
-#endif /* GNM_MS_EXCEL_UTIL_H */
+#endif /* GNM_MS_EXCEL_UTIL_H_ */

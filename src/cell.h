@@ -1,5 +1,5 @@
-#ifndef _GNM_CELL_H_
-# define _GNM_CELL_H_
+#ifndef GNM_CELL_H_
+#define GNM_CELL_H_
 
 #include <gnumeric.h>
 #include <dependent.h>
@@ -19,7 +19,7 @@ typedef enum {
 /* Definition of a GnmCell */
 #define GNM_DEP_TO_CELL(dep)	((GnmCell *)(dep))
 #define GNM_CELL_TO_DEP(cell)	(&(cell)->base)
-struct _GnmCell {
+struct GnmCell_ {
 	GnmDependent base;
 
 	/* Mandatory state information */
@@ -35,16 +35,21 @@ GType	    gnm_cell_get_type (void);
  */
 #ifdef __GI_SCANNER__
 gboolean gnm_cell_has_expr (GnmCell const *cell);
+gboolean gnm_cell_needs_recalc (GnmCell const *cell);
+gboolean gnm_cell_expr_is_linked (GnmCell const *cell);
+gboolean gnm_cell_is_merged (GnmCell const *cell);
+GnmValue *gnm_cell_eval (GnmCell *cell);
 #else
-inline gboolean
-gnm_cell_has_expr (GnmCell const *cell) {
-	return cell->base.texpr != NULL;
-}
+inline gboolean gnm_cell_has_expr (GnmCell const *cell) { return cell->base.texpr != NULL; }
+inline gboolean gnm_cell_needs_recalc (GnmCell const *cell) { return (cell->base.flags & DEPENDENT_NEEDS_RECALC) != 0; }
+inline gboolean gnm_cell_expr_is_linked (GnmCell const *cell) { return (cell->base.flags & DEPENDENT_IS_LINKED) != 0; }
+inline gboolean gnm_cell_is_merged (GnmCell const *cell) { return (cell->base.flags & GNM_CELL_IS_MERGED) != 0; }
+inline GnmValue *gnm_cell_eval (GnmCell *cell) { gnm_dep_cell_eval (cell); return cell->value; }
 #endif
 
-#define	    gnm_cell_needs_recalc(cell)	((cell)->base.flags & DEPENDENT_NEEDS_RECALC)
-#define	    gnm_cell_expr_is_linked(cell)	((cell)->base.flags & DEPENDENT_IS_LINKED)
-#define	    gnm_cell_is_merged(cell)	((cell)->base.flags & GNM_CELL_IS_MERGED)
+void gnm_cell_queue_recalc (GnmCell *cell);
+
+
 gboolean    gnm_cell_is_empty	  (GnmCell const *cell);
 gboolean    gnm_cell_is_blank	  (GnmCell const *cell); /* empty, or "" */
 GnmValue   *gnm_cell_is_error	  (GnmCell const *cell);
@@ -104,4 +109,4 @@ char *  gnm_cell_get_rendered_text	(GnmCell *cell);
 
 G_END_DECLS
 
-#endif /* _GNM_CELL_H_ */
+#endif /* GNM_CELL_H_ */

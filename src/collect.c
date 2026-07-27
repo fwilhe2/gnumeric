@@ -13,8 +13,10 @@
 #include <func.h>
 #include <application.h>
 #include <value.h>
+#include <cell.h>
 #include <expr.h>
 #include <expr-impl.h>
+#include <expr-name.h>
 #include <gnm-datetime.h>
 #include <workbook.h>
 #include <sheet.h>
@@ -97,7 +99,7 @@ pairs_floats_cache_entry_hash (const PairsFloatsCacheEntry *entry)
 
 static gboolean
 pairs_floats_cache_entry_equal (const PairsFloatsCacheEntry *a,
-				 const PairsFloatsCacheEntry *b)
+				const PairsFloatsCacheEntry *b)
 
 {
 	return (a->flags == b->flags &&
@@ -314,7 +316,7 @@ typedef struct {
 
 static GnmValue *
 callback_function_collect (GnmEvalPos const *ep, GnmValue const *value,
-			   void *closure)
+			   gboolean direct, void *closure)
 {
 	gnm_float x = 0;
 	collect_floats_t *cl = closure;
@@ -331,7 +333,9 @@ callback_function_collect (GnmEvalPos const *ep, GnmValue const *value,
 		break;
 
 	case VALUE_BOOLEAN:
-		if (cl->flags & COLLECT_IGNORE_BOOLS)
+		if (direct && (cl->flags & COLLECT_BOOLS_DIRECT_COMBO_MASK)) {
+			x = value_get_as_float (value);
+		} else if (cl->flags & COLLECT_IGNORE_BOOLS)
 			ignore = TRUE;
 		else if (cl->flags & COLLECT_ZEROONE_BOOLS)
 			x = value_get_as_float (value);
@@ -357,7 +361,35 @@ callback_function_collect (GnmEvalPos const *ep, GnmValue const *value,
 		break;
 
 	case VALUE_STRING:
-		if (cl->flags & COLLECT_COERCE_STRINGS) {
+		if (direct && (cl->flags & COLLECT_STRINGS_DIRECT_COMBO_MASK)) {
+			GnmValue *vc = format_match_number (value_peek_string (value),
+							    NULL,
+							    cl->date_conv);
+			gboolean bad = !vc;
+
+			if (!bad) {
+				switch (cl->flags & COLLECT_STRINGS_DIRECT_COMBO_MASK) {
+				case COLLECT_STRINGS_DIRECT_COMBO1:
+				default:
+					// "and"
+					ignore = VALUE_IS_FLOAT (vc);
+					break;
+				case COLLECT_STRINGS_DIRECT_COMBO2:
+					// "sum"
+					bad |= VALUE_IS_BOOLEAN (vc);
+					break;
+				case COLLECT_STRINGS_DIRECT_COMBO3:
+					// "count"
+					ignore = VALUE_IS_BOOLEAN (vc);
+					break;
+				}
+			}
+
+			x = vc ? value_get_as_float (vc) : 0;
+			value_release (vc);
+			if (bad)
+				return value_new_error_VALUE (ep);
+		} else if (cl->flags & COLLECT_COERCE_STRINGS) {
 			GnmValue *vc = format_match_number (value_peek_string (value),
 							    NULL,
 							    cl->date_conv);
@@ -419,9 +451,9 @@ callback_function_collect (GnmEvalPos const *ep, GnmValue const *value,
  * n:              Output parameter for number of floats.
  *
  * Return value:
- *   NULL in case of strict and a blank.
+ *   %NULL in case of strict and a blank.
  *   A copy of the error in the case of strict and an error.
- *   Non-NULL in case of success.  Then n will be set.
+ *   Non-%NULL in case of success.  Then @n will be set.
  *
  * Evaluate a list of expressions and return the result as an array of
  * gnm_float.
@@ -534,6 +566,10 @@ collect_floats (int argc, GnmExprConstPtr const *argv,
 			ce->data = go_memdup_n (cl.data, MAX (1, *n), sizeof (gnm_float));
 		prune_caches ();
 
+		// Normally the caches will exist at this point, but
+		// an explicit signal emission could have cleared them.
+		create_caches ();
+
 		/*
 		 * We looked for the entry earlier and it was not there.
 		 * However, sub-calculation might have added it so be careful
@@ -596,6 +632,221 @@ collect_floats_value_with_info (GnmValue const *val, GnmEvalPos const *ep,
 	return res;
 }
 
+typedef struct {
+	FunctionIterateCB  callback;
+	void              *closure;
+	gboolean           strict;
+	CellIterFlags      iter_flags;
+	GnmEvalPos const  *ep;
+} IterateCallbackClosure;
+
+/**
+ * cb_iterate_cellrange:
+ *
+ * Helper routine used by the function_iterate_do_value routine.
+ * Invoked by the sheet cell range iterator.
+ **/
+static GnmValue *
+cb_iterate_cellrange (GnmCellIter const *iter, gpointer user)
+
+{
+	IterateCallbackClosure *data = user;
+	GnmEvalPos ep;
+
+	GnmCell *cell = iter->cell;
+	if (!cell) {
+		ep.sheet = iter->pp.sheet;
+		ep.dep = NULL;
+		ep.eval = iter->pp.eval;
+		return (*data->callback)(&ep, NULL, FALSE, data->closure);
+	}
+
+	if ((data->iter_flags & CELL_ITER_IGNORE_SUBTOTAL) &&
+	    gnm_cell_has_expr (cell) &&
+	    gnm_expr_top_contains_subtotal (cell->base.texpr))
+		return NULL;
+
+	gnm_cell_eval (cell);
+	eval_pos_init_cell (&ep, cell);
+
+	/* If we encounter an error for the strict case, short-circuit here.  */
+	if (data->strict) {
+		GnmValue *res = gnm_cell_is_error (cell);
+		if (res)
+			return value_new_error_str (&ep, res->v_err.mesg);
+	}
+
+	/* All other cases -- including error -- just call the handler.  */
+	return (*data->callback)(&ep, cell->value, FALSE, data->closure);
+}
+
+/*
+ * function_iterate_do_value:
+ *
+ * Helper routine for function_iterate_argument_values.
+ */
+static GnmValue *
+function_iterate_do_value (GnmValue const *value,
+			   IterateCallbackClosure *data,
+			   gboolean direct)
+{
+	GnmValue *res = NULL;
+
+	switch (value->v_any.type){
+	case VALUE_ERROR:
+		if (data->strict) {
+			res = value_dup (value);
+			break;
+		}
+		/* Fall through.  */
+
+	case VALUE_EMPTY:
+	case VALUE_BOOLEAN:
+	case VALUE_FLOAT:
+	case VALUE_STRING:
+		res = (data->callback)(data->ep, value, direct, data->closure);
+		break;
+
+	case VALUE_ARRAY: {
+		int x, y;
+
+		/* Note the order here.  */
+		for (y = 0; y < value->v_array.y; y++) {
+			  for (x = 0; x < value->v_array.x; x++) {
+				res = function_iterate_do_value (
+					value->v_array.vals[x][y], data, FALSE);
+				if (res != NULL)
+					return res;
+			}
+		}
+		break;
+	}
+	case VALUE_CELLRANGE:
+		res = workbook_foreach_cell_in_range (data->ep, value,
+						      data->iter_flags,
+						      cb_iterate_cellrange,
+						      data);
+		break;
+	}
+	return res;
+}
+
+/**
+ * function_iterate_argument_values:
+ * @ep:               The position in a workbook at which to evaluate
+ * @callback: (scope call): The routine to be invoked for every value computed
+ * @callback_closure: Closure for the callback.
+ * @argc:
+ * @argv:
+ * @strict:           If TRUE, the function is considered "strict".  This means
+ *                   that if an error value occurs as an argument, the iteration
+ *                   will stop and that error will be returned.  If FALSE, an
+ *                   error will be passed on to the callback (as a GnmValue *
+ *                   of type VALUE_ERROR).
+ * @iter_flags:
+ *
+ * Return value:
+ *    NULL            : if no errors were reported.
+ *    GnmValue *         : if an error was found during strict evaluation
+ *    VALUE_TERMINATE : if the callback requested termination of the iteration.
+ *
+ * This routine provides a simple way for internal functions with variable
+ * number of arguments to be written: this would iterate over a list of
+ * expressions (expr_node_list) and will invoke the callback for every
+ * GnmValue found on the list (this means that ranges get properly expanded).
+ **/
+GnmValue *
+function_iterate_argument_values (GnmEvalPos const	*ep,
+				  FunctionIterateCB	 callback,
+				  void			*callback_closure,
+				  int                    argc,
+				  GnmExprConstPtr const *argv,
+				  gboolean		 strict,
+				  CellIterFlags		 iter_flags)
+{
+	GnmValue *result = NULL;
+	int a;
+	IterateCallbackClosure data;
+
+	data.callback = callback;
+	data.closure = callback_closure;
+	data.strict = strict;
+	data.iter_flags = iter_flags;
+	data.ep = ep;
+
+	for (a = 0; result == NULL && a < argc; a++) {
+		GnmExpr const *expr = argv[a];
+		GnmValue *val;
+
+		if (iter_flags & CELL_ITER_IGNORE_SUBTOTAL &&
+		    gnm_expr_contains_subtotal (expr))
+			continue;
+
+		/* need to drill down into names to handle things like
+		 * sum(name)  with name := (A:A,B:B) */
+		while (GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_NAME) {
+			GnmExprTop const *texpr = expr->name.name->texpr;
+			expr = texpr ? texpr->expr : NULL;
+			if (expr == NULL) {
+				if (strict)
+					return value_new_error_REF (ep);
+				break;
+			}
+		}
+		if (!expr)
+			continue;
+
+		/* Handle sets as a special case */
+		if (GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_SET) {
+			result = function_iterate_argument_values
+				(ep, callback, callback_closure,
+				 expr->set.argc, expr->set.argv,
+				 strict, iter_flags);
+			continue;
+		}
+
+		/* We need a cleaner model of what to do here.
+		 * In non-array mode
+		 *	SUM(Range)
+		 * will obviously return Range
+		 *
+		 *	SUM(INDIRECT(Range))
+		 *	SUM(INDIRECT(Range):....)
+		 * will do implicit intersection on Range (in non-array mode),
+		 * but allow non-scalar results from indirect (no intersection)
+		 *
+		 *	SUM(Range=3)
+		 * will do implicit intersection in non-array mode */
+		if (GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_CONSTANT)
+			val = value_dup (expr->constant.value);
+		else if (GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_CELLREF) {
+			// Treat as range.  We probably could cut out several
+			// layers of function calls here.
+			GnmCellRef const *cr = gnm_expr_get_cellref (expr);
+			val = value_new_cellrange_unsafe (cr, cr);
+		} else if (eval_pos_is_array_context (ep) ||
+			 GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_FUNCALL ||
+			 GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_RANGE_CTOR ||
+			 GNM_EXPR_GET_OPER (expr) == GNM_EXPR_OP_INTERSECT)
+			val = gnm_expr_eval (expr, ep,
+				GNM_EXPR_EVAL_PERMIT_EMPTY | GNM_EXPR_EVAL_PERMIT_NON_SCALAR);
+		else
+			val = gnm_expr_eval (expr, ep, GNM_EXPR_EVAL_PERMIT_EMPTY);
+
+		if (val == NULL)
+			continue;
+
+		if (strict && VALUE_IS_ERROR (val)) {
+			/* Be careful not to make VALUE_TERMINATE into a real value */
+			return val;
+		}
+
+		result = function_iterate_do_value (val, &data, TRUE);
+		value_release (val);
+	}
+	return result;
+}
+
 
 /* ------------------------------------------------------------------------- */
 
@@ -644,6 +895,51 @@ float_range_function (int argc, GnmExprConstPtr const *argv,
 /* ------------------------------------------------------------------------- */
 
 /**
+ * bool_range_function:
+ * @argc: number of arguments
+ * @argv: (in) (array length=argc): function arguments
+ * @ei: #GnmFuncEvalInfo describing evaluation context
+ * @func: (scope call): implementation function
+ * @flags: #CollectFlags flags describing the collection and interpretation
+ * of values from @argv.
+ * @func_error: A #GnmStdError to use to @func indicates an error.
+ *
+ * This implements a Gnumeric sheet function that operates on a list of
+ * numbers.  This function collects the arguments and uses @func to do
+ * the actual computation.  The only difference from float_range_function
+ * is that it returns its value as a boolean.
+ *
+ * Returns: (transfer full): Function result or error value.
+ **/
+GnmValue *
+bool_range_function (int argc, GnmExprConstPtr const *argv,
+		     GnmFuncEvalInfo *ei,
+		     float_range_function_t func,
+		     CollectFlags flags,
+		     GnmStdError func_error)
+{
+	GnmValue *error = NULL;
+	gnm_float *vals, res;
+	int n, err;
+	gboolean constp;
+
+	vals = collect_floats (argc, argv, ei->pos, flags, &n, &error,
+			       NULL, &constp);
+	if (!vals)
+		return error;
+
+	err = func (vals, n, &res);
+	if (!constp) g_free (vals);
+
+	if (err)
+		return value_new_error_std (ei->pos, func_error);
+	else
+		return value_new_bool (res != 0);
+}
+
+/* ------------------------------------------------------------------------- */
+
+/**
  * gnm_slist_sort_merge:
  * @list_1: (element-type guint) (transfer container): a sorted list of
  * unsigned integers with no duplicates.
@@ -651,7 +947,7 @@ float_range_function (int argc, GnmExprConstPtr const *argv,
  *
  * gnm_slist_sort_merge merges two lists of unsigned integers.
  *
- * Returns: (element-type guint) (transfer container): the mergedlist.
+ * Returns: (element-type guint) (transfer container): the merged list.
  **/
 GSList *
 gnm_slist_sort_merge (GSList *l1,
@@ -691,7 +987,7 @@ gnm_slist_sort_merge (GSList *l1,
  * order.
  *
  * This removes the data elements from @data whose indices are given by
- * @missing.  @n is the number of elements and it updated upon return.
+ * @missing.  @n is the number of elements and is updated upon return.
  **/
 void
 gnm_strip_missing (gnm_float *data, int *n, GSList *missing)
@@ -769,15 +1065,15 @@ collect_float_pairs_ce (GnmValue const *vx, GnmValue const *vy,
  * @xs0: (out) (array length=n): return location for first data vector
  * @xs1: (out) (array length=n): return location for second data vector
  * @n: (out): return location for number of data points
- * @constp: (out) (optional): Return location for a flag describing who own
+ * @constp: (out) (optional): Return location for a flag describing who owns
  * the vectors returned in @xs0 and @xs1.  If present and %TRUE, the
  * resulting data vectors in @xs0 and @xs1 are not owned by the caller.
- * If not-present or %FALSE, the callers owns and must free the result.
+ * If not-present or %FALSE, the caller owns and must free the result.
  *
  * If @n is not positive upon return, no data has been allocated.
  * If @n is negative upon return, the two ranges had different sizes.
  *
- * Note: introspection cannot handle this functions parameter mix.
+ * Note: introspection cannot handle this function's parameter mix.
  *
  * Returns: (transfer full) (nullable): Error value.
  */
@@ -964,7 +1260,7 @@ typedef struct {
 
 static GnmValue *
 callback_function_collect_strings (GnmEvalPos const *ep, GnmValue const *value,
-				   void *closure)
+				   G_GNUC_UNUSED gboolean direct, void *closure)
 {
 	char *text;
 	collect_strings_t *cl = closure;
@@ -997,7 +1293,7 @@ collect_strings_free (GPtrArray *data)
  * @ep: Evaluation position
  * @flags: #CollectFlags flags describing the collection and interpretation
  * of values from @argv.
- * @error: (out): Error return value
+ * @error: (out) (nullable): Error return value
  *
  * Evaluate a list of expressions and return the result as a #GPtrArray of
  * strings.
@@ -1046,6 +1342,7 @@ collect_strings (int argc, GnmExprConstPtr const *argv,
  * @argv: (in) (array length=argc): function arguments
  * @ei: #GnmFuncEvalInfo describing evaluation context
  * @func: (scope call): implementation function
+ * @user: (nullable): ignored.
  * @flags: #CollectFlags flags describing the collection and interpretation
  * of values from @argv.
  * @func_error: A #GnmStdError to use to @func indicates an error.
@@ -1058,11 +1355,11 @@ collect_strings (int argc, GnmExprConstPtr const *argv,
  **/
 GnmValue *
 string_range_function (int argc, GnmExprConstPtr const *argv,
-		       GnmFuncEvalInfo *ei,
-		       string_range_function_t func,
-		       gpointer user,
-		       CollectFlags flags,
-		       GnmStdError func_error)
+                       GnmFuncEvalInfo *ei,
+                       string_range_function_t func,
+                       gpointer user,
+                       CollectFlags flags,
+                       GnmStdError func_error)
 {
 	GnmValue *error = NULL;
 	GPtrArray *vals;

@@ -1,5 +1,5 @@
-#ifndef _GNM_FORMAT_TEMPLATE_H_
-# define _GNM_FORMAT_TEMPLATE_H_
+#ifndef GNM_FORMAT_TEMPLATE_H_
+#define GNM_FORMAT_TEMPLATE_H_
 
 #include <gnumeric.h>
 
@@ -55,25 +55,39 @@ typedef enum {
 	FREQ_DIRECTION_VERTICAL
 } GnmFTFreqDirection;
 
-/* A collection of categories of the same name from different paths */
-typedef struct {
+#define GNM_TYPE_FT_CATEGORY_GROUP (gnm_ft_category_group_get_type ())
+G_DECLARE_FINAL_TYPE (GnmFTCategoryGroup, gnm_ft_category_group, GNM, FT_CATEGORY_GROUP, GObject)
+
+struct _GnmFTCategoryGroup {
+	GObject parent;
+
+	/* A collection of categories of the same name from different paths */
 	GList *categories;
 
 	/* translatable via gettext in the std message domain */
 	char *name;
 	char *description;
-} GnmFTCategoryGroup;
+};
 
-typedef struct {
+#define GNM_TYPE_FT_CATEGORY (gnm_ft_category_get_type ())
+G_DECLARE_FINAL_TYPE (GnmFTCategory, gnm_ft_category, GNM, FT_CATEGORY, GObject)
+
+struct _GnmFTCategory {
+	GObject parent;
 	char *directory;
-	gboolean is_writable;
 
 	/* translatable via gettext in the std message domain */
 	char *name;
 	char *description;
-} GnmFTCategory;
+};
+
+GType gnm_ft_get_type (void);
+#define GNM_TYPE_FT (gnm_ft_get_type ())
+#define GNM_FT(o)          (G_TYPE_CHECK_INSTANCE_CAST ((o), GNM_TYPE_FT, GnmFT))
+#define GNM_IS_FT(o)       (G_TYPE_CHECK_INSTANCE_TYPE ((o), GNM_TYPE_FT))
 
 struct GnmFT_ {
+	GObject parent;
 	GnmFTCategory *category;
 	GSList *members;	/* the actual TemplateMembers */
 	char *filename;
@@ -104,7 +118,11 @@ struct GnmFT_ {
 	GnmRange dimension;
 };
 
-typedef struct {
+#define GNM_TYPE_FT_MEMBER (gnm_ft_member_get_type ())
+G_DECLARE_FINAL_TYPE (GnmFTMember, gnm_ft_member, GNM, FT_MEMBER, GObject)
+
+struct _GnmFTMember {
+	GObject parent;
 	GnmFTColRowInfo row; /* Row info */
 	GnmFTColRowInfo col; /* Col info */
 
@@ -117,13 +135,11 @@ typedef struct {
 	int edge;
 
 	GnmStyle *mstyle;       /* Style to apply */
-} GnmFTMember;
+};
 
 /*
  * Functions for GnmFT
  */
-GType            gnm_ft_get_type       (void);
-void             gnm_ft_free           (GnmFT *ft);
 GnmFT		*gnm_ft_clone          (GnmFT const *ft);
 GnmFT 		*gnm_ft_new_from_file  (char const *filename,
 					GOCmdContext *context);
@@ -137,4 +153,4 @@ gboolean	 gnm_ft_check_valid   (GnmFT *ft, GSList *regions,
 
 G_END_DECLS
 
-#endif /* _GNM_FORMAT_TEMPLATE_H_ */
+#endif /* GNM_FORMAT_TEMPLATE_H_ */

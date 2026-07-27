@@ -1,5 +1,5 @@
-#ifndef GNM_EXCEL_CONTAINER_H
-#define GNM_EXCEL_CONTAINER_H
+#ifndef GNM_EXCEL_CONTAINER_H_
+#define GNM_EXCEL_CONTAINER_H_
 
 /**
  * ms-container.h: A meta container to handle object import for charts,
@@ -16,10 +16,10 @@
 #include <glib.h>
 #include <pango/pango-attributes.h>
 
-typedef struct _MSContainer	MSContainer;
-typedef struct _GnmXLImporter	GnmXLImporter;
-typedef struct _MSEscherBlip	MSEscherBlip;
-typedef struct _MSObj		MSObj;
+typedef struct MSContainer_	MSContainer;
+typedef struct GnmXLImporter_	GnmXLImporter;
+typedef struct MSEscherBlip_	MSEscherBlip;
+typedef struct MSObj_		MSObj;
 
 typedef struct {
 	gboolean        (*realize_obj)	(MSContainer *c, MSObj *obj);
@@ -31,7 +31,7 @@ typedef struct {
 	PangoAttrList * (*get_markup)	(MSContainer const *c, unsigned indx);
 } MSContainerClass;
 
-struct _MSContainer {
+struct MSContainer_ {
 	MSContainerClass const *vtbl;
 
 	GnmXLImporter	*importer;
@@ -68,4 +68,4 @@ PangoAttrList	*ms_container_read_markup (MSContainer const *c,
 					   guint8 const *data, size_t txo_len,
 					   char const *str);
 
-#endif /* GNM_EXCEL_CONTAINER_H */
+#endif /* GNM_EXCEL_CONTAINER_H_ */

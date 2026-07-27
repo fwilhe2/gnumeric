@@ -1,7 +1,167 @@
+2026-05-20  Morten Welinder  <terra@gnome.org>
+
+	* src/func.c (function_call_with_values): Remove unused function.
+
+2026-05-15  Morten Welinder  <terra@gnome.org>
+
+	* src/collect.c (callback_function_collect): Add special handling
+	for direct string arguments (where "direct" means that they are
+	directly listed function arguments, not values reached via cell
+	range references).  They are *weird*.  Excel-class weird.
+
+	* src/func.h (FunctionIterateCB): Add "direct" argument.  All
+	users changed.
+
+	* src/func.c (function_iterate_do_value, cb_iterate_cellrange):
+	Supply "direct" argument.
+
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2026-04-29  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.61
+
+2026-04-04  Morten Welinder  <terra@gnome.org>
+
+	* src/stf-parse.c (guess_line_endings): New function.  We'll
+	preserve line endings on cvs->cvs or cvs->txt conversion.  At
+	least if they are consistent.
+
+2026-03-26  Morten Welinder  <terra@gnome.org>
+
+	* src/stf-parse.c (stf_parse_sheet): Move error messages needing
+	translation outside the changed-locale region used for parsing.
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2026-02-10  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.60
+
+2026-02-01  Morten Welinder  <terra@gnome.org>
+
+	* src/colrow.c (colrow_set_states): Never restore to NULL as we
+	may have created cells.  See sheet_cell_add_to_hash.
+
+2025-08-29  Morten Welinder  <terra@gnome.org>
+
+	* src/mathfunc.c (gnm_logbase): New function.
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2025-03-01  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.59
+
+2025-01-17  Morten Welinder  <terra@gnome.org>
+
+	* src/cell-draw.c (cell_draw_simplify_attributes): Copy attributes
+	before filtering.  Fixes #707.
+
+2024-12-18  Morten Welinder  <terra@gnome.org>
+
+	* src/colrow.c (colrow_set_visibility): Invalidate sheet's colrow
+	position cache.  Fixes #712.
+
+2024-04-29  b.s. <newbie-02 (at) gmx (dot) de>
+
+	* src/numbers.h: add '~10_EXP' definitions,
+
+2024-04-10  Morten Welinder  <terra@gnome.org>
+
+	* src/gui-util.c (entry_to_float_with_format): With general
+	format, use value_get_as_string to get shortest representation and
+	don't truncate.
+
+2024-04-03  Morten Welinder  <terra@gnome.org>
+
+	* src/workbook.c (workbook_init): Fix double-gnm_float confusion.
+
+2024-03-13  Morten Welinder  <terra@gnome.org>
+
+	* src/cell.c (gnm_cell_get_text_for_editing): If the format family
+	is unknown, render as general.
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2024-02-11  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.57
+
+2024-02-11  Morten Welinder  <terra@gnome.org>
+
+	* src/sheet.c (sheet_range_set_expr_cb): Also redraw.  Fixes #755.
+
+2023-12-05  Morten Welinder  <terra@gnome.org>
+
+	* src/xml-sax-write.c (xml_write_filter_field): Fix reversed sense
+	on several fields.
+
+	* src/xml-sax-read.c (xml_sax_filter_condition): Fix badly broken
+	reading of auto-filters.
+
+	* src/sheet-filter.c (gnm_filter_condition_new_bucket): Cap n,
+	so crazy numbers don't cause trouble down the line.
+	(gnm_filter_combo_apply): Fix problem with empty range; fix
+	gnm_float/double mixing.
+
+2023-11-16  Morten Welinder  <terra@gnome.org>
+
+	* src/wbc-gtk.c (wbcg_set_action_feedback): New function to
+	suppress toggle action signalling while we're updating the ui.
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2023-11-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.56
+
+2023-09-24  Morten Welinder  <terra@gnome.org>
+
+	* src/dependent.h (GnmDependentClass): Add q_array_context since
+	certain graph deps are computed in array context.
+
+	* src/dependent.c (dependent_link): Observe q_array_context.
+	(link_unlink_expr_dep): Don't clear array context for operators.
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2023-02-02  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.55
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* configure.ac: Post-release bump.
+
+2023-01-19  Morten Welinder <terra@gnome.org>
+
+	* Release 1.12.54
+
+2023-01-15  Morten Welinder  <terra@gnome.org>
+
+	* src/sheet-object.c (sheet_objects_clear): Freeze the object
+	views, just in case there are a lot of objects to clear.
+
+	* src/gnm-pane.c (cb_pane_init_objs): Freeze panes while creating
+	views -- there might be a lot.
+
 2022-12-01  Morten Welinder  <terra@gnome.org>
 
 	* src/value.c (value_get_as_gstring): When rendering shortest,
-	round-away-from-zero, not to-even.
+	round halfways away-from-zero, not to-even.
 
 	* src/complex.c (gnm_complex_to_string): Round
 	away-away-from-zero.
@@ -495,7 +655,7 @@
 	* src/cell.c (gnm_cell_get_text_for_editing): Avoid excess
 	precision when editing percentages.  [#413]
 
-	* src/criteria.c (parse_criteria): Be careful about critiria that
+	* src/criteria.c (parse_criteria): Be careful about criteria that
 	are either empty values or empty strings.  The semantics are
 	special.  [#423]  Fix initial ref-count problem.
 
@@ -1450,7 +1610,7 @@
 	* src/sheet.c (gnm_sheet_constructed): Chain ->constructed early.
 
 	* src/expr-name.c (expr_name_add): Improve check for circular name
-	defintion.  Fixes #760046.
+	definition.  Fixes #760046.
 
 2015-12-28  Morten Welinder  <terra@gnome.org>
 
@@ -1968,7 +2128,7 @@
 2015-02-11  Jean Brefort  <jean.brefort@normalesup.org>
 
 	* src/graph.c (cb_assign_val): use go_nan instead of infinite for strings
-	that can't be convered to valid numbers.
+	that can't be converted to valid numbers.
 
 2015-02-10  Morten Welinder  <terra@gnome.org>
 
@@ -2428,7 +2588,7 @@
 2014-03-15  Jean Brefort  <jean.brefort@normalesup.org>
 
 	* src/item-grid.c (item_grid_realize), (cb_cursor_come_to_rest): move
-	the tooltip where it will not immediatly be destroyed after creation.
+	the tooltip where it will not immediately be destroyed after creation.
 	[really fix #706659]
 
 2014-03-14  Morten Welinder  <terra@gnome.org>
@@ -2894,7 +3054,7 @@
 
 2013-10-06  Andreas J. Guelzow <aguelzow@pyrshep.ca>
 
-	* src/cmd-edit.c (cmd_paste): chceck for locked cells
+	* src/cmd-edit.c (cmd_paste): check for locked cells
 
 2013-10-03  Morten Welinder  <terra@gnome.org>
 
@@ -3028,7 +3188,7 @@
 2013-08-08  Andreas J. Guelzow <aguelzow@pyrshep.ca>
 
 	* src/sheet-object-widget.c (sheet_widget_frame_draw_cairo): use
-	cairo version for Gnuemric too.
+	cairo version for Gnumeric too.
 	(sheet_widget_button_draw_cairo): ditto
 	(sheet_widget_scrollbar_draw_cairo): ditto
 	(sheet_widget_spinbutton_draw_cairo): ditto
@@ -3287,7 +3447,7 @@
 2013-06-20  Andreas J. Guelzow <aguelzow@pyrshep.ca>
 
 	* src/wbc-gtk.c (show_gui): protect against excessively large
-	preferred widow sizes
+	preferred window sizes
 
 2013-06-14  Morten Welinder  <terra@gnome.org>
 
@@ -4031,7 +4191,7 @@
 
 	* src/parse-util.c (std_func_map): Lookup translated name as
 	needed.
-	(parse_util_init): Add enviroment magic to turn on translated
+	(parse_util_init): Add environment magic to turn on translated
 	functions names.  This is not ready for prime time and should be
 	controlled by a user preference eventually.
 

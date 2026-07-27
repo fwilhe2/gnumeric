@@ -1,9 +1,14 @@
-#ifndef _GNM_SORT_H_
-# define _GNM_SORT_H_
+#ifndef GNM_SORT_H_
+#define GNM_SORT_H_
 
 #include <gnumeric.h>
 
 G_BEGIN_DECLS
+
+GType gnm_sort_data_get_type (void);
+#define GNM_SORT_DATA_TYPE (gnm_sort_data_get_type ())
+#define GNM_SORT_DATA(o)          (G_TYPE_CHECK_INSTANCE_CAST ((o), GNM_SORT_DATA_TYPE, GnmSortData))
+#define GNM_IS_SORT_DATA(o)       (G_TYPE_CHECK_INSTANCE_TYPE ((o), GNM_SORT_DATA_TYPE))
 
 typedef struct {
 	int	 offset;
@@ -12,9 +17,10 @@ typedef struct {
 	gboolean val;
 } GnmSortClause;
 
-struct _GnmSortData {
+struct GnmSortData_ {
+	GObject		parent;
 	Sheet		*sheet;
-	GnmRange	*range;
+	GnmRange	range;
 	int		 num_clause;
 	GnmSortClause	*clauses;
 	gboolean	 top;
@@ -22,13 +28,11 @@ struct _GnmSortData {
 	char            *locale;
 };
 
-GType gnm_sort_data_get_type (void);
-void gnm_sort_data_destroy   (GnmSortData *data);
-GnmSortData *gnm_sort_data_copy   (GnmSortData *data);
+GnmSortData *gnm_sort_data_new    (void);
+GnmSortData *gnm_sort_data_copy   (GnmSortData const *data);
 void gnm_sort_position	     (GnmSortData *data, int *perm, GOCmdContext *cc);
 int *gnm_sort_contents	     (GnmSortData *data, GOCmdContext *cc);
-int *gnm_sort_permute_invert (int const *perm, int length);
 
 G_END_DECLS
 
-#endif /* _GNM_SORT_H_ */
+#endif /* GNM_SORT_H_ */

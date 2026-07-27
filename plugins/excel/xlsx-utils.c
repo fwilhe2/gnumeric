@@ -38,20 +38,27 @@
 #include <expr.h>
 #include <expr-impl.h>
 #include <value.h>
+#include <gutils.h>
 
 typedef struct {
-	GnmConventions base;
 	GHashTable *extern_id_by_wb;
 	GHashTable *extern_wb_by_id;
 	GHashTable *xlfn_map;
 	GHashTable *xlfn_handler_map;
-} XLSXExprConventions;
+	GHashTable *future_function_set;
+} XLSXExprData;
+
+static inline XLSXExprData *
+xlsx_get_data (GnmConventions const *convs)
+{
+	return (XLSXExprData *)convs->pdata;
+}
 
 static void
 xlsx_add_extern_id (GnmConventionsOut *out, Workbook *wb)
 {
 	if (wb != out->pp->wb) {
-		XLSXExprConventions const *xconv = (XLSXExprConventions const *)out->convs;
+		XLSXExprData const *xconv = xlsx_get_data (out->convs);
 		char *id = g_hash_table_lookup (xconv->extern_id_by_wb, wb);
 		if (NULL == id) {
 			id = g_strdup_printf ("[%u]",
@@ -68,7 +75,7 @@ xlsx_lookup_external_wb (GnmConventions const *convs,
 			 G_GNUC_UNUSED Workbook *ref_wb,
 			 char const *name)
 {
-	XLSXExprConventions const *xconv = (XLSXExprConventions const *)convs;
+	XLSXExprData const *xconv = xlsx_get_data (convs);
 	if (strcmp (name, "0") == 0)
 		return ref_wb;
 	if (0) g_printerr ("lookup '%s'\n", name);
@@ -115,7 +122,7 @@ xlsx_rangeref_as_string (GnmConventionsOut *out, GnmRangeRef const *ref)
 Workbook *
 xlsx_conventions_add_extern_ref (GnmConventions *convs, char const *path)
 {
-	XLSXExprConventions *xconv = (XLSXExprConventions *)convs;
+	XLSXExprData *xconv = xlsx_get_data (convs);
 	Workbook *res = g_object_new (GNM_WORKBOOK_TYPE, NULL);
 	char *id;
 
@@ -134,7 +141,7 @@ xlsx_func_map_in (GnmConventions const *convs,
 		  G_GNUC_UNUSED Workbook *scope,
 		  char const *name, GnmExprList *args)
 {
-	XLSXExprConventions const *xconv = (XLSXExprConventions const *)convs;
+	XLSXExprData const *xconv = xlsx_get_data (convs);
 	GnmExpr const * (*handler) (GnmConventions const *convs, Workbook *scope,
 				    GnmExprList *args);
 	GnmFunc  *f;
@@ -156,7 +163,7 @@ xlsx_func_map_in (GnmConventions const *convs,
 		/* This should at most happen for ODF functions incorporated */
 		/* in an xlsx file, we should perform the appropriate translation! */
 		name = name + 9;
-	else if (0 == g_ascii_strncasecmp (name, "_xlfngnumeric.", 9))
+	else if (0 == g_ascii_strncasecmp (name, "_xlfngnumeric.", 14))
 		/* These are Gnumeric's own functions */
 		name = name + 14;
 
@@ -168,35 +175,39 @@ xlsx_func_map_in (GnmConventions const *convs,
 static void
 xlsx_func_map_out (GnmConventionsOut *out, GnmExprFunction const *func)
 {
-	XLSXExprConventions const *xconv = (XLSXExprConventions const *)(out->convs);
+	XLSXExprData const *xconv = xlsx_get_data (out->convs);
 	GnmFunc *gfunc = gnm_expr_get_func_def ((GnmExpr *)func);
 	char const *name = gnm_func_get_name (gfunc, FALSE);
 	gboolean (*handler) (GnmConventionsOut *out, GnmExprFunction const *func);
+	GString *target = out->accum;
 
 	handler = g_hash_table_lookup (xconv->xlfn_handler_map, name);
+	if (handler && handler (out, func))
+		return;  // Handler took care of it all
 
-	if (handler == NULL || !handler (out, func)) {
-		char const *new_name = g_hash_table_lookup (xconv->xlfn_map, name);
-		GString *target = out->accum;
+	char const *new_name = g_hash_table_lookup (xconv->xlfn_map, name);
+	if (!new_name)
+		new_name = g_hash_table_lookup (xconv->future_function_set, name);
 
-		if (new_name == NULL) {
-				char *new_u_name;
-				new_u_name = g_ascii_strup (name, -1);
-				if (gnm_func_get_impl_status (gfunc) ==
-				    GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC)
-					g_string_append (target, "_xlfngnumeric.");
-				/* LO & friends use _xlfnodf */
-				g_string_append (target, new_u_name);
-				g_free (new_u_name);
-		}
-		else {
-			g_string_append (target, "_xlfn.");
-			g_string_append (target, new_name);
-		}
+	gboolean q_xlfn = (new_name != NULL);
+	gboolean q_xlfngnumeric = !q_xlfn &&
+		(gnm_func_get_impl_status (gfunc) ==
+		 GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC);
 
-		gnm_expr_list_as_string (func->argc, func->argv, out);
+	if (q_xlfn)
+		g_string_append (target, "_xlfn.");
+	else if (q_xlfngnumeric)
+		g_string_append (target, "_xlfngnumeric.");
+
+	if (new_name)
+		g_string_append (target, new_name);
+	else {
+		char *uname = g_ascii_strup (name, -1);
+		g_string_append (target, uname);
+		g_free (uname);
 	}
-	return;
+
+	gnm_expr_list_as_string (func->argc, func->argv, out);
 }
 
 
@@ -224,32 +235,22 @@ xlsx_func_dist_handler (GnmExprList *args, guint n_args, char const *name, char 
 		GnmFunc  *f_if = gnm_func_lookup_or_add_placeholder ("if");
 		GnmFunc  *f_p = gnm_func_lookup_or_add_placeholder (name_p);
 		GnmFunc  *f_d = gnm_func_lookup_or_add_placeholder (name_d);
-		GnmExprList *arg_cum, *args_c;
-		GnmExpr const *cum;
-		GnmValue const *constant;
+		GnmExprList *arg_cum = g_slist_nth (args, n_args - 1);
+		GnmExpr const *cum = arg_cum->data;
+		args = g_slist_delete_link (args, arg_cum);
+		GnmExprList *args_c = gnm_expr_list_copy (args);
 
-		arg_cum = g_slist_nth (args, n_args - 1);
-		args = g_slist_remove_link (args, arg_cum);
-		cum = arg_cum->data;
-		gnm_expr_list_free (arg_cum);
-
-		constant = gnm_expr_get_constant (cum);
-
-		if (constant == NULL || !VALUE_IS_NUMBER (constant)) {
-			args_c = gnm_expr_list_copy (args);
-
-			return gnm_expr_new_funcall3
-				(f_if, cum,
-				 gnm_expr_new_funcall (f_p, args),
-				 gnm_expr_new_funcall (f_d, args_c));
-
-		} else if (value_is_zero (constant)) {
-			gnm_expr_free (cum);
-			return gnm_expr_new_funcall (f_d, args);
-		} else {
-			gnm_expr_free (cum);
-			return gnm_expr_new_funcall (f_p, args);
+		GnmExpr const *expr =
+			gnm_expr_new_funcall3
+			(f_if, cum,
+			 gnm_expr_new_funcall (f_p, args),
+			 gnm_expr_new_funcall (f_d, args_c));
+		GnmExpr const *expr2 = gnm_expr_simplify_if (expr);
+		if (expr2) {
+			gnm_expr_free (expr);
+			expr = expr2;
 		}
+		return expr;
 	}
 }
 
@@ -265,6 +266,13 @@ xlsx_func_fdist_handler (G_GNUC_UNUSED GnmConventions const *convs, G_GNUC_UNUSE
 			 GnmExprList *args)
 {
 	return xlsx_func_dist_handler (args, 4, "f.dist", "r.pf", "r.df");
+}
+
+static GnmExpr const *
+xlsx_func_tdist_handler (G_GNUC_UNUSED GnmConventions const *convs, G_GNUC_UNUSED Workbook *scope,
+			 GnmExprList *args)
+{
+	return xlsx_func_dist_handler (args, 3, "t.dist", "r.pt", "r.dt");
 }
 
 static GnmExpr const *
@@ -325,15 +333,15 @@ xlsx_write_r_q_func (GnmConventionsOut *out, char const *name, char const *name_
 
 /**
  * xlsx_func_r_q_output_handler:
- *
  * @out: #GnmConventionsOut
  * @func: #GnmExprFunction
  * @n: last index used for a parameter
  * @n_p: index of the probability argument, usually 0
- * @name:
+ * @name: function name
+ * @name_rt: (nullable): right tail function name
  *
  * Print the appropriate simple function call
- */
+ **/
 static gboolean
 xlsx_func_r_q_output_handler (GnmConventionsOut *out, GnmExprFunction const *func, int n, int n_p,
 			      char const *name, char const *name_rt)
@@ -548,6 +556,23 @@ xlsx_output_string (GnmConventionsOut *out, GOString const *str)
 	g_string_append_c (out->accum, '"');
 }
 
+static void
+xlsx_conventions_pdata_free (gpointer pdata)
+{
+	XLSXExprData *xconv = pdata;
+	if (xconv->extern_id_by_wb)
+		g_hash_table_destroy (xconv->extern_id_by_wb);
+	if (xconv->extern_wb_by_id)
+		g_hash_table_destroy (xconv->extern_wb_by_id);
+	if (xconv->xlfn_map)
+		g_hash_table_destroy (xconv->xlfn_map);
+	if (xconv->xlfn_handler_map)
+		g_hash_table_destroy (xconv->xlfn_handler_map);
+	if (xconv->future_function_set)
+		g_hash_table_destroy (xconv->future_function_set);
+	g_free (xconv);
+}
+
 GnmConventions *
 xlsx_conventions_new (gboolean output)
 {
@@ -558,6 +583,7 @@ xlsx_conventions_new (gboolean output)
 		{"BINOM.INV", xlsx_func_binominv_handler},
 		{"CHISQ.DIST", xlsx_func_chisqdist_handler},
 		{"F.DIST", xlsx_func_fdist_handler},
+		{"T.DIST", xlsx_func_tdist_handler},
 		{"NEGBINOM.DIST", xlsx_func_negbinomdist_handler},
 		{"LOGNORM.DIST", xlsx_func_lognormdist_handler},
 		{NULL, NULL}
@@ -601,8 +627,11 @@ xlsx_conventions_new (gboolean output)
 		{ "F.INV", "R.QF" }, /* see output handler */
 		{ "F.INV.RT", "FINV" },
 		{ "F.TEST", "FTEST" },
+		{ "FORECAST.LINEAR", "FORECAST" },
+		{ "FORMULATEXT", "GET.FORMULA" },
 		{ "GAMMA.DIST", "GAMMADIST" },
 		{ "GAMMA.INV", "GAMMAINV" },
+		{ "GAMMALN.PRECISE", "GAMMALN" },
 		{ "HYPGEOM.DIST", "HYPGEOMDIST" },  /* see output handler */
 		{ "LOGNORM.INV", "LOGINV" },
 		{ "MODE.SNGL", "MODE" },
@@ -614,6 +643,7 @@ xlsx_conventions_new (gboolean output)
 		{ "POISSON.DIST", "POISSON" },
 		{ "QUARTILE.INC", "QUARTILE" },
 		{ "RANK.EQ", "RANK" },
+		{ "SKEW.P", "SKEWP" },
 		{ "STDEV.P", "STDEVP" },
 		{ "STDEV.S", "STDEV" },
 		{ "T.TEST", "TTEST" },
@@ -625,10 +655,39 @@ xlsx_conventions_new (gboolean output)
 		{ "Z.TEST", "ZTEST" },
 		{ NULL, NULL }
 	};
-	GnmConventions *convs = gnm_conventions_new_full (
-		sizeof (XLSXExprConventions));
-	XLSXExprConventions *xconv = (XLSXExprConventions *)convs;
+	// List of functions that need "_xlfn." prefix.
+	static const char * const future_funcs [] = {
+		"AGGREGATE", "ACOT", "ACOTH", "ARABIC", "BASE", "BETA.DIST", "BETA.INV",
+		"BINOM.DIST", "BINOM.DIST.RANGE", "BINOM.INV", "BITAND", "BITLSHIFT",
+		"BITOR", "BITRSHIFT", "BITXOR", "BYCOL", "BYROW", "CEILING.MATH",
+		"CEILING.PRECISE", "CHISQ.DIST", "CHISQ.DIST.RT", "CHISQ.INV", "CHISQ.INV.RT",
+		"CHISQ.TEST", "CHOOSECOLS", "CHOOSEROWS", "COMBINA", "CONFIDENCE.NORM",
+		"CONFIDENCE.T", "COPILOT", "COT", "COTH", "COVARIANCE.P", "COVARIANCE.S",
+		"CSC", "CSCH", "DAYS", "DECIMAL", "DROP", "ERF.PRECISE", "ERFC.PRECISE",
+		"EXPAND", "EXPON.DIST", "F.DIST", "F.DIST.RT", "F.INV", "F.INV.RT", "F.TEST",
+		"FIELDVALUE", "FILTERXML", "FLOOR.MATH", "FLOOR.PRECISE", "FORMULATEXT",
+		"GAMMA", "GAMMA.DIST", "GAMMA.INV", "GAMMALN.PRECISE", "GAUSS", "HSTACK",
+		"HYPGEOM.DIST", "IFNA", "IMCOSH", "IMCOT", "IMCSC", "IMCSCH", "IMSEC",
+		"IMSECH", "IMSINH", "IMTAN", "ISFORMULA", "ISOMITTED", "ISOWEEKNUM",
+		"LAMBDA", "LET", "LOGNORM.DIST", "LOGNORM.INV", "LONGTEXT", "MAKEARRAY",
+		"MAP", "MODE.MULT", "MODE.SNGL", "MUNIT", "NEGBINOM.DIST", "NORM.DIST",
+		"NORM.INV", "NORM.S.DIST", "NORM.S.INV", "NUMBERVALUE", "PDURATION",
+		"PERCENTILE.EXC", "PERCENTILE.INC", "PERCENTRANK.EXC", "PERCENTRANK.INC",
+		"PERMUTATIONA", "PHI", "POISSON.DIST", "PQSOURCE", "PYTHON_STR",
+		"PYTHON_TYPE", "PYTHON_TYPENAME", "QUARTILE.EXC", "QUARTILE.INC",
+		"QUERYSTRING", "RANDARRAY", "RANK.AVG", "RANK.EQ", "REDUCE", "RRI",
+		"SCAN", "SEC", "SECH", "SEQUENCE", "SHEET", "SHEETS", "SKEW.P", "SORTBY",
+		"STDEV.P", "STDEV.S", "T.DIST", "T.DIST.2T", "T.DIST.RT", "T.INV", "T.INV.2T",
+		"T.TEST", "TAKE", "TEXTAFTER", "TEXTBEFORE", "TEXTSPLIT", "TOCOL", "TOROW",
+		"UNICHAR", "UNICODE", "UNIQUE", "VAR.P", "VAR.S", "VSTACK", "WEBSERVICE",
+		"WEIBULL.DIST", "WRAPCOLS", "WRAPROWS", "XLOOKUP", "XOR", "Z.TEST"
+	};
+
+	GnmConventions *convs = gnm_conventions_new ();
+	XLSXExprData *xconv = g_new0 (XLSXExprData, 1);
 	int i;
+
+	gnm_conventions_set_extension (convs, xconv, xlsx_conventions_pdata_free);
 
 	convs->decimal_sep_dot		= TRUE;
 	convs->input.range_ref		= rangeref_parse;
@@ -648,11 +707,21 @@ xlsx_conventions_new (gboolean output)
 	xconv->extern_wb_by_id = g_hash_table_new_full (g_str_hash, g_str_equal,
 		g_free, (GDestroyNotify) g_object_unref);
 
+	xconv->future_function_set = g_hash_table_new (go_ascii_strcase_hash,
+						       go_ascii_strcase_equal);
+	for (unsigned i = 0; i < G_N_ELEMENTS (future_funcs); i++) {
+		const char *n = future_funcs[i];
+		g_hash_table_insert (xconv->future_function_set, (gpointer)n, (gpointer)n);
+	}
+
 	if (output) {
-		gnm_float l10 = gnm_log10 (FLT_RADIX);
-		convs->output.decimal_digits =
-			(int)gnm_ceil (GNM_MANT_DIG * l10) +
-			(l10 == (int)l10 ? 0 : 1);
+		if (!gnm_shortest_rep_in_files ()) {
+			gnm_float l10 = gnm_log10 (GNM_RADIX);
+			convs->output.decimal_digits =
+				(int)gnm_ceil (GNM_MANT_DIG * l10) +
+				(l10 == (int)l10 ? 0 : 1);
+		}
+		convs->output.uppercase_E = FALSE;
 
 		convs->output.func      = xlsx_func_map_out;
 
@@ -686,17 +755,6 @@ xlsx_conventions_new (gboolean output)
 	}
 
 	return convs;
-}
-
-void
-xlsx_conventions_free (GnmConventions *convs)
-{
-	XLSXExprConventions *xconv = (XLSXExprConventions *)convs;
-	g_hash_table_destroy (xconv->extern_id_by_wb);
-	g_hash_table_destroy (xconv->extern_wb_by_id);
-	g_hash_table_destroy (xconv->xlfn_map);
-	g_hash_table_destroy (xconv->xlfn_handler_map);
-	gnm_conventions_unref (convs);
 }
 
 /**
@@ -741,7 +799,7 @@ xlsx_plottype_from_type_name (const char *type_name)
 
 /*****************************************************************************/
 
-XLSXGradientInfo xlsx_gradient_info[GO_GRADIENT_MAX] = {
+const XLSXGradientInfo xlsx_gradient_info[GO_GRADIENT_MAX] = {
 	{ 270, FALSE, FALSE }, {  90, FALSE, FALSE }, {  90, TRUE, FALSE }, {  90, TRUE, TRUE },
 	{ 180, FALSE, FALSE }, {   0, FALSE, FALSE }, {   0, TRUE, FALSE }, {   0, TRUE, TRUE },
 	{ 315, FALSE, FALSE }, { 135, FALSE, FALSE }, { 135, TRUE, FALSE }, { 135, TRUE, TRUE },

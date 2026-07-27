@@ -1,5 +1,5 @@
-#ifndef _GNM_PANE_IMPL_H_
-# define _GNM_PANE_IMPL_H_
+#ifndef GNM_PANE_IMPL_H_
+#define GNM_PANE_IMPL_H_
 
 #include <src/gnm-pane.h>
 #include <src/gnumeric-simple-canvas.h>
@@ -10,7 +10,7 @@ G_BEGIN_DECLS
 #define GNM_PANE_MAX_X 1600000
 #define GNM_PANE_MAX_Y 1536000000
 
-struct _GnmPane {
+struct GnmPane_ {
 	GnmSimpleCanvas simple;
 
 	GnmCellPos first, last_full, last_visible;
@@ -80,4 +80,4 @@ struct _GnmPane {
 
 G_END_DECLS
 
-#endif /* _GNM_PANE_IMPL_H_ */
+#endif /* GNM_PANE_IMPL_H_ */

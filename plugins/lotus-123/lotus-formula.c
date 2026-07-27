@@ -29,9 +29,9 @@
 #define FORMULA_DEBUG 0
 
 
-typedef struct _LFuncInfo LFuncInfo;
+typedef struct LFuncInfo_ LFuncInfo;
 
-struct _LFuncInfo {
+struct LFuncInfo_ {
 	short args;
 	unsigned short ordinal;
 	char const *lotus_name;
@@ -507,8 +507,12 @@ make_function (LotusState *state, GnmExprList **stack, guint8 const *data, const
 		if (*data <= WORKS_MAX_ORDINAL)
 			f = works_ordinal_to_info[*data];
 	} else {
-		if (*data <= LOTUS_MAX_ORDINAL)
-			f = lotus_ordinal_to_info[*data];
+		if (*data >= 166) {
+			g_printerr ("Encountered lotus opcode %d\n", *data);
+			// "darwin" encoding used
+		}
+		g_assert (LOTUS_MAX_ORDINAL > 0xff);
+		f = lotus_ordinal_to_info[*data];
 	}
 
 	if (f == NULL) {
@@ -592,25 +596,33 @@ lotus_parse_formula_old (LotusState *state, GnmParsePos *orig,
 	gboolean done = FALSE;
 	GnmExprTop const *res;
 
+#define CHECK_BYTES(n) if (i + (n) > len) { done = TRUE; break; }
+
 	for (i = 0; (i < len) && !done;) {
 		switch (data[i]) {
 		case LOTUS_FORMULA_CONSTANT:
+			CHECK_BYTES (9);
 			parse_list_push_value (&stack,
 				value_new_float (gsf_le_get_double (data + i + 1)));
 			i += 9;
 			break;
 
 		case LOTUS_FORMULA_VARIABLE:
+			CHECK_BYTES (5);
 			get_cellref (&a, data + i + 1, data + i + 3, orig);
 			parse_list_push_expr (&stack, gnm_expr_new_cellref (&a));
 			i += 5;
 			break;
 
 		case LOTUS_FORMULA_RANGE:
+			CHECK_BYTES (9);
 			get_cellref (&a, data + i + 1, data + i + 3, orig);
 			get_cellref (&b, data + i + 5, data + i + 7, orig);
-			parse_list_push_value (&stack,
-				value_new_cellrange (&a, &b, orig->eval.col, orig->eval.row));
+			parse_list_push_value
+				(&stack,
+				 value_new_cellrange (&a, &b,
+						      orig->eval.col,
+						      orig->eval.row));
 			i += 9;
 			break;
 
@@ -623,16 +635,21 @@ lotus_parse_formula_old (LotusState *state, GnmParsePos *orig,
 			break;
 
 		case LOTUS_FORMULA_INTEGER:
+			CHECK_BYTES (3);
 			parse_list_push_value (&stack,
 					       value_new_int (GSF_LE_GET_GINT16 (data + i + 1)));
 			i += 3;
 			break;
 
-		case LOTUS_FORMULA_STRING:
+		case LOTUS_FORMULA_STRING: {
+			size_t l;
+			CHECK_BYTES (2);
+			l = strnlen (data + i + 1, len - i - 1);
 			parse_list_push_value (&stack,
 				lotus_new_string (data + i + 1, state->lmbcs_group));
-			i += 2 + strlen (data + i + 1);
+			i += 2 + l;
 			break;
+		}
 
 		/* Note: ordinals differ between versions.  */
 		case 0x08: HANDLE_UNARY (GNM_EXPR_OP_UNARY_NEG);
@@ -649,16 +666,19 @@ lotus_parse_formula_old (LotusState *state, GnmParsePos *orig,
 		case 0x13: HANDLE_BINARY (GNM_EXPR_OP_GT);
 		case 0x14:
 			/* FIXME: Check if we need bit version.  */
+			CHECK_BYTES (1);
 			handle_named_func (&stack, orig, "AND", NULL, 2);
 			i++;
 			break;
 		case 0x15:
 			/* FIXME: Check if we need bit version.  */
+			CHECK_BYTES (1);
 			handle_named_func (&stack, orig, "OR", NULL, 2);
 			i++;
 			break;
 		case 0x16:
 			/* FIXME: Check if we need bit version.  */
+			CHECK_BYTES (1);
 			handle_named_func (&stack, orig, "NOT", NULL, 1);
 			i++;
 			break;
@@ -709,9 +729,12 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 	gboolean uses_snum = (state->version <= LOTUS_VERSION_123V4);
 	GnmExprTop const *res;
 
+#define CHECK_BYTES(n) if (i + (n) > len) { done = TRUE; break; }
+
 	for (i = 0; i < len && !done;) {
 		switch (data[i]) {
 		case LOTUS_FORMULA_CONSTANT:
+			CHECK_BYTES (11);
 			parse_list_push_value (&stack,
 				lotus_load_treal (data + i + 1));
 			i += 11;
@@ -719,6 +742,7 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 
 		case LOTUS_FORMULA_VARIABLE: {
 			GnmCellRef a;
+			CHECK_BYTES (6);
 			get_new_cellref (&a, data[1] & 7, data + i + 2, orig);
 			if (a.sheet == orig->sheet)
 				a.sheet = NULL;
@@ -729,6 +753,7 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 
 		case LOTUS_FORMULA_RANGE: {
 			GnmCellRef a, b;
+			CHECK_BYTES (10);
 			get_new_cellref (&a, data[1] & 7, data + i + 2, orig);
 			get_new_cellref (&b, (data[1] >> 3) & 7, data + i + 6, orig);
 			if (b.sheet == a.sheet)
@@ -755,9 +780,11 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 		case LOTUS_FORMULA_PACKED_NUMBER: {
 			GnmValue *val;
 			if (uses_snum) {
+				CHECK_BYTES (3);
 				val = lotus_smallnum (GSF_LE_GET_GUINT16 (data + i + 1));
 				i += 3;
 			} else {
+				CHECK_BYTES (5);
 				val = lotus_unpack_number (GSF_LE_GET_GUINT32 (data + i + 1));
 				i += 5;
 			}
@@ -766,11 +793,15 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 			break;
 		}
 
-		case LOTUS_FORMULA_STRING:
+		case LOTUS_FORMULA_STRING: {
+			size_t l;
+			CHECK_BYTES (2);
+			l = strnlen (data + i + 1, len - i - 1);
 			parse_list_push_value (&stack,
 				lotus_new_string (data + i + 1, state->lmbcs_group));
-			i += 2 + strlen (data + i + 1);
+			i += 2 + l;
 			break;
+		}
 
 		case LOTUS_FORMULA_NAMED:
 		case LOTUS_FORMULA_ABS_NAMED:
@@ -779,12 +810,14 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 			break;
 
 		case LOTUS_FORMULA_ERR_RREF:
+			CHECK_BYTES (5);
 			parse_list_push_value (&stack,
 					       value_new_error_REF (NULL));
 			i += 5;
 			break;
 
 		case LOTUS_FORMULA_ERR_CREF:
+			CHECK_BYTES (6);
 			parse_list_push_value (&stack,
 					       value_new_error_REF (NULL));
 			i += 6;
@@ -792,6 +825,7 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 
 
 		case LOTUS_FORMULA_ERR_CONSTANT:
+			CHECK_BYTES (12);
 			parse_list_push_value (&stack,
 					       value_new_error_VALUE (NULL));
 			i += 12;
@@ -827,14 +861,18 @@ lotus_parse_formula_new (LotusState *state, GnmParsePos *orig,
 			break;
 
 		case LOTUS_FORMULA_SPLFUNC: {
-			int args = data[i + 1];
-			int fnamelen = GSF_LE_GET_GUINT16 (data + i + 2);
-			char *name = lotus_get_lmbcs (data + (i + 4),
-						      len - (i + 4),
-						      state->lmbcs_group);
+			int args, fnamelen;
+			char *name, *p;
 			size_t namelen;
-			char *p;
 			const LFuncInfo *f;
+
+			CHECK_BYTES (4);
+			args = data[i + 1];
+			fnamelen = GSF_LE_GET_GUINT16 (data + i + 2);
+			CHECK_BYTES (4 + fnamelen);
+			name = lotus_get_lmbcs (data + (i + 4),
+						fnamelen,
+						state->lmbcs_group);
 
 			if (name == NULL)
 				name = g_strdup ("bogus");

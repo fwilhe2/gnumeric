@@ -1,10 +1,19 @@
-#ifndef _GNM_PARSE_UTIL_H_
-# define _GNM_PARSE_UTIL_H_
+#ifndef GNM_PARSE_UTIL_H_
+#define GNM_PARSE_UTIL_H_
 
 #include <gnumeric.h>
 #include <libgnumeric.h>
 
+#include <glib-object.h>
+
 G_BEGIN_DECLS
+
+typedef struct GnmConventions_ GnmConventions;
+
+#define GNM_CONVENTIONS_TYPE (gnm_conventions_get_type ())
+GType gnm_conventions_get_type (void);
+#define GNM_CONVENTIONS(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GNM_CONVENTIONS_TYPE, GnmConventions))
+#define GNM_IS_CONVENTIONS(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GNM_CONVENTIONS_TYPE))
 
 char const *col_name  (int col);
 char const *cols_name (int start_col, int end_col);
@@ -42,7 +51,7 @@ void gnm_1_0_rangeref_as_string (GnmConventionsOut *out,
 				 GnmRangeRef const *ref);
 
 
-struct _GnmConventionsOut {
+struct GnmConventionsOut_ {
 	GString	*accum;
 	GnmParsePos const *pp;
 	GnmConventions const *convs;
@@ -70,7 +79,7 @@ typedef enum {
 } ParseErrorID;
 
 /* In parser.y  */
-struct _GnmParseError {
+struct GnmParseError_ {
 	GError	*err;
 	int begin_char, end_char;
 };
@@ -95,15 +104,9 @@ typedef enum {
 	GNM_EXPR_PARSE_UNKNOWN_NAMES_ARE_INVALID	   = 1 << 5
 } GnmExprParseFlags;
 
-struct _GnmConventions {
-	int ref_count;
+struct GnmConventions_ {
+	GObject parent;
 
-#if 0
-	/* Not yet.  */
-	gboolean force_absolute_col_references;
-	gboolean force_absolute_row_references;
-	gboolean force_explicit_sheet_references;
-#endif
 	gboolean r1c1_addresses;
 
 	/* Whether function names should be translated.  */
@@ -147,7 +150,7 @@ struct _GnmConventions {
 	gboolean exp_is_left_associative;
 
 /* Import specific functions ------------------------------------- */
-	struct _GnmConventionsImport {
+	struct GnmConventionsImport_ {
 		/* Called a lot for anything that might be a reference.  */
 		char const *(*range_ref) (GnmRangeRef *res, char const *in,
 					  GnmParsePos const *pp,
@@ -180,8 +183,9 @@ struct _GnmConventions {
 	} input;
 
 /* Export specific functions ----------------------------------- */
-	struct _GnmConventionsExport {
+	struct GnmConventionsExport_ {
 		int decimal_digits;
+		gboolean uppercase_E;
 
 		gboolean translated;
 
@@ -202,13 +206,14 @@ struct _GnmConventions {
 		GString * (*quote_sheet_name) (GnmConventions const *convs,
 					       char const *name);
 	} output;
-};
-GType           gnm_conventions_get_type (void);
-GnmConventions *gnm_conventions_new	 (void);
-GnmConventions *gnm_conventions_new_full (unsigned size);
 
-GnmConventions *gnm_conventions_ref	 (GnmConventions const *c);
-void		gnm_conventions_unref	 (GnmConventions *c);
+	gpointer pdata;
+	GDestroyNotify pdata_free;
+};
+
+GnmConventions *gnm_conventions_new	 (void);
+
+void gnm_conventions_set_extension (GnmConventions *convs, gpointer pdata, GDestroyNotify pdata_free);
 
 
 GNM_VAR_DECL GnmConventions const *gnm_conventions_default;
@@ -241,4 +246,4 @@ GString	*gnm_expr_conv_quote (GnmConventions const *convs, char const *str);
 
 G_END_DECLS
 
-#endif /* _GNM_PARSE_UTIL_H_ */
+#endif /* GNM_PARSE_UTIL_H_ */

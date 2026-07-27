@@ -41,7 +41,6 @@
 #include <number-match.h>
 #include <gutils.h>
 #include <parse-util.h>
-#include <number-match.h>
 #include <gnm-format.h>
 #include <ranges.h>
 #include <goffice/goffice.h>
@@ -53,16 +52,70 @@
 #define SETUP_LOCALE_SWITCH char *oldlocale = NULL
 
 #define START_LOCALE_SWITCH if (parseoptions->locale) {\
-oldlocale = g_strdup(go_setlocale (LC_ALL, NULL)); \
-go_setlocale(LC_ALL, parseoptions->locale);}
+oldlocale = g_strdup (go_setlocale (LC_ALL, NULL)); \
+go_setlocale (LC_ALL, parseoptions->locale);}
 
 #define END_LOCALE_SWITCH if (oldlocale) {\
-go_setlocale(LC_ALL, oldlocale);\
+go_setlocale (LC_ALL, oldlocale);\
 g_free (oldlocale);}
+
+// ----------------------------------------------------------------------------
+
+
+typedef struct {
+	GObjectClass parent_class;
+} GnmStfParsedLinesClass;
+
+G_DEFINE_TYPE (GnmStfParsedLines, gnm_stf_parsed_lines, G_TYPE_OBJECT)
+
+static void
+gnm_stf_parsed_lines_finalize (GObject *obj)
+{
+	GnmStfParsedLines *pl = GNM_STF_PARSED_LINES (obj);
+
+	g_string_chunk_free (pl->lines_chunk);
+	for (size_t i = 0; i < pl->lines->len; i++) {
+		GPtrArray *line = g_ptr_array_index (pl->lines, i);
+		if (line)
+			g_ptr_array_unref (line);
+	}
+	g_ptr_array_unref (pl->lines);
+
+	G_OBJECT_CLASS (gnm_stf_parsed_lines_parent_class)->finalize (obj);
+}
+
+static void
+gnm_stf_parsed_lines_class_init (GnmStfParsedLinesClass *klass)
+{
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	gobject_class->finalize = gnm_stf_parsed_lines_finalize;
+}
+
+static void
+gnm_stf_parsed_lines_init (GnmStfParsedLines *pl)
+{
+	pl->lines_chunk = g_string_chunk_new (100 * 1024);
+	pl->lines = g_ptr_array_new ();
+}
+
+/**
+ * gnm_stf_parsed_lines_new:
+ *
+ * Returns: (transfer full): a new GnmStfParseOptions struct.
+ **/
+static GnmStfParsedLines *
+gnm_stf_parsed_lines_new (void)
+{
+	return g_object_new (GNM_STF_PARSED_LINES_TYPE, NULL);
+}
+
+// ----------------------------------------------------------------------------
 
 /* Source_t struct, used for interchanging parsing information between the low level parse functions */
 typedef struct {
-	GStringChunk *chunk;
+	// The eventual owner of the strings
+	GnmStfParsedLines *pl;
+
 	char const *position;  /* Indicates the current position within data */
 
 	/* Used internally for fixed width parsing */
@@ -93,7 +146,7 @@ my_utf8_strchr (const char *p, gunichar uc)
 }
 
 static int
-compare_terminator (char const *s, StfParseOptions_t *parseoptions)
+compare_terminator (char const *s, GnmStfParseOptions *parseoptions)
 {
 	guchar const *us = (guchar const *)s;
 	GSList *l;
@@ -132,17 +185,46 @@ gnm_g_string_free (GString *s)
 }
 
 
-/**
- * stf_parse_options_new:
- *
- * This will return a new StfParseOptions_t struct.
- * The struct should, after being used, freed with stf_parse_options_free.
- **/
-static StfParseOptions_t *
-stf_parse_options_new (void)
-{
-	StfParseOptions_t* parseoptions = g_new0 (StfParseOptions_t, 1);
+typedef struct {
+	GObjectClass parent_class;
+} GnmStfParseOptionsClass;
 
+G_DEFINE_TYPE (GnmStfParseOptions, stf_parse_options, G_TYPE_OBJECT)
+
+static void
+stf_parse_options_finalize (GObject *obj)
+{
+	GnmStfParseOptions *parseoptions = GNM_STF_PARSE_OPTIONS (obj);
+
+	g_free (parseoptions->col_import_array);
+	g_free (parseoptions->col_autofit_array);
+	g_free (parseoptions->locale);
+	g_free (parseoptions->sep.chr);
+
+	g_slist_free_full (parseoptions->sep.str, g_free);
+
+	g_array_free (parseoptions->splitpositions, TRUE);
+
+	stf_parse_options_clear_line_terminator (parseoptions);
+
+	g_ptr_array_free (parseoptions->formats, TRUE);
+	g_ptr_array_free (parseoptions->formats_decimal, TRUE);
+	g_ptr_array_free (parseoptions->formats_thousand, TRUE);
+	g_ptr_array_free (parseoptions->formats_curr, TRUE);
+
+	G_OBJECT_CLASS (stf_parse_options_parent_class)->finalize (obj);
+}
+
+static void
+stf_parse_options_class_init (GnmStfParseOptionsClass *klass)
+{
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	gobject_class->finalize = stf_parse_options_finalize;
+}
+
+static void
+stf_parse_options_init (GnmStfParseOptions *parseoptions)
+{
 	parseoptions->parsetype   = PARSE_TYPE_NOTSET;
 
 	parseoptions->terminator  = NULL;
@@ -174,72 +256,28 @@ stf_parse_options_new (void)
 
 	parseoptions->cols_exceeded = FALSE;
 	parseoptions->rows_exceeded = FALSE;
-	parseoptions->ref_count = 1;
-
-	return parseoptions;
 }
 
 /**
- * stf_parse_options_free:
+ * stf_parse_options_new:
  *
- * will free @parseoptions, note that this will not free the splitpositions
- * member (GArray) of the struct, the caller is responsible for that.
+ * Returns: (transfer full): a new GnmStfParseOptions struct.
+ **/
+static GnmStfParseOptions *
+stf_parse_options_new (void)
+{
+	return g_object_new (GNM_STF_PARSE_OPTIONS_TYPE, NULL);
+}
+
+/**
+ * stf_parse_options_set_type:
+ * @parseoptions: #GnmStfParseOptions
+ * @parsetype: #GnmStfParseType
+ *
+ * Sets the parse type.
  **/
 void
-stf_parse_options_free (StfParseOptions_t *parseoptions)
-{
-	g_return_if_fail (parseoptions != NULL);
-
-	if (parseoptions->ref_count-- > 1)
-		return;
-
-	g_free (parseoptions->col_import_array);
-	g_free (parseoptions->col_autofit_array);
-	g_free (parseoptions->locale);
-	g_free (parseoptions->sep.chr);
-
-	if (parseoptions->sep.str) {
-		GSList *l;
-
-		for (l = parseoptions->sep.str; l != NULL; l = l->next)
-			g_free ((char *) l->data);
-		g_slist_free (parseoptions->sep.str);
-	}
-
-	g_array_free (parseoptions->splitpositions, TRUE);
-
-	stf_parse_options_clear_line_terminator (parseoptions);
-
-	g_ptr_array_free (parseoptions->formats, TRUE);
-	g_ptr_array_free (parseoptions->formats_decimal, TRUE);
-	g_ptr_array_free (parseoptions->formats_thousand, TRUE);
-	g_ptr_array_free (parseoptions->formats_curr, TRUE);
-
-	g_free (parseoptions);
-}
-
-static StfParseOptions_t *
-stf_parse_options_ref (StfParseOptions_t *parseoptions)
-{
-	parseoptions->ref_count++;
-	return parseoptions;
-}
-
-GType
-stf_parse_options_get_type (void)
-{
-	static GType t = 0;
-
-	if (t == 0) {
-		t = g_boxed_type_register_static ("StfParseOptions_t",
-			 (GBoxedCopyFunc)stf_parse_options_ref,
-			 (GBoxedFreeFunc)stf_parse_options_free);
-	}
-	return t;
-}
-
-void
-stf_parse_options_set_type (StfParseOptions_t *parseoptions, StfParseType_t const parsetype)
+stf_parse_options_set_type (GnmStfParseOptions *parseoptions, GnmStfParseType parsetype)
 {
 	g_return_if_fail (parseoptions != NULL);
 	g_return_if_fail (parsetype == PARSE_TYPE_CSV || parsetype == PARSE_TYPE_FIXED);
@@ -255,7 +293,7 @@ long_string_first (gchar const *a, gchar const *b)
 }
 
 static void
-compile_terminators (StfParseOptions_t *parseoptions)
+compile_terminators (GnmStfParseOptions *parseoptions)
 {
 	GSList *l;
 
@@ -275,13 +313,14 @@ compile_terminators (StfParseOptions_t *parseoptions)
 
 /**
  * stf_parse_options_add_line_terminator:
+ * @parseoptions: #GnmStfParseOptions
+ * @terminator: line terminator
  *
  * This will add to the line terminators, in both the Fixed width and CSV delimited importers
  * this indicates the end of a row.
- *
  **/
 void
-stf_parse_options_add_line_terminator (StfParseOptions_t *parseoptions, char const *terminator)
+stf_parse_options_add_line_terminator (GnmStfParseOptions *parseoptions, char const *terminator)
 {
 	g_return_if_fail (parseoptions != NULL);
 	g_return_if_fail (terminator != NULL && *terminator != 0);
@@ -292,13 +331,13 @@ stf_parse_options_add_line_terminator (StfParseOptions_t *parseoptions, char con
 
 /**
  * stf_parse_options_clear_line_terminator:
+ * @parseoptions: #GnmStfParseOptions
  *
  * This will clear the line terminator, in both the Fixed width and CSV delimited importers
  * this indicates the end of a row.
- *
  **/
 void
-stf_parse_options_clear_line_terminator (StfParseOptions_t *parseoptions)
+stf_parse_options_clear_line_terminator (GnmStfParseOptions *parseoptions)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -309,12 +348,14 @@ stf_parse_options_clear_line_terminator (StfParseOptions_t *parseoptions)
 
 /**
  * stf_parse_options_set_trim_spaces:
+ * @parseoptions: #GnmStfParseOptions
+ * @trim_spaces: #GnmStfTrimType
  *
  * If enabled will trim spaces in every parsed field on left and/or right
  * sides.
  **/
 void
-stf_parse_options_set_trim_spaces (StfParseOptions_t *parseoptions, StfTrimType_t const trim_spaces)
+stf_parse_options_set_trim_spaces (GnmStfParseOptions *parseoptions, GnmStfTrimType const trim_spaces)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -323,14 +364,12 @@ stf_parse_options_set_trim_spaces (StfParseOptions_t *parseoptions, StfTrimType_
 
 /**
  * stf_parse_options_csv_set_separators:
- * @parseoptions: #StfParseOptions_t
- * @character:
- * @seps: (element-type utf8): the separators to be used
- *
- * A copy is made of the parameters.
+ * @parseoptions: #GnmStfParseOptions
+ * @character: (nullable): single-character separators
+ * @seps: (element-type utf8) (transfer none): the separators to be used
  **/
 void
-stf_parse_options_csv_set_separators (StfParseOptions_t *parseoptions,
+stf_parse_options_csv_set_separators (GnmStfParseOptions *parseoptions,
 				      char const *character,
 				      GSList const *seps)
 {
@@ -344,8 +383,15 @@ stf_parse_options_csv_set_separators (StfParseOptions_t *parseoptions,
 		g_slist_copy_deep ((GSList *)seps, (GCopyFunc)g_strdup, NULL);
 }
 
+/**
+ * stf_parse_options_csv_set_stringindicator:
+ * @parseoptions: #GnmStfParseOptions
+ * @stringindicator: #gunichar
+ *
+ * Sets the string indicator.
+ **/
 void
-stf_parse_options_csv_set_stringindicator (StfParseOptions_t *parseoptions, gunichar const stringindicator)
+stf_parse_options_csv_set_stringindicator (GnmStfParseOptions *parseoptions, gunichar stringindicator)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -354,13 +400,14 @@ stf_parse_options_csv_set_stringindicator (StfParseOptions_t *parseoptions, guni
 
 /**
  * stf_parse_options_csv_set_indicator_2x_is_single:
+ * @parseoptions: #GnmStfParseOptions
  * @indic_2x: a boolean value indicating whether we want to see two
  *		adjacent string indicators as a single string indicator
  *		that is part of the cell, rather than a terminator.
  **/
 void
-stf_parse_options_csv_set_indicator_2x_is_single (StfParseOptions_t *parseoptions,
-						  gboolean const indic_2x)
+stf_parse_options_csv_set_indicator_2x_is_single (GnmStfParseOptions *parseoptions,
+						  gboolean indic_2x)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -369,12 +416,12 @@ stf_parse_options_csv_set_indicator_2x_is_single (StfParseOptions_t *parseoption
 
 /**
  * stf_parse_options_csv_set_duplicates:
- * @parseoptions:
+ * @parseoptions: #GnmStfParseOptions
  * @duplicates: a boolean value indicating whether we want to see two
  *               separators right behind each other as one
  **/
 void
-stf_parse_options_csv_set_duplicates (StfParseOptions_t *parseoptions, gboolean const duplicates)
+stf_parse_options_csv_set_duplicates (GnmStfParseOptions *parseoptions, gboolean duplicates)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -383,11 +430,12 @@ stf_parse_options_csv_set_duplicates (StfParseOptions_t *parseoptions, gboolean 
 
 /**
  * stf_parse_options_csv_set_trim_seps:
+ * @parseoptions: #GnmStfParseOptions
  * @trim_seps: a boolean value indicating whether we want to ignore
  *               separators at the beginning of lines
  **/
 void
-stf_parse_options_csv_set_trim_seps (StfParseOptions_t *parseoptions, gboolean const trim_seps)
+stf_parse_options_csv_set_trim_seps (GnmStfParseOptions *parseoptions, gboolean trim_seps)
 {
 	g_return_if_fail (parseoptions != NULL);
 
@@ -396,11 +444,12 @@ stf_parse_options_csv_set_trim_seps (StfParseOptions_t *parseoptions, gboolean c
 
 /**
  * stf_parse_options_fixed_splitpositions_clear:
+ * @parseoptions: #GnmStfParseOptions
  *
  * This will clear the splitpositions (== points on which a line is split)
  **/
 void
-stf_parse_options_fixed_splitpositions_clear (StfParseOptions_t *parseoptions)
+stf_parse_options_fixed_splitpositions_clear (GnmStfParseOptions *parseoptions)
 {
 	int minus_one = -1;
 	g_return_if_fail (parseoptions != NULL);
@@ -414,11 +463,13 @@ stf_parse_options_fixed_splitpositions_clear (StfParseOptions_t *parseoptions)
 
 /**
  * stf_parse_options_fixed_splitpositions_add:
+ * @parseoptions: #GnmStfParseOptions
+ * @position: position
  *
  * @position will be added to the splitpositions.
  **/
 void
-stf_parse_options_fixed_splitpositions_add (StfParseOptions_t *parseoptions, int position)
+stf_parse_options_fixed_splitpositions_add (GnmStfParseOptions *parseoptions, int position)
 {
 	unsigned int ui;
 
@@ -436,8 +487,15 @@ stf_parse_options_fixed_splitpositions_add (StfParseOptions_t *parseoptions, int
 	g_array_insert_val (parseoptions->splitpositions, ui, position);
 }
 
+/**
+ * stf_parse_options_fixed_splitpositions_remove:
+ * @parseoptions: #GnmStfParseOptions
+ * @position: position
+ *
+ * @position will be removed from the splitpositions.
+ **/
 void
-stf_parse_options_fixed_splitpositions_remove (StfParseOptions_t *parseoptions, int position)
+stf_parse_options_fixed_splitpositions_remove (GnmStfParseOptions *parseoptions, int position)
 {
 	unsigned int ui;
 
@@ -453,14 +511,27 @@ stf_parse_options_fixed_splitpositions_remove (StfParseOptions_t *parseoptions, 
 	}
 }
 
+/**
+ * stf_parse_options_fixed_splitpositions_count:
+ * @parseoptions: #GnmStfParseOptions
+ *
+ * Returns: the number of split positions.
+ **/
 int
-stf_parse_options_fixed_splitpositions_count (StfParseOptions_t *parseoptions)
+stf_parse_options_fixed_splitpositions_count (GnmStfParseOptions *parseoptions)
 {
 	return parseoptions->splitpositions->len;
 }
 
+/**
+ * stf_parse_options_fixed_splitpositions_nth:
+ * @parseoptions: #GnmStfParseOptions
+ * @n: index
+ *
+ * Returns: the @n-th split position.
+ **/
 int
-stf_parse_options_fixed_splitpositions_nth (StfParseOptions_t *parseoptions, int n)
+stf_parse_options_fixed_splitpositions_nth (GnmStfParseOptions *parseoptions, int n)
 {
 	return g_array_index (parseoptions->splitpositions, int, n);
 }
@@ -475,7 +546,7 @@ stf_parse_options_fixed_splitpositions_nth (StfParseOptions_t *parseoptions, int
  * Returns: %TRUE if it is correctly filled, %FALSE otherwise.
  **/
 static gboolean
-stf_parse_options_valid (StfParseOptions_t *parseoptions)
+stf_parse_options_valid (GnmStfParseOptions *parseoptions)
 {
 	g_return_val_if_fail (parseoptions != NULL, FALSE);
 
@@ -494,12 +565,12 @@ stf_parse_options_valid (StfParseOptions_t *parseoptions)
  *******************************************************************************************************/
 
 static void
-trim_spaces_inplace (char *field, StfParseOptions_t const *parseoptions)
+trim_spaces_inplace (char *field, GnmStfParseOptions const *parseoptions)
 {
 	if (!field) return;
 
 	if (parseoptions->trim_spaces & TRIM_TYPE_LEFT) {
-		char *s = field;
+		const char *s = field;
 
 		while (g_unichar_isspace (g_utf8_get_char (s)))
 			s = g_utf8_next_char (s);
@@ -522,6 +593,9 @@ trim_spaces_inplace (char *field, StfParseOptions_t const *parseoptions)
 
 /**
  * stf_parse_csv_is_separator:
+ * @character: head of string
+ * @chr: (nullable):
+ * @str: (element-type utf8): 
  *
  * Returns: %NULL if @character is not a separator, a pointer to the character
  * after the separator otherwise.
@@ -561,13 +635,13 @@ stf_parse_csv_is_separator (char const *character, char const *chr, GSList const
 
 /*
  * stf_parse_eat_separators:
+ * @src: parsing source
+ * @parseoptions: #GnmStfParseOptions
  *
- * skip over leading separators
- *
+ * Skip over leading separators
  */
-
 static void
-stf_parse_eat_separators (Source_t *src, StfParseOptions_t *parseoptions)
+stf_parse_eat_separators (Source_t *src, GnmStfParseOptions *parseoptions)
 {
 	char const *cur, *next;
 
@@ -594,7 +668,7 @@ typedef enum {
 } StfParseCellRes;
 
 static StfParseCellRes
-stf_parse_csv_cell (GString *text, Source_t *src, StfParseOptions_t *parseoptions)
+stf_parse_csv_cell (GString *text, Source_t *src, GnmStfParseOptions *parseoptions)
 {
 	char const *cur;
 	gboolean saw_sep = FALSE;
@@ -667,7 +741,6 @@ stf_parse_csv_cell (GString *text, Source_t *src, StfParseOptions_t *parseoption
 		/* Unquoted field.  */
 
 		while (*cur && !compare_terminator (cur, parseoptions)) {
-
 			char const *post = stf_parse_csv_is_separator
 				(cur, parseoptions->sep.chr, parseoptions->sep.str);
 			if (post) {
@@ -700,14 +773,15 @@ stf_parse_csv_cell (GString *text, Source_t *src, StfParseOptions_t *parseoption
 
 /**
  * stf_parse_csv_line:
+ * @src: parsing source
+ * @parseoptions: #GnmStfParseOptions
  *
  * This will parse one line from the current @src->position.
- * NOTE: The calling routine is responsible for freeing the result.
  *
- * returns : a GPtrArray of char*'s
+ * Returns: (transfer full) (element-type utf8): split line
  **/
 static GPtrArray *
-stf_parse_csv_line (Source_t *src, StfParseOptions_t *parseoptions)
+stf_parse_csv_line (Source_t *src, GnmStfParseOptions *parseoptions)
 {
 	GPtrArray *line;
 	gboolean cont = FALSE;
@@ -727,7 +801,7 @@ stf_parse_csv_line (Source_t *src, StfParseOptions_t *parseoptions)
 		StfParseCellRes res =
 			stf_parse_csv_cell (text, src, parseoptions);
 		trim_spaces_inplace (text->str, parseoptions);
-		ctext = g_string_chunk_insert_len (src->chunk,
+		ctext = g_string_chunk_insert_len (src->pl->lines_chunk,
 						   text->str, text->len);
 		g_string_truncate (text, 0);
 
@@ -753,11 +827,13 @@ stf_parse_csv_line (Source_t *src, StfParseOptions_t *parseoptions)
 
 /**
  * stf_parse_fixed_cell:
+ * @src: parsing source
+ * @parseoptions: #GnmStfParseOptions
  *
- * returns a pointer to the parsed cell contents.
+ * Returns: (transfer full): parsed cell text
  **/
 static char *
-stf_parse_fixed_cell (Source_t *src, StfParseOptions_t *parseoptions)
+stf_parse_fixed_cell (Source_t *src, GnmStfParseOptions *parseoptions)
 {
 	char *res;
 	char const *cur;
@@ -778,7 +854,7 @@ stf_parse_fixed_cell (Source_t *src, StfParseOptions_t *parseoptions)
 		cur = g_utf8_next_char (cur);
 	}
 
-	res = g_string_chunk_insert_len (src->chunk,
+	res = g_string_chunk_insert_len (src->pl->lines_chunk,
 					 src->position,
 					 cur - src->position);
 
@@ -789,14 +865,16 @@ stf_parse_fixed_cell (Source_t *src, StfParseOptions_t *parseoptions)
 
 /**
  * stf_parse_fixed_line:
+ * @src: parsing source
+ * @parseoptions: #GnmStfParseOptions
  *
  * This will parse one line from the current @src->position.
  * It will return a GPtrArray with the cell contents as strings.
-
- * NOTE: The calling routine is responsible for freeing result.
+ *
+ * Returns: (transfer full) (element-type utf8): split line
  **/
 static GPtrArray *
-stf_parse_fixed_line (Source_t *src, StfParseOptions_t *parseoptions)
+stf_parse_fixed_line (Source_t *src, GnmStfParseOptions *parseoptions)
 {
 	GPtrArray *line;
 
@@ -822,38 +900,19 @@ stf_parse_fixed_line (Source_t *src, StfParseOptions_t *parseoptions)
 	return line;
 }
 
-/**
- * stf_parse_general_free: (skip)
- */
-void
-stf_parse_general_free (GPtrArray *lines)
-{
-	unsigned lineno;
-	for (lineno = 0; lineno < lines->len; lineno++) {
-		GPtrArray *line = g_ptr_array_index (lines, lineno);
-		/* Fields are not freed here.  */
-		if (line)
-			g_ptr_array_free (line, TRUE);
-	}
-	g_ptr_array_free (lines, TRUE);
-}
-
 
 /**
- * stf_parse_general: (skip)
+ * stf_parse_general:
+ * @parseoptions: #GnmStfParseOptions
+ * @data: start of text to parse
+ * @data_end: end of text to parse
  *
- * Returns: (transfer full): a GPtrArray of lines, where each line is itself a
- * GPtrArray of strings.
- *
- * The caller must free this entire structure, for example by calling
- * stf_parse_general_free.
+ * Returns: (transfer full): a #GnmStfParsedLines structure.
  **/
-GPtrArray *
-stf_parse_general (StfParseOptions_t *parseoptions,
-		   GStringChunk *lines_chunk,
+GnmStfParsedLines *
+stf_parse_general (GnmStfParseOptions *parseoptions,
 		   char const *data, char const *data_end)
 {
-	GPtrArray *lines;
 	Source_t src;
 	int row;
 	char const *valid_end = data_end;
@@ -864,16 +923,17 @@ stf_parse_general (StfParseOptions_t *parseoptions,
 	g_return_val_if_fail (stf_parse_options_valid (parseoptions), NULL);
 	g_return_val_if_fail (g_utf8_validate (data, data_end-data, &valid_end), NULL);
 
-	src.chunk = lines_chunk;
+	GnmStfParsedLines *pl = gnm_stf_parsed_lines_new ();
+
+	src.pl = pl;
 	src.position = data;
 	row = 0;
 
-	if ((data_end-data >= 3) && !strncmp(src.position, "\xEF\xBB\xBF", 3)) {
+	if ((data_end-data >= 3) && g_str_has_prefix (src.position, "\xEF\xBB\xBF")) {
 		/* Skip over byte-order mark */
 		src.position += 3;
 	}
 
-	lines = g_ptr_array_new ();
 	while (*src.position != '\0' && src.position < data_end) {
 		GPtrArray *line;
 
@@ -886,41 +946,34 @@ stf_parse_general (StfParseOptions_t *parseoptions,
 			? stf_parse_csv_line (&src, parseoptions)
 			: stf_parse_fixed_line (&src, parseoptions);
 
-		g_ptr_array_add (lines, line);
+		g_ptr_array_add (pl->lines, line);
 		if (parseoptions->parsetype != PARSE_TYPE_CSV)
 			src.position += compare_terminator (src.position, parseoptions);
 		row++;
 	}
 
-	return lines;
+	return pl;
 }
 
 /**
- * stf_parse_lines: (skip)
- * @parseoptions: #StfParseOptions_t
- * @lines_chunk:
- * @data:
+ * stf_parse_lines:
+ * @parseoptions: #GnmStfParseOptions
+ * @data: text to parse
  * @maxlines:
  * @with_lineno:
  *
- * Returns: (transfer full): a GPtrArray of lines, where each line is itself a
- * GPtrArray of strings.
- *
- * The caller must free this entire structure, for example by calling
- * stf_parse_general_free.
+ * Returns: (transfer full): a #GnmStfParsedLines structure.
  **/
-GPtrArray *
-stf_parse_lines (StfParseOptions_t *parseoptions,
-		 GStringChunk *lines_chunk,
+GnmStfParsedLines *
+stf_parse_lines (GnmStfParseOptions *parseoptions,
 		 char const *data,
 		 int maxlines, gboolean with_lineno)
 {
-	GPtrArray *lines;
 	int lineno = 1;
 
 	g_return_val_if_fail (data != NULL, NULL);
 
-	lines = g_ptr_array_new ();
+	GnmStfParsedLines *pl = gnm_stf_parsed_lines_new ();
 	while (*data) {
 		char const *data0 = data;
 		GPtrArray *line = g_ptr_array_new ();
@@ -929,14 +982,14 @@ stf_parse_lines (StfParseOptions_t *parseoptions,
 			char buf[4 * sizeof (int)];
 			sprintf (buf, "%d", lineno);
 			g_ptr_array_add (line,
-					 g_string_chunk_insert (lines_chunk, buf));
+					 g_string_chunk_insert (pl->lines_chunk, buf));
 		}
 
 		while (1) {
 			int termlen = compare_terminator (data, parseoptions);
 			if (termlen > 0 || *data == 0) {
 				g_ptr_array_add (line,
-						 g_string_chunk_insert_len (lines_chunk,
+						 g_string_chunk_insert_len (pl->lines_chunk,
 									    data0,
 									    data - data0));
 				data += termlen;
@@ -945,17 +998,26 @@ stf_parse_lines (StfParseOptions_t *parseoptions,
 				data = g_utf8_next_char (data);
 		}
 
-		g_ptr_array_add (lines, line);
+		g_ptr_array_add (pl->lines, line);
 
 		lineno++;
 		if (lineno >= maxlines)
 			break;
 	}
-	return lines;
+
+	return pl;
 }
 
+/**
+ * stf_parse_find_line:
+ * @parseoptions: #GnmStfParseOptions
+ * @data: data
+ * @line: line index
+ *
+ * Returns: (transfer none): a pointer to the start of the @line-th line.
+ **/
 char const *
-stf_parse_find_line (StfParseOptions_t *parseoptions,
+stf_parse_find_line (GnmStfParseOptions *parseoptions,
 		     char const *data,
 		     int line)
 {
@@ -987,7 +1049,7 @@ stf_parse_find_line (StfParseOptions_t *parseoptions,
  *        Think hard of a better more flexible solution...
  **/
 void
-stf_parse_options_fixed_autodiscover (StfParseOptions_t *parseoptions,
+stf_parse_options_fixed_autodiscover (GnmStfParseOptions *parseoptions,
 				      char const *data, char const *data_end)
 {
 	char const *iterator = data;
@@ -1270,7 +1332,7 @@ stf_cell_set_text (GnmCell *cell, char const *text)
 }
 
 static void
-stf_read_remember_settings (Workbook *book, StfParseOptions_t *po)
+stf_read_remember_settings (Workbook *book, GnmStfParseOptions *po)
 {
 	if (po->parsetype == PARSE_TYPE_CSV) {
 		GnmStfExport *stfe = gnm_stf_get_stfe (G_OBJECT (book));
@@ -1283,20 +1345,34 @@ stf_read_remember_settings (Workbook *book, StfParseOptions_t *po)
 
 		g_object_set (G_OBJECT (stfe), "separator", po->sep.chr, "quote", &quote, NULL);
 
-		if ((po->terminator != NULL) &&  (po->terminator->data != NULL))
-			g_object_set (G_OBJECT (stfe), "eol", po->terminator->data, NULL);
+		// Only export terminator when unique
+		if (g_slist_length (po->terminator) == 1) {
+			const char *term = po->terminator->data;
+			g_object_set (G_OBJECT (stfe), "eol", term, NULL);
+		}
 	}
 }
 
+/**
+ * stf_parse_sheet:
+ * @parseoptions: #GnmStfParseOptions
+ * @data: data
+ * @data_end: (nullable): end of data
+ * @sheet: #Sheet
+ * @start_col: start column
+ * @start_row: start row
+ *
+ * Parses @data into @sheet starting at @start_col, @start_row.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
-stf_parse_sheet (StfParseOptions_t *parseoptions,
+stf_parse_sheet (GnmStfParseOptions *parseoptions,
 		 char const *data, char const *data_end,
 		 Sheet *sheet, int start_col, int start_row)
 {
 	int row;
 	unsigned int lrow;
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
 	gboolean result = TRUE;
 	int col;
 	unsigned int lcol;
@@ -1311,9 +1387,8 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 	if (!data_end)
 		data_end = data + strlen (data);
 
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_general (parseoptions, lines_chunk, data, data_end);
-	if (lines == NULL)
+	GnmStfParsedLines *pl = stf_parse_general (parseoptions, data, data_end);
+	if (pl == NULL)
 		result = FALSE;
 
 	col = start_col;
@@ -1330,7 +1405,7 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 
 		if (fmt && !go_format_is_general (fmt)) {
 			GnmRange r;
-			int end_row = MIN (start_row + (int)lines->len - 1,
+			int end_row = MIN (start_row + (int)pl->lines->len - 1,
 					   gnm_sheet_get_last_row (sheet));
 
 			range_init (&r, col, start_row, col, end_row);
@@ -1343,23 +1418,17 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 
 	START_LOCALE_SWITCH;
 	for (row = start_row, lrow = 0;
-	     result && lrow < lines->len;
+	     result && lrow < pl->lines->len;
 	     row++, lrow++) {
 		GPtrArray *line;
 
 		if (row >= gnm_sheet_get_max_rows (sheet)) {
-			if (!parseoptions->rows_exceeded) {
-				/* FIXME: What locale?  */
-				g_warning (_("There are more rows of data than "
-					     "there is room for in the sheet.  Extra "
-					     "rows will be ignored."));
-				parseoptions->rows_exceeded = TRUE;
-			}
+			parseoptions->rows_exceeded = TRUE;
 			break;
 		}
 
 		col = start_col;
-		line = g_ptr_array_index (lines, lrow);
+		line = g_ptr_array_index (pl->lines, lrow);
 
 		for (lcol = 0; lcol < line->len; lcol++) {
 			GOFormat const *fmt = lcol < nformats
@@ -1374,13 +1443,7 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 				continue;
 
 			if (col >= gnm_sheet_get_max_cols (sheet)) {
-				if (!parseoptions->cols_exceeded) {
-					/* FIXME: What locale?  */
-					g_warning (_("There are more columns of data than "
-						     "there is room for in the sheet.  Extra "
-						     "columns will be ignored."));
-					parseoptions->cols_exceeded = TRUE;
-				}
+				parseoptions->cols_exceeded = TRUE;
 				break;
 			}
 			if (text && *text) {
@@ -1405,10 +1468,21 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 			col++;
 		}
 
-		g_ptr_array_index (lines, lrow) = NULL;
+		g_ptr_array_index (pl->lines, lrow) = NULL;
 		g_ptr_array_free (line, TRUE);
 	}
 	END_LOCALE_SWITCH;
+
+	if (parseoptions->rows_exceeded) {
+		g_warning (_("There are more rows of data than "
+			     "there is room for in the sheet.  Extra "
+			     "rows will be ignored."));
+	}
+	if (parseoptions->cols_exceeded) {
+		g_warning (_("There are more columns of data than "
+			     "there is room for in the sheet.  Extra "
+			     "columns will be ignored."));
+	}
 
 	for (lcol = 0, col = start_col;
 	     lcol < parseoptions->col_import_array_len  && col < gnm_sheet_get_max_cols (sheet);
@@ -1427,16 +1501,26 @@ stf_parse_sheet (StfParseOptions_t *parseoptions,
 		}
 	}
 
-	g_string_chunk_free (lines_chunk);
-	if (lines)
-		stf_parse_general_free (lines);
+	if (pl)
+		g_object_unref (pl);
 	if (result)
 		stf_read_remember_settings (sheet->workbook, parseoptions);
 	return result;
 }
 
+/**
+ * stf_parse_region:
+ * @parseoptions: #GnmStfParseOptions
+ * @data: data
+ * @data_end: (nullable): end of data
+ * @wb: (nullable): #Workbook
+ *
+ * Parses @data into a #GnmCellRegion.
+ *
+ * Returns: (transfer full): the new #GnmCellRegion.
+ **/
 GnmCellRegion *
-stf_parse_region (StfParseOptions_t *parseoptions, char const *data, char const *data_end,
+stf_parse_region (GnmStfParseOptions *parseoptions, char const *data, char const *data_end,
 		  Workbook const *wb)
 {
 	static GODateConventions const default_conv = {FALSE};
@@ -1444,8 +1528,6 @@ stf_parse_region (StfParseOptions_t *parseoptions, char const *data, char const 
 
 	GnmCellRegion *cr;
 	unsigned int row, colhigh = 0;
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
 	size_t nformats;
 
 	SETUP_LOCALE_SWITCH;
@@ -1459,11 +1541,10 @@ stf_parse_region (StfParseOptions_t *parseoptions, char const *data, char const 
 
 	if (!data_end)
 		data_end = data + strlen (data);
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_general (parseoptions, lines_chunk, data, data_end);
+	GnmStfParsedLines *pl = stf_parse_general (parseoptions, data, data_end);
 	nformats = parseoptions->formats->len;
-	for (row = 0; row < lines->len; row++) {
-		GPtrArray *line = g_ptr_array_index (lines, row);
+	for (row = 0; row < pl->lines->len; row++) {
+		GPtrArray *line = g_ptr_array_index (pl->lines, row);
 		unsigned int col, targetcol = 0;
 		for (col = 0; col < line->len; col++) {
 			if (parseoptions->col_import_array == NULL ||
@@ -1491,8 +1572,7 @@ stf_parse_region (StfParseOptions_t *parseoptions, char const *data, char const 
 			}
 		}
 	}
-	stf_parse_general_free (lines);
-	g_string_chunk_free (lines_chunk);
+	g_object_unref (pl);
 
 	END_LOCALE_SWITCH;
 
@@ -1509,18 +1589,18 @@ int_sort (void const *a, void const *b)
 }
 
 static int
-count_character (GPtrArray *lines, gunichar c, double quantile)
+count_character (GnmStfParsedLines *pl, gunichar c, double quantile)
 {
 	int *counts, res;
 	unsigned int lno, cno;
 
-	if (lines->len == 0)
+	if (pl->lines->len == 0)
 		return 0;
 
-	counts = g_new (int, lines->len);
-	for (lno = cno = 0; lno < lines->len; lno++) {
+	counts = g_new (int, pl->lines->len);
+	for (lno = cno = 0; lno < pl->lines->len; lno++) {
 		int count = 0;
-		GPtrArray *boxline = g_ptr_array_index (lines, lno);
+		GPtrArray *boxline = g_ptr_array_index (pl->lines, lno);
 		char const *line = g_ptr_array_index (boxline, 0);
 
 		/* Ignore empty lines.  */
@@ -1552,7 +1632,39 @@ count_character (GPtrArray *lines, gunichar c, double quantile)
 }
 
 static void
-dump_guessed_options (const StfParseOptions_t *res)
+guess_line_endings (GnmStfParseOptions *res, const char *data)
+{
+	guint cr = 0, crlf = 0, lf = 0;
+
+	while (*data) {
+		if (data[0] == '\r' && data[1] == '\n') {
+			crlf++;
+			data += 2;
+		} else if (data[0] == '\r') {
+			cr++;
+			data++;
+		} else if (data[0] == '\n') {
+			lf++;
+			data++;
+		} else
+			data++;
+	}
+	guint m = MAX (cr, MAX (crlf, lf));
+
+	// Any sane input has only one type.  Just in case, we pick the
+	// most common.
+	stf_parse_options_clear_line_terminator (res);
+	if (m == lf)
+		stf_parse_options_add_line_terminator (res, "\n");
+	else if (m == crlf)
+		stf_parse_options_add_line_terminator (res, "\r\n");
+	else
+		stf_parse_options_add_line_terminator (res, "\r");
+}
+
+
+static void
+dump_guessed_options (const GnmStfParseOptions *res)
 {
 	GSList *l;
 	char ubuffer[6 + 1];
@@ -1617,12 +1729,10 @@ dump_guessed_options (const StfParseOptions_t *res)
  *
  * Returns: (transfer full): the guessed options.
  **/
-StfParseOptions_t *
+GnmStfParseOptions *
 stf_parse_options_guess (char const *data)
 {
-	StfParseOptions_t *res;
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
+	GnmStfParseOptions *res;
 	int tabcount;
 	int sepcount;
 	gunichar sepchar = go_locale_get_arg_sep ();
@@ -1630,11 +1740,11 @@ stf_parse_options_guess (char const *data)
 	g_return_val_if_fail (data != NULL, NULL);
 
 	res = stf_parse_options_new ();
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_lines (res, lines_chunk, data, 1000, FALSE);
+	guess_line_endings (res, data);
+	GnmStfParsedLines *pl = stf_parse_lines (res, data, 1000, FALSE);
 
-	tabcount = count_character (lines, '\t', 0.2);
-	sepcount = count_character (lines, sepchar, 0.2);
+	tabcount = count_character (pl, '\t', 0.2);
+	sepcount = count_character (pl, sepchar, 0.2);
 
 	/* At least one tab per line and enough to separate every
 	   would-be sepchars.  */
@@ -1650,14 +1760,14 @@ stf_parse_options_guess (char const *data)
 		 * The order is mostly random, although ' ' and '!' which
 		 * could very easily occur in text are put last.
 		 */
-		if (count_character (lines, (c = sepchar), 0.5) > 0 ||
-		    count_character (lines, (c = go_locale_get_col_sep ()), 0.5) > 0 ||
-		    count_character (lines, (c = ':'), 0.5) > 0 ||
-		    count_character (lines, (c = ','), 0.5) > 0 ||
-		    count_character (lines, (c = ';'), 0.5) > 0 ||
-		    count_character (lines, (c = '|'), 0.5) > 0 ||
-		    count_character (lines, (c = '!'), 0.5) > 0 ||
-		    count_character (lines, (c = ' '), 0.5) > 0) {
+		if (count_character (pl, (c = sepchar), 0.5) > 0 ||
+		    count_character (pl, (c = go_locale_get_col_sep ()), 0.5) > 0 ||
+		    count_character (pl, (c = ':'), 0.5) > 0 ||
+		    count_character (pl, (c = ','), 0.5) > 0 ||
+		    count_character (pl, (c = ';'), 0.5) > 0 ||
+		    count_character (pl, (c = '|'), 0.5) > 0 ||
+		    count_character (pl, (c = '!'), 0.5) > 0 ||
+		    count_character (pl, (c = ' '), 0.5) > 0) {
 			char sep[7];
 			sep[g_unichar_to_utf8 (c, sep)] = 0;
 			if (c == ' ')
@@ -1694,8 +1804,7 @@ stf_parse_options_guess (char const *data)
 		g_assert_not_reached ();
 	}
 
-	stf_parse_general_free (lines);
-	g_string_chunk_free (lines_chunk);
+	g_object_unref (pl);
 
 	stf_parse_options_guess_formats (res, data);
 
@@ -1711,12 +1820,10 @@ stf_parse_options_guess (char const *data)
  *
  * Returns: (transfer full): the guessed options.
  **/
-StfParseOptions_t *
+GnmStfParseOptions *
 stf_parse_options_guess_csv (char const *data)
 {
-	StfParseOptions_t *res;
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
+	GnmStfParseOptions *res;
 	char *sep = NULL;
 	char const *quoteline = NULL;
 	int pass;
@@ -1725,6 +1832,7 @@ stf_parse_options_guess_csv (char const *data)
 	g_return_val_if_fail (data != NULL, NULL);
 
 	res = stf_parse_options_new ();
+	guess_line_endings (res, data);
 	stf_parse_options_set_type (res, PARSE_TYPE_CSV);
 	stf_parse_options_set_trim_spaces (res, TRIM_TYPE_NEVER);
 	stf_parse_options_csv_set_indicator_2x_is_single (res, TRUE);
@@ -1732,8 +1840,7 @@ stf_parse_options_guess_csv (char const *data)
 	stf_parse_options_csv_set_trim_seps (res, FALSE);
 	stf_parse_options_csv_set_stringindicator (res, stringind);
 
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_lines (res, lines_chunk, data, 1000, FALSE);
+	GnmStfParsedLines *pl = stf_parse_lines (res, data, 1000, FALSE);
 
 	// Find a line containing a quote; skip first line unless it is
 	// the only one.  Prefer a line with the quote first.
@@ -1747,9 +1854,9 @@ stf_parse_options_guess_csv (char const *data)
 		size_t lend = (pass == 2 ? 1 : -1);
 
 		for (lno = lstart;
-		     !quoteline && lno < MIN (lend, lines->len);
+		     !quoteline && lno < MIN (lend, pl->lines->len);
 		     lno++) {
-			GPtrArray *boxline = g_ptr_array_index (lines, lno);
+			GPtrArray *boxline = g_ptr_array_index (pl->lines, lno);
 			const char *line = g_ptr_array_index (boxline, 0);
 			switch (pass) {
 			case 1:
@@ -1815,8 +1922,7 @@ stf_parse_options_guess_csv (char const *data)
 	stf_parse_options_csv_set_separators (res, sep, NULL);
 	g_free (sep);
 
-	stf_parse_general_free (lines);
-	g_string_chunk_free (lines_chunk);
+	g_object_unref (pl);
 
 	stf_parse_options_guess_formats (res, data);
 
@@ -1942,6 +2048,7 @@ done:
 
 /**
  * stf_parse_options_guess_formats:
+ * @po: #GnmStfParseOptions
  * @data: the CSV input data.
  *
  * This function attempts to recognize data formats on a column-by-column
@@ -1959,10 +2066,8 @@ done:
  *
  **/
 void
-stf_parse_options_guess_formats (StfParseOptions_t *po, char const *data)
+stf_parse_options_guess_formats (GnmStfParseOptions *po, char const *data)
 {
-	GStringChunk *lines_chunk;
-	GPtrArray *lines;
 	unsigned lno, col, colcount, sline;
 	GODateConventions const *date_conv = go_date_conv_from_str ("Lotus:1900");
 	GString *s_comma = g_string_new (",");
@@ -1975,17 +2080,16 @@ stf_parse_options_guess_formats (StfParseOptions_t *po, char const *data)
 	g_ptr_array_set_size (po->formats_thousand, 0);
 	g_ptr_array_set_size (po->formats_curr, 0);
 
-	lines_chunk = g_string_chunk_new (100 * 1024);
-	lines = stf_parse_general (po, lines_chunk, data, data + strlen (data));
+	GnmStfParsedLines *pl = stf_parse_general (po, data, data + strlen (data));
 
 	colcount = 0;
-	for (lno = 0; lno < lines->len; lno++) {
-		GPtrArray *line = g_ptr_array_index (lines, lno);
+	for (lno = 0; lno < pl->lines->len; lno++) {
+		GPtrArray *line = g_ptr_array_index (pl->lines, lno);
 		colcount = MAX (colcount, line->len);
 	}
 
 	// Ignore first line unless it is the only one
-	sline = MIN ((int)lines->len - 1, 1);
+	sline = MIN ((int)pl->lines->len - 1, 1);
 
 	g_ptr_array_set_size (po->formats, colcount);
 	g_ptr_array_set_size (po->formats_decimal, colcount);
@@ -1999,8 +2103,8 @@ stf_parse_options_guess_formats (StfParseOptions_t *po, char const *data)
 		int decimals_if_point = -1; // -1: unset; -2: inconsistent; >=0: count
 		int decimals_if_comma = -1; // -1: unset; -2: inconsistent; >=0: count
 
-		for (lno = sline; possible && lno < lines->len; lno++) {
-			GPtrArray *line = g_ptr_array_index (lines, lno);
+		for (lno = sline; possible && lno < pl->lines->len; lno++) {
+			GPtrArray *line = g_ptr_array_index (pl->lines, lno);
 			const char *data = col < line->len ? g_ptr_array_index (line, col) : "";
 			unsigned prev_possible = possible;
 			gunichar c0 = g_utf8_get_char (data);
@@ -2099,8 +2203,7 @@ stf_parse_options_guess_formats (StfParseOptions_t *po, char const *data)
 		g_ptr_array_index (po->formats, col) = fmt;
 	}
 
-	stf_parse_general_free (lines);
-	g_string_chunk_free (lines_chunk);
+	g_object_unref (pl);
 
 	g_string_free (s_dot, TRUE);
 	g_string_free (s_comma, TRUE);

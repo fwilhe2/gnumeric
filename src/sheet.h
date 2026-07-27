@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_H_
-# define _GNM_SHEET_H_
+#ifndef GNM_SHEET_H_
+#define GNM_SHEET_H_
 
 #include <gnumeric.h>
 #include <colrow.h>
@@ -15,21 +15,24 @@ GNM_VAR_DECL Sheet *invalid_sheet;
 
 GType gnm_sheet_size_get_type (void);
 
-struct _ColRowCollection {
+struct ColRowCollection_ {
 	int         max_used;
 	ColRowInfo  default_style;
 	GPtrArray * info;
 	int	    max_outline_level;
+
+	// Index into @info of last ColRowSegment with valid pixel_start
+	int         last_valid_pixel_start;
 };
 
-typedef struct _SheetPrivate SheetPrivate;
+typedef struct SheetPrivate_ SheetPrivate;
 GType gnm_sheet_type_get_type (void);
 #define GNM_SHEET_TYPE_TYPE (gnm_sheet_type_get_type ())
 
 GType gnm_sheet_visibility_get_type (void);
 #define GNM_SHEET_VISIBILITY_TYPE (gnm_sheet_visibility_get_type ())
 
-struct _Sheet {
+struct Sheet_ {
 	GObject	base;
 
 	int         index_in_wb;
@@ -147,10 +150,18 @@ GOUndo   *gnm_sheet_resize       (Sheet *sheet, int cols, int rows,
 GnmSheetSize const *gnm_sheet_get_size (Sheet const *sheet);
 GnmSheetSize const *gnm_sheet_get_size2 (Sheet const *sheet,
 					 Workbook const *wb);
-#define gnm_sheet_get_max_rows(sheet) (gnm_sheet_get_size(sheet)->max_rows)
-#define gnm_sheet_get_max_cols(sheet) (gnm_sheet_get_size(sheet)->max_cols)
-#define gnm_sheet_get_last_col(sheet) (gnm_sheet_get_max_cols(sheet) - 1)
-#define gnm_sheet_get_last_row(sheet) (gnm_sheet_get_max_rows(sheet) - 1)
+
+#ifdef __GI_SCANNER__
+int gnm_sheet_get_max_rows (Sheet const *sheet);
+int gnm_sheet_get_max_cols (Sheet const *sheet);
+int gnm_sheet_get_last_row (Sheet const *sheet);
+int gnm_sheet_get_last_col (Sheet const *sheet);
+#else
+inline int gnm_sheet_get_max_rows (Sheet const *sheet) { return gnm_sheet_get_size (sheet)->max_rows; }
+inline int gnm_sheet_get_max_cols (Sheet const *sheet) { return gnm_sheet_get_size (sheet)->max_cols; }
+inline int gnm_sheet_get_last_row (Sheet const *sheet) { return gnm_sheet_get_size (sheet)->max_rows - 1; }
+inline int gnm_sheet_get_last_col (Sheet const *sheet) { return gnm_sheet_get_size (sheet)->max_cols - 1; }
+#endif
 
 /* GnmCell management */
 GnmCell  *sheet_cell_get	 (Sheet const *sheet, int col, int row);
@@ -162,7 +173,7 @@ void      sheet_cell_remove	 (Sheet *sheet, GnmCell *cell,
  * Merge with sheet_cell_foreach
  *
  **/
-struct _GnmCellIter {
+struct GnmCellIter_ {
 	GnmCell	    *cell;
 	GnmParsePos  pp;
 	ColRowInfo  *ci, *ri;
@@ -223,11 +234,16 @@ ColRowInfo const *sheet_row_get_info	  (Sheet const *sheet, int row);
 ColRowInfo const *sheet_colrow_get_info	  (Sheet const *sheet,
 					   int colrow, gboolean is_cols);
 
+void sheet_colrow_copy_info               (Sheet *sheet, int colrow,
+					   gboolean is_cols, ColRowInfo const *cri);
+
 gboolean          sheet_colrow_foreach	   (Sheet const *sheet,
 					    gboolean is_cols,
 					    int first, int last,
 					    ColRowHandler callback,
 					    gpointer user_data);
+
+void gnm_sheet_mark_colrow_changed (Sheet *sheet, int colrow, gboolean is_cols);
 
 /*
  * Definitions of row/col size terminology :
@@ -301,7 +317,7 @@ gboolean sheet_range_contains_merges_or_arrays (Sheet const *sheet,
 						char const *cmd,
 						gboolean merges,
 						gboolean arrays);
-void	 sheet_range_bounding_box    (Sheet const *sheet, GnmRange *r);
+void	 sheet_range_bounding_box    (Sheet const *sheet, GnmRange *bound);
 gboolean sheet_range_trim	     (Sheet const *sheet, GnmRange *r,
 				      gboolean cols, gboolean rows);
 gboolean sheet_range_has_heading     (Sheet const *sheet, GnmRange const *src,
@@ -322,8 +338,8 @@ void gnm_sheet_add_sort_setup (Sheet *sheet, char *key, gpointer setup);
 gconstpointer gnm_sheet_find_sort_setup (Sheet *sheet, char const *key);
 
 /* Redraw */
-#define sheet_is_visible(_sheet) ((_sheet)->visibility == GNM_SHEET_VISIBILITY_VISIBLE)
-void     sheet_redraw_all       (Sheet const *sheet, gboolean header);
+gboolean sheet_is_visible (Sheet const *sheet);
+void     sheet_redraw_all       (Sheet const *sheet, gboolean headers);
 void     sheet_redraw_range     (Sheet const *sheet, GnmRange const *range);
 void     sheet_queue_redraw_range (Sheet *sheet, GnmRange const *range);
 void     sheet_redraw_region    (Sheet const *sheet,
@@ -413,6 +429,8 @@ GOUndo *sheet_clear_region_undo (GnmSheetRange *sr,
 
 SheetView *sheet_get_view (Sheet const *sheet, WorkbookView const *wbv);
 
+void sheet_freeze_object_views (Sheet const *sheet, gboolean qfreeze);
+
 GODateConventions const *sheet_date_conv (Sheet const *sheet);
 
 // Introspection support
@@ -451,4 +469,4 @@ do {										\
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_H_ */
+#endif /* GNM_SHEET_H_ */

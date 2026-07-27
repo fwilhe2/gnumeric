@@ -1,4 +1,3 @@
-
 /*
  * auto-correct.c:
  *
@@ -109,7 +108,7 @@ autocorrect_initial_caps (const char *src)
 
 				for (l = gnm_conf_get_autocorrect_init_caps_list (); l; l = l->next) {
 					const char *except = l->data;
-					if (strncmp (begin, except, strlen (except)) == 0) {
+					if (g_str_has_prefix (begin, except)) {
 						exception_found = TRUE;
 						break;
 					}
@@ -289,11 +288,12 @@ autocorrect_names_of_days (const char *src)
 }
 
 
-/*
- * NOTE: If in the future this is extended with methods that insert or
- * delete characters (bytes to be precise), the there might need to be
- * rich text corrections.
- */
+/**
+ * autocorrect_tool:
+ * @input: source string
+ *
+ * Returns: (transfer full): the corrected string.
+ **/
 char *
 autocorrect_tool (char const *src)
 {

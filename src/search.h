@@ -1,5 +1,5 @@
-#ifndef _GNM_SEARCH_H_
-# define _GNM_SEARCH_H_
+#ifndef GNM_SEARCH_H_
+#define GNM_SEARCH_H_
 
 #include <gnumeric.h>
 #include <position.h>
@@ -44,7 +44,7 @@ typedef enum {
 
 typedef  int (*GnmSearchReplaceQueryFunc) (GnmSearchReplaceQuery q, GnmSearchReplace *sr, ...);
 
-struct _GnmSearchReplace {
+struct GnmSearchReplace_ {
 	GOSearchReplace base;
 
 	GnmSearchReplaceScope scope;
@@ -142,4 +142,4 @@ int gnm_search_replace_query_comment (GnmSearchReplace *sr,
 
 G_END_DECLS
 
-#endif /* _GNM_SEARCH_H_ */
+#endif /* GNM_SEARCH_H_ */

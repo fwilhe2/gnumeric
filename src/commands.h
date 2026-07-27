@@ -1,8 +1,8 @@
-#ifndef _GNM_COMMANDS_H_
-#define _GNM_COMMANDS_H_
+#ifndef GNM_COMMANDS_H_
+#define GNM_COMMANDS_H_
 
 #include <gnumeric.h>
-#include <tools/tools.h>
+#include <mstyle.h>
 
 G_BEGIN_DECLS
 
@@ -54,7 +54,7 @@ gboolean cmd_delete_rows	(WorkbookControl *wbc, Sheet *sheet,
 				 int start_row, int count);
 
 gboolean cmd_resize_colrow	(WorkbookControl *wbc, Sheet *sheet,
-				 gboolean is_col, ColRowIndexList *selection,
+				 gboolean is_cols, ColRowIndexList *selection,
 				 int new_size);
 gboolean cmd_autofit_selection  (WorkbookControl *wbc, SheetView *sv, Sheet *sheet,
 				 gboolean fit_width,
@@ -63,7 +63,7 @@ gboolean cmd_autofit_selection  (WorkbookControl *wbc, SheetView *sv, Sheet *she
 gboolean cmd_paste_cut		(WorkbookControl *wbc,
 				 GnmExprRelocateInfo const *info,
 				 gboolean move_selection,
-				 char *cmd_descriptor);
+				 char *descriptor);
 gboolean cmd_paste_copy		(WorkbookControl *wbc,
 				 GnmPasteTarget const *pt, GnmCellRegion *content);
 
@@ -124,9 +124,8 @@ gboolean cmd_set_comment	(WorkbookControl *wbc, Sheet *sheet,
 				 PangoAttrList *attr, char const *new_author);
 
 gboolean cmd_analysis_tool	(WorkbookControl *wbc, Sheet *sheet,
-				 data_analysis_output_t *dao, gpointer specs,
-				 analysis_tool_engine engine,
-				 gboolean always_take_ownership);
+				 data_analysis_output_t *dao,
+				 GnmAnalysisTool *tool);
 
 gboolean cmd_merge_data		(WorkbookControl *wbc, Sheet *sheet,
 				 GnmValue *merge_zone, GSList *merge_fields, GSList *merge_data);
@@ -146,21 +145,22 @@ gboolean cmd_scenario_mngr (WorkbookControl *wbc, GnmScenario *sc,
 			    GOUndo *undo);
 
 /* FIXME: figure out how to resolve this better.  */
-struct _data_shuffling_t;
-gboolean cmd_data_shuffle (WorkbookControl *wbc, struct _data_shuffling_t *sc, Sheet *sheet);
+struct _GnmDataShuffle;
+gboolean cmd_data_shuffle (WorkbookControl *wbc, struct _GnmDataShuffle *sc, Sheet *sheet);
 
 
 gboolean cmd_text_to_columns (WorkbookControl *wbc,
 			      GnmRange const *src, Sheet *src_sheet,
 			      GnmRange const *target, Sheet *target_sheet,
-			      GnmCellRegion *content);
+			      GnmCellRegion *contents);
 
 gboolean cmd_goal_seek (WorkbookControl *wbc,
 			GnmCell *cell, GnmValue *ov, GnmValue *nv);
 
-gboolean cmd_tabulate (WorkbookControl *wbc, gpointer data);
+gboolean cmd_tabulate (WorkbookControl *wbc, GnmTabulate *tab);
 
-gboolean cmd_toggle_rtl (WorkbookControl *wbc, Sheet *sheet);
+gboolean cmd_toggle_sheet_property (WorkbookControl *wbc, Sheet *sheet,
+				    const char *property, const char *desc);
 
 gboolean cmd_autofilter_add_remove (WorkbookControl *wbc);
 gboolean cmd_autofilter_set_condition (WorkbookControl *wbc,
@@ -241,4 +241,4 @@ gboolean cmd_resize_sheets      (WorkbookControl *wbc,
 
 G_END_DECLS
 
-#endif /* _GNM_COMMANDS_H_ */
+#endif /* GNM_COMMANDS_H_ */

@@ -34,6 +34,8 @@
 
 #define SPEED_FACTOR 1.5
 
+#define EXPANSION_CHAR UNICODE_ZERO_WIDTH_SPACE_C
+
 #define LICENSE_TEXT \
 	N_("Gnumeric is available under the GNU General Public License, version 2 or 3 at your option.\n\nSee https://www.gnu.org/licenses/old-licenses/gpl-2.0.html\nor https://www.gnu.org/licenses/gpl-3.0.html.\n\nGnumeric comes with absolutely no warranty.")
 
@@ -157,7 +159,7 @@ static struct {
 	{ N_("Vladimir Vuksan"),		GNM_ANALYTICS,
 		N_("Some financial functions") },
 	{ N_("Morten Welinder"),		GNM_CORE|GNM_FEATURE_HACKER|GNM_ANALYTICS|GNM_IMPORT_EXPORT|GNM_SCRIPTING|GNM_GUI|GNM_USABILITY|GNM_TRANSLATION|GNM_QA,
-		N_("All round powerhouse") },
+		N_("All-round powerhouse") },
 	{ N_("Kevin Breit"),		GNM_DOCUMENTATION, NULL },
 	{ N_("Thomas Canty"),		GNM_DOCUMENTATION, NULL },
 	{ N_("Adrian Custer"),		GNM_DOCUMENTATION, NULL },
@@ -175,7 +177,9 @@ struct AboutRenderer_ {
 	gboolean (*renderer) (AboutRenderer *, AboutState *);
 
 	PangoLayout *layout;
+	PangoAttrList *attrs;
 	int natural_width;
+	char *text;
 
 	gboolean fade_in, fade_out;
 
@@ -207,13 +211,16 @@ free_renderer (AboutRenderer *r)
 {
 	if (r->layout)
 		g_object_unref (r->layout);
+	if (r->attrs)
+		pango_attr_list_unref (r->attrs);
+	g_free (r->text);
 	g_free (r);
 }
 
 static gboolean
 text_item_renderer (AboutRenderer *r, AboutState *state)
 {
-	PangoLayout *layout = r->layout;
+	PangoLayout *layout;
 	int age = state->now - r->start_time;
 	double rage = CLAMP (age / (double)r->duration, 0.0, 1.0);
 	GtkWidget *widget = state->anim_area;
@@ -227,6 +234,13 @@ text_item_renderer (AboutRenderer *r, AboutState *state)
 
 	if (age >= r->duration)
 		return FALSE;
+
+	if (r->layout == NULL) {
+		r->layout = gtk_widget_create_pango_layout (state->anim_area, r->text);
+		pango_layout_set_attributes (r->layout, r->attrs);
+		pango_layout_get_size (r->layout, &r->natural_width, NULL);
+	}
+	layout = r->layout;
 
 	if (r->fade_in && age < fade)
 		alpha = age / (double)fade;
@@ -242,23 +256,21 @@ text_item_renderer (AboutRenderer *r, AboutState *state)
 		  (r->start.y + rage * (r->end.y - r->start.y)));
 
 	if (r->expansion.count) {
-		PangoAttrList *attrlist = pango_layout_get_attributes (layout);
-		const char *p, *text = pango_layout_get_text (layout);
+		PangoAttrList *attrlist = pango_attr_list_copy (r->attrs);
+		const char *p, *text = r->text;
 		PangoRectangle ink, logical;
 
-		memset (&ink, 0, sizeof (ink));
-		logical = ink;
-
+		memset (&logical, 0, sizeof (logical));
 		logical.width = (int)(rage * r->expansion.rate * r->natural_width / r->expansion.count);
+		ink = logical;
 
 		p = text;
 		while (*p) {
 			const char *next = g_utf8_next_char (p);
 			gunichar uc = g_utf8_get_char (p);
-			PangoAttribute *attr;
 
-			if (uc == UNICODE_ZERO_WIDTH_SPACE_C) {
-				attr = pango_attr_shape_new (&ink, &logical);
+			if (uc == EXPANSION_CHAR) {
+				PangoAttribute *attr = pango_attr_shape_new (&ink, &logical);
 				attr->start_index = p - text;
 				attr->end_index = next - text;
 				pango_attr_list_change (attrlist, attr);
@@ -266,6 +278,7 @@ text_item_renderer (AboutRenderer *r, AboutState *state)
 			p = next;
 		}
 		pango_layout_set_attributes (layout, attrlist);
+		pango_attr_list_unref (attrlist);
 	}
 
 	pango_layout_get_size (layout, &width, &height);
@@ -295,7 +308,7 @@ set_text_motion (AboutRenderer *r, double sx, double sy, double ex, double ey)
 static void
 set_text_expansion (AboutRenderer *r, double er)
 {
-	const char *text = pango_layout_get_text (r->layout);
+	char *text = r->text;
 	GString *str = g_string_new (NULL);
 	char *ntext;
 	const char *p;
@@ -310,45 +323,40 @@ set_text_expansion (AboutRenderer *r, double er)
 	for (p = ntext; *p; p = g_utf8_next_char (p)) {
 		gunichar uc = g_utf8_get_char (p);
 
-		if (uc == UNICODE_ZERO_WIDTH_SPACE_C)
+		if (uc == EXPANSION_CHAR)
 			continue;
 
 		if (str->len) {
-			g_string_append_unichar (str, UNICODE_ZERO_WIDTH_SPACE_C);
+			g_string_append_unichar (str, EXPANSION_CHAR);
 			r->expansion.count++;
 		}
 		g_string_append_unichar (str, uc);
 	}
 
 	g_free (ntext);
-	pango_layout_set_text (r->layout, str->str, -1);
-	g_string_free (str, TRUE);
+	g_free (text);
+	r->text = g_string_free (str, FALSE);
 }
 
 static AboutRenderer *
 make_text_item (AboutState *state, const char *text, int duration)
 {
 	AboutRenderer *r = g_new0 (AboutRenderer, 1);
-	PangoAttrList *attrlist;
 	PangoAttribute *attr;
 
 	duration = (int)(duration / SPEED_FACTOR);
 
 	r->start_time = state->now;
 	r->duration = duration;
-	r->layout = gtk_widget_create_pango_layout (state->anim_area, NULL);
+	r->layout = NULL;
 	r->renderer = text_item_renderer;
 	r->fade_in = r->fade_out = TRUE;
+	r->text = g_strdup (text);
 	set_text_motion (r, 0.5, 0.5, 0.5, 0.5);
 
-	pango_layout_set_text (r->layout, text, -1);
-	pango_layout_get_size (r->layout, &r->natural_width, NULL);
-
-	attrlist = pango_attr_list_new ();
+	r->attrs = pango_attr_list_new ();
 	attr = pango_attr_weight_new (PANGO_WEIGHT_BOLD);
-	pango_attr_list_change (attrlist, attr);
-	pango_layout_set_attributes (r->layout, attrlist);
-	pango_attr_list_unref (attrlist);
+	pango_attr_list_change (r->attrs, attr);
 
 	state->now += duration;
 
@@ -415,7 +423,7 @@ about_dialog_anim_draw (G_GNUC_UNUSED GtkWidget *widget,
 		keep = r->renderer (r, state);
 		if (!keep) {
 			free_renderer (r);
-			state->active = g_list_remove_link (state->active, l);
+			state->active = g_list_delete_link (state->active, l);
 		}
 		l = next;
 	}
@@ -465,7 +473,7 @@ create_animation (AboutState *state)
 		permutation[ui] = ui;
 
 	for (ui = 0; ui < N; ui++) {
-		unsigned pui = (int)(random_01 () * N);
+		unsigned pui = gnm_random_uniform_int (N);
 		unsigned A = permutation[ui];
 		permutation[ui] = permutation[pui];
 		permutation[pui] = A;
@@ -534,9 +542,9 @@ create_animation (AboutState *state)
 
 	OVERLAP (-100);
 
-	r = make_text_item (state, _("We aim to please!"), 1000);
+	r = make_text_item (state, _("We aim to please!"), 2500);
 	r->fade_in = FALSE;
-	set_text_expansion (r, 4);
+	set_text_expansion (r, 3);
 	APPENDR (r);
 
 	state->now = 0;
@@ -588,8 +596,8 @@ dialog_about (WBCGtk *wbcg)
 			  "version", GNM_VERSION_FULL,
 			  "website", PACKAGE_URL,
 			  "website-label", _("Visit the Gnumeric website"),
-			  "logo-icon-name", "gnumeric",
-			  "copyright", _("Copyright \xc2\xa9 1998-2020"),
+			  "logo-icon-name", "org.gnumeric.gnumeric",
+			  "copyright", _("Copyright \xc2\xa9 1998-2026"),
 			  "comments", _("Free, Fast, Accurate - Pick Any Three!"),
 			  "license", _(LICENSE_TEXT),
 			  "wrap-license", TRUE,
@@ -619,7 +627,7 @@ dialog_about (WBCGtk *wbcg)
 		layout = gtk_widget_create_pango_layout (state->anim_area, "x");
 		pango_layout_get_pixel_size (layout, &width, &height);
 		gtk_widget_set_size_request (state->anim_area,
-					     40 * width, 8 * height);
+					     60 * width, 8 * height);
 		g_object_unref (layout);
 
 		g_signal_connect (state->anim_area, "draw",

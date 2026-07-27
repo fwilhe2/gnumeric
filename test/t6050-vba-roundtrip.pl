@@ -17,14 +17,19 @@ my $dir1 = &gsf_list ($src);
 my $tmp = $src;
 $tmp =~ s|^.*/||;
 $tmp =~ s|\..*|-tmp.xls|;
-&GnumericTest::junkfile ($tmp);
+$tmp = &GnumericTest::invent_junkfile ($tmp);
 system ("$ssconvert $src $tmp");
+die "$0: failed to create $tmp\n" unless -f $tmp;
 my $dir2 = &gsf_list ($tmp);
 
+my $vba_count = 0;
 foreach my $f (sort keys %$dir1) {
+    my $qvba = ($f =~ m{^_VBA_PROJECT_CUR/});
+    $vba_count++ if $qvba;
+
     next unless ($f eq "\001Ole" ||
 		 $f eq "\001CompObj" ||
-		 $f =~ m{^_VBA_PROJECT_CUR/});
+		 $qvba);
     my $fprint = $f;
     $fprint =~ s{\001}{\\001};
     if (!exists $dir2->{$f}) {
@@ -44,12 +49,14 @@ foreach my $f (sort keys %$dir1) {
     }
 }
 
+die "$0: something is strange here\n" if $vba_count < 10;
+
 sub gsf_list {
     my ($fn) = @_;
 
     my $dir = {};
     local (*FIL);
-    open (FIL, "$gsf list '$fn' | ") or die "Cannot parse $fn: $!\n";
+    open (FIL, "$gsf list '$fn' | ") or die "$0: Cannot parse $fn: $!\n";
     while (<FIL>) {
 	next unless /^f\s.*\s(\d+)\s+(.*)$/;
 	$dir->{$2} = $1;

@@ -100,9 +100,10 @@ gnumeric_char (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /***************************************************************************/
 
 static GnmFuncHelp const help_unichar[] = {
-        { GNM_FUNC_HELP_NAME, F_("UNICHAR:the Unicode character represented by the Unicode code point @{x}")},
-        { GNM_FUNC_HELP_ARG, F_("x:Unicode code point")},
-        { GNM_FUNC_HELP_EXAMPLES, "=UNICHAR(65)"},
+        { GNM_FUNC_HELP_NAME, F_("UNICHAR:the Unicode character represented by the code point @{n}")},
+        { GNM_FUNC_HELP_ARG, F_("n:Unicode code point")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+        { GNM_FUNC_HELP_EXAMPLES, "=UNICHAR(65)" },
         { GNM_FUNC_HELP_EXAMPLES, "=UNICHAR(960)"},
         { GNM_FUNC_HELP_EXAMPLES, "=UNICHAR(20000)"},
         { GNM_FUNC_HELP_SEEALSO, "CHAR,UNICODE,CODE"},
@@ -126,6 +127,34 @@ gnumeric_unichar (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 /***************************************************************************/
 
 static GIConv CODE_iconv;
+
+typedef struct {
+	size_t byte_offset;
+	size_t byte_len;
+	int char_offset;
+	int char_len;
+	gboolean is_row_delim;
+} Match;
+
+static int
+compare_matches (Match const *a, Match const *b)
+{
+	if (a->byte_offset < b->byte_offset) return -1;
+	if (a->byte_offset > b->byte_offset) return 1;
+	return 0;
+}
+
+static GnmValue *
+cb_collect_delims (GnmValueIter const *iter, gpointer user)
+{
+	GSList **list = user;
+	char *s = value_get_as_string (iter->v);
+	if (s && *s)
+		*list = g_slist_prepend (*list, s);
+	else
+		g_free (s);
+	return NULL;
+}
 
 static GnmFuncHelp const help_code[] = {
 	{ GNM_FUNC_HELP_NAME, F_("CODE:the CP1252 (Windows-1252) code point for the character @{c}")},
@@ -175,6 +204,7 @@ gnumeric_code (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 static GnmFuncHelp const help_unicode[] = {
         { GNM_FUNC_HELP_NAME, F_("UNICODE:the Unicode code point for the character @{c}")},
         { GNM_FUNC_HELP_ARG, F_("c:character")},
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=UNICODE(\"A\")" },
         { GNM_FUNC_HELP_SEEALSO, "UNICHAR,CODE,CHAR"},
         { GNM_FUNC_HELP_END}
@@ -330,18 +360,21 @@ static GnmFuncHelp const help_left[] = {
 static GnmValue *
 gnumeric_left (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	const guchar *peek = (const guchar *)value_peek_string (argv[0]);
-	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1.0;
-	int icount, newlen;
+	const char *peek = value_peek_string (argv[0]);
+	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1;
+	char const *p = peek;
+	int icount;
 
 	if (count < 0)
 		return value_new_error_VALUE (ei->pos);
 	icount = (int)MIN ((gnm_float)INT_MAX, count);
 
-	for (newlen = 0; peek[newlen] != 0 && icount > 0; icount--)
-		newlen += g_utf8_skip[peek[newlen]];
+	while (icount > 0 && *p != '\0') {
+		p = g_utf8_next_char (p);
+		icount--;
+	}
 
-	return value_new_string_nocopy (g_strndup (peek, newlen));
+	return value_new_string_nocopy (g_strndup (peek, p - peek));
 }
 
 /***************************************************************************/
@@ -364,7 +397,7 @@ static GnmValue *
 gnumeric_leftb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	const guchar *peek = (const guchar *)value_peek_string (argv[0]);
-	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1.0;
+	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1;
 	int len = strlen (peek);
 	int icount, newlen;
 
@@ -417,23 +450,23 @@ gnumeric_mid (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	char const *source = value_peek_string (argv[0]);
 	gnm_float pos = value_get_as_float (argv[1]);
 	gnm_float len = value_get_as_float (argv[2]);
-	size_t slen = g_utf8_strlen (source, -1);
-	char const *upos;
-	size_t ilen, ipos, ulen;
+	char const *upos, *end;
+	int ipos, ilen;
 
 	if (len < 0 || pos < 1)
 		return value_new_error_VALUE (ei->pos);
-	if (pos >= slen + 1)
-		return value_new_string ("");
 
 	/* Make ipos zero-based.  */
-	ipos = (size_t)(pos - 1);
-	ilen  = (size_t)MIN (len, (gnm_float)(slen - ipos));
+	ipos = (int)MIN ((gnm_float)INT_MAX, pos - 1);
+	ilen = (int)MIN ((gnm_float)INT_MAX, len);
 
-	upos = g_utf8_offset_to_pointer (source, ipos);
-	ulen = g_utf8_offset_to_pointer (upos, ilen) - upos;
+	for (upos = source; ipos > 0 && *upos != '\0'; ipos--)
+		upos = g_utf8_next_char (upos);
 
-	return value_new_string_nocopy (g_strndup (upos, ulen));
+	for (end = upos; ilen > 0 && *end != '\0'; ilen--)
+		end = g_utf8_next_char (end);
+
+	return value_new_string_nocopy (g_strndup (upos, end - upos));
 }
 
 /***************************************************************************/
@@ -460,7 +493,7 @@ gnumeric_midb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	const guchar *peek = (const guchar *)value_peek_string (argv[0]);
 	gnm_float pos = value_get_as_float (argv[1]);
 	gnm_float len = value_get_as_float (argv[2]);
- 	int slen = strlen (peek);
+	int slen = strlen (peek);
 	int ipos, ilen, newlen;
 
 	if ((len < 0) || (pos < 1))
@@ -503,7 +536,7 @@ gnumeric_findb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	char const *needle   = value_peek_string (argv[0]);
 	char const *haystack = value_peek_string (argv[1]);
-	gnm_float count      = argv[2] ? value_get_as_float (argv[2]) : 1.0;
+	gnm_float count      = argv[2] ? value_get_as_float (argv[2]) : 1;
 	size_t haystacksize = strlen (haystack);
 	size_t icount;
 	char const *p;
@@ -542,21 +575,21 @@ static GnmValue *
 gnumeric_right (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	char const *os = value_peek_string (argv[0]);
-	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1.0;
-	int icount, slen;
+	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1;
+	const char *p;
+	int icount;
 
 	if (count < 0)
 		return value_new_error_VALUE (ei->pos);
 	icount = (int)MIN ((gnm_float)INT_MAX, count);
 
-	slen = g_utf8_strlen (os, -1);
+	p = os + strlen (os);
+	while (icount > 0 && p > os) {
+		p = g_utf8_prev_char (p);
+		icount--;
+	}
 
-	if (icount < slen)
-		return value_new_string (g_utf8_offset_to_pointer (os, slen - icount));
-	else
-		/* We could just duplicate the arg, but that would not ensure
-		   that the result was a string.  */
-		return value_new_string (os);
+	return value_new_string (p);
 }
 
 /***************************************************************************/
@@ -579,7 +612,7 @@ static GnmValue *
 gnumeric_rightb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	const guchar *peek = (const guchar *)value_peek_string (argv[0]);
-	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1.0;
+	gnm_float count = argv[1] ? value_get_as_float (argv[1]) : 1;
 	int len = strlen (peek);
 	int icount;
 	gchar *res;
@@ -719,8 +752,12 @@ gnumeric_textjoin (GnmFuncEvalInfo *ei, int argc, GnmExprConstPtr const *argv)
 	v = gnm_expr_eval (argv[1], ei->pos, GNM_EXPR_EVAL_SCALAR_NON_EMPTY);
 	if (VALUE_IS_ERROR (v))
 		goto done;
-	data.ignore_blanks = value_get_as_bool (v, &err); // What about err?
+	data.ignore_blanks = value_get_as_bool (v, &err);
 	value_release (v);
+	if (err) {
+		v = value_new_error_VALUE (ei->pos);
+		goto done;
+	}
 
 	v = string_range_function (argc - 2, argv + 2, ei,
 				   range_textjoin,
@@ -746,6 +783,32 @@ static GnmFuncHelp const help_rept[] = {
         { GNM_FUNC_HELP_END}
 };
 
+static void
+memcpy_n_times (char *dst, const char *src, size_t len, size_t n)
+{
+	size_t copied_bytes = len;
+	size_t total_bytes = n * len;
+	size_t chunk = len;
+
+	if (total_bytes == 0)
+		return;
+
+	if (len == 1) {
+		memset (dst, *src, n);
+		return;
+	}
+
+	memcpy (dst, src, len);
+	while (copied_bytes < total_bytes) {
+		chunk = MIN (chunk, total_bytes - copied_bytes);
+		memcpy (dst + copied_bytes, dst, chunk);
+		copied_bytes += chunk;
+		// Don't let chunk get so big as to risk the source getting
+		// kicked out of the cache
+		if (chunk < 4096u) chunk *= 2;
+	}
+}
+
 static GnmValue *
 gnumeric_rept (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
@@ -753,7 +816,7 @@ gnumeric_rept (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float num = value_get_as_float (argv[1]);
 	size_t len = strlen (source);
 	char *res;
-	size_t i, inum;
+	size_t inum;
 
 	if (num < 0)
 		return value_new_error_VALUE (ei->pos);
@@ -771,9 +834,8 @@ gnumeric_rept (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	if (!res)
 		return value_new_error_VALUE (ei->pos);
 
-	for (i = 0; inum-- > 0; i += len)
-		memcpy (res + i, source, len);
-	res[i] = 0;
+	memcpy_n_times (res, source, len, inum);
+	res[len * inum] = 0;
 
 	return value_new_string_nocopy (res);
 }
@@ -798,7 +860,7 @@ gnumeric_clean (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	while (*s) {
 		gunichar uc = g_utf8_get_char (s);
 
-		if (g_unichar_isprint (uc))
+		if (uc >= 32)
 			g_string_append_unichar (res, uc);
 
 		s = g_utf8_next_char (s);
@@ -826,7 +888,7 @@ gnumeric_find (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	char const *needle   = value_peek_string (argv[0]);
 	char const *haystack = value_peek_string (argv[1]);
-	gnm_float count      = argv[2] ? value_get_as_float (argv[2]) : 1.0;
+	gnm_float count      = argv[2] ? value_get_as_float (argv[2]) : 1;
 	size_t haystacksize = g_utf8_strlen (haystack, -1);
 	size_t icount;
 	char const *p;
@@ -864,7 +926,7 @@ static GnmValue *
 gnumeric_fixed (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	gnm_float num = value_get_as_float (argv[0]);
-	gnm_float decimals = argv[1] ? value_get_as_float (argv[1]) : 2.0;
+	gnm_float decimals = argv[1] ? value_get_as_float (argv[1]) : 2;
 	gboolean no_commas = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
 	GString *format;
 	GOFormat *fmt;
@@ -919,11 +981,10 @@ static GnmFuncHelp const help_proper[] = {
 static GnmValue *
 gnumeric_proper (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	char const *p;
+	char const *p = value_peek_string (argv[0]);
 	GString    *res    = g_string_new (NULL);
 	gboolean   inword = FALSE;
 
-	p = value_peek_string (argv[0]);
 	while (*p) {
 		gunichar uc = g_utf8_get_char (p);
 
@@ -949,6 +1010,284 @@ gnumeric_proper (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 /***************************************************************************/
 
+static GnmFuncHelp const help_regexextract[] = {
+	{ GNM_FUNC_HELP_NAME, F_("REGEXEXTRACT:extract text using a regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("pattern:regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("return_mode:0 for first match (default), 1 for all matches, 2 for capturing groups")},
+	{ GNM_FUNC_HELP_ARG, F_("case_insensitive:if TRUE, perform a case-insensitive match; defaults to FALSE")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("REGEXEXTRACT returns substrings from @{text} based on @{pattern}.\n"
+					"If @{return_mode} is 0, it returns the first match.\n"
+					"If @{return_mode} is 1, it returns all matches as a vertical array.\n"
+					"If @{return_mode} is 2, it returns capturing groups from the first match as a horizontal array.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=REGEXEXTRACT(\"ID: 12345\", \"[0-9]+\")" },
+	{ GNM_FUNC_HELP_SEEALSO, "REGEXTEST,REGEXREPLACE,SEARCH"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_regexextract_mode_1 (GRegex *regex, char const *text)
+{
+	GSList *matches = NULL;
+	int pos = 0;
+	int text_len = strlen (text);
+	GnmValue *res = NULL;
+
+	while (pos <= text_len) {
+		GMatchInfo *match_info = NULL;
+		if (g_regex_match_full (regex, text, text_len, pos, 0, &match_info, NULL)) {
+			char *m = g_match_info_fetch (match_info, 0);
+			int start, end;
+			g_match_info_fetch_pos (match_info, 0, &start, &end);
+
+			if (start == end) {
+				/* Empty match. Append it, then try for a non-empty match at same position. */
+				matches = g_slist_prepend (matches, m);
+				g_match_info_free (match_info);
+				match_info = NULL;
+				if (g_regex_match_full (regex, text, text_len, pos, G_REGEX_MATCH_NOTEMPTY, &match_info, NULL)) {
+					m = g_match_info_fetch (match_info, 0);
+					g_match_info_fetch_pos (match_info, 0, &start, &end);
+					matches = g_slist_prepend (matches, m);
+					pos = end;
+				} else {
+					pos++;
+				}
+			} else {
+				matches = g_slist_prepend (matches, m);
+				pos = end;
+			}
+			g_match_info_free (match_info);
+		} else {
+			g_match_info_free (match_info);
+			break;
+		}
+	}
+
+	if (matches) {
+		int n = g_slist_length (matches);
+		int i = n;
+		GSList *l;
+		res = value_new_array_non_init (1, n);
+		// matches is currently in reverse order
+		for (l = matches; l; l = l->next)
+			res->v_array.vals[0][--i] = value_new_string_nocopy (l->data);
+		g_slist_free (matches);
+	}
+	return res;
+}
+
+static GnmValue *
+gnumeric_regexextract_mode_2 (GRegex *regex, char const *text)
+{
+	GMatchInfo *match_info = NULL;
+	GnmValue *res = NULL;
+
+	if (g_regex_match (regex, text, 0, &match_info)) {
+		int n_groups = g_regex_get_capture_count (regex);
+		if (n_groups > 0) {
+			int i;
+			res = value_new_array_non_init (n_groups, 1);
+			for (i = 1; i <= n_groups; i++) {
+				char *group = g_match_info_fetch (match_info, i);
+				res->v_array.vals[i - 1][0] = group
+					? value_new_string_nocopy (group)
+					: value_new_empty ();
+			}
+		}
+	}
+	g_match_info_free (match_info);
+	return res;
+}
+
+static GnmValue *
+gnumeric_regexextract (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	char const *pattern = value_peek_string (argv[1]);
+	int return_mode = argv[2] ? value_get_as_int (argv[2]) : 0;
+	gboolean case_insensitive = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
+	GRegex *regex;
+	GError *err = NULL;
+	GnmValue *res = NULL;
+	GRegexCompileFlags cflags = G_REGEX_OPTIMIZE;
+
+	if (case_insensitive)
+		cflags |= G_REGEX_CASELESS;
+
+	regex = g_regex_new (pattern, cflags, 0, &err);
+	if (!regex) {
+		g_error_free (err);
+		return value_new_error_VALUE (ei->pos);
+	}
+
+	if (return_mode == 0) {
+		GMatchInfo *match_info;
+		if (g_regex_match (regex, text, 0, &match_info)) {
+			res = value_new_string_nocopy (g_match_info_fetch (match_info, 0));
+		}
+		g_match_info_free (match_info);
+	} else if (return_mode == 1) {
+		res = gnumeric_regexextract_mode_1 (regex, text);
+	} else if (return_mode == 2) {
+		res = gnumeric_regexextract_mode_2 (regex, text);
+	}
+
+	g_regex_unref (regex);
+	return res ? res : value_new_error_NA (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_regexreplace[] = {
+	{ GNM_FUNC_HELP_NAME, F_("REGEXREPLACE:replace text matching a regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("pattern:regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("replacement:new text")},
+	{ GNM_FUNC_HELP_ARG, F_("occurrence:0 for all instances (default), n for the n-th instance")},
+	{ GNM_FUNC_HELP_ARG, F_("case_insensitive:if TRUE, perform a case-insensitive match; defaults to FALSE")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("REGEXREPLACE replaces occurrences of @{pattern} in @{text} with @{replacement}.\n"
+					"The @{replacement} string can include backreferences like \\1, \\2 or $1, $2.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=REGEXREPLACE(\"ID: 12345\", \"[0-9]+\", \"*****\")" },
+	{ GNM_FUNC_HELP_SEEALSO, "REGEXTEST,REGEXEXTRACT,SUBSTITUTE,REPLACE"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static char *
+translate_replacement (char const *replacement)
+{
+	GString *s = g_string_new (NULL);
+	char const *p = replacement;
+
+	while (*p) {
+		if (*p == '$' && g_ascii_isdigit (p[1])) {
+			g_string_append_c (s, '\\');
+			p++;
+		} else if (*p == '\\' && g_ascii_isdigit (p[1])) {
+			/* Already GLib style, keep it */
+			g_string_append_c (s, '\\');
+			p++;
+		} else {
+			g_string_append_c (s, *p);
+			p++;
+		}
+	}
+	return g_string_free (s, FALSE);
+}
+
+static GnmValue *
+gnumeric_regexreplace (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	char const *pattern = value_peek_string (argv[1]);
+	char const *replacement_raw = value_peek_string (argv[2]);
+	char *replacement = translate_replacement (replacement_raw);
+	int occurrence = argv[3] ? value_get_as_int (argv[3]) : 0;
+	gboolean case_insensitive = argv[4] ? value_get_as_checked_bool (argv[4]) : FALSE;
+	GRegex *regex;
+	GError *err = NULL;
+	char *res_str = NULL;
+	GRegexCompileFlags cflags = G_REGEX_OPTIMIZE;
+
+	if (case_insensitive)
+		cflags |= G_REGEX_CASELESS;
+
+	regex = g_regex_new (pattern, cflags, 0, &err);
+	if (!regex) {
+		g_error_free (err);
+		g_free (replacement);
+		return value_new_error_VALUE (ei->pos);
+	}
+
+	if (occurrence == 0) {
+		/* Global replace */
+		res_str = g_regex_replace (regex, text, -1, 0, replacement, 0, &err);
+		if (err) {
+			g_error_free (err);
+			g_regex_unref (regex);
+			g_free (replacement);
+			return value_new_error_VALUE (ei->pos);
+		}
+	} else {
+		/* Replace specific occurrence (positive or negative) */
+		GMatchInfo *match_info;
+		GPtrArray *matches = g_ptr_array_new_with_free_func (NULL);
+		g_regex_match (regex, text, 0, &match_info);
+		while (g_match_info_matches (match_info)) {
+			int start, end;
+			g_match_info_fetch_pos (match_info, 0, &start, &end);
+			g_ptr_array_add (matches, GINT_TO_POINTER (start));
+			g_ptr_array_add (matches, GINT_TO_POINTER (end));
+			g_match_info_next (match_info, NULL);
+		}
+		int n = matches->len / 2;
+		int target = -1;
+		if (occurrence > 0 && occurrence <= n) target = occurrence - 1;
+		else if (occurrence < 0 && -occurrence <= n) target = n + occurrence;
+
+		if (target != -1) {
+			int start = GPOINTER_TO_INT (g_ptr_array_index (matches, target * 2));
+			int end = GPOINTER_TO_INT (g_ptr_array_index (matches, target * 2 + 1));
+
+			GString *s = g_string_new_len (text, start);
+			/* Replacement for this instance only */
+			char *rep = g_regex_replace (regex, text + start, end - start, 0, replacement, 0, NULL);
+			g_string_append (s, rep);
+			g_string_append (s, text + end);
+			res_str = g_string_free (s, FALSE);
+			g_free (rep);
+		} else {
+			res_str = g_strdup (text);
+		}
+		g_ptr_array_free (matches, TRUE);
+		g_match_info_free (match_info);
+	}
+
+	g_regex_unref (regex);
+	g_free (replacement);
+	return value_new_string_nocopy (res_str);
+}
+/***************************************************************************/
+
+static GnmFuncHelp const help_regextest[] = {
+	{ GNM_FUNC_HELP_NAME, F_("REGEXTEST:test if @{text} matches a regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("pattern:regular expression")},
+	{ GNM_FUNC_HELP_ARG, F_("case_insensitive:if TRUE, perform a case-insensitive match; defaults to FALSE")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("REGEXTEST checks if @{text} matches the regular expression @{pattern}.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=REGEXTEST(\"Gnumeric123\", \"^[A-Za-z]+[0-9]+$\")" },
+	{ GNM_FUNC_HELP_SEEALSO, "SEARCH,SUBSTITUTE"},
+	{ GNM_FUNC_HELP_END }
+};
+
+static GnmValue *
+gnumeric_regextest (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	char const *pattern = value_peek_string (argv[1]);
+	gboolean case_insensitive = argv[2] ? value_get_as_checked_bool (argv[2]) : FALSE;
+	GRegex *regex;
+	GError *err = NULL;
+	gboolean res;
+	GRegexCompileFlags cflags = G_REGEX_OPTIMIZE;
+
+	if (case_insensitive)
+		cflags |= G_REGEX_CASELESS;
+
+	regex = g_regex_new (pattern, cflags, 0, &err);
+	if (!regex) {
+		g_error_free (err);
+		return value_new_error_VALUE (ei->pos);
+	}
+
+	res = g_regex_match (regex, text, 0, NULL);
+	g_regex_unref (regex);
+
+	return value_new_bool (res);
+}
+
+/***************************************************************************/
+
 static GnmFuncHelp const help_replace[] = {
         { GNM_FUNC_HELP_NAME, F_("REPLACE:string @{old} with @{num} characters "
 				 "starting at @{start} replaced by @{new}")},
@@ -969,17 +1308,17 @@ gnumeric_replace (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float start = value_get_as_float (argv[1]);
 	gnm_float num = value_get_as_float (argv[2]);
 	char const *new = value_peek_string (argv[3]);
-	size_t istart, inum, oldlen, precutlen, postcutlen, newlen;
+	size_t istart, inum, oldlen, result_len;
 	char const *p, *q;
-	char *res;
+	GString *res;
 
 	if (start < 1 || num < 0)
 		return value_new_error_VALUE (ei->pos);
 
 	oldlen = g_utf8_strlen (old, -1);
 	/* Make istart zero-based.  */
-	istart = (int)MIN ((gnm_float)oldlen, start - 1);
-	inum = (int)MIN((gnm_float)(oldlen - istart), num);
+	istart = (size_t)MIN ((gnm_float)oldlen, start - 1);
+	inum = (size_t)MIN ((gnm_float)(oldlen - istart), num);
 
 	/* |<----precut----><cut><---postcut--->| */
 	/*  ^old            ^p   ^q               */
@@ -987,15 +1326,15 @@ gnumeric_replace (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	p = g_utf8_offset_to_pointer (old, istart);
 	q = g_utf8_offset_to_pointer (p, inum);
 
-	precutlen = p - old;
-	postcutlen = strlen (q);
-	newlen = strlen (new);
+	/* Exact length: precut + replacement + postcut */
+	result_len = (p - old) + strlen (new) + strlen (q);
+	res = g_string_sized_new (result_len);
 
-	res = g_malloc (precutlen + newlen + postcutlen + 1);
-	memcpy (res, old, precutlen);
-	memcpy (res + precutlen, new, newlen);
-	memcpy (res + precutlen + newlen, q, postcutlen + 1);
-	return value_new_string_nocopy (res);
+	g_string_append_len (res, old, p - old);
+	g_string_append (res, new);
+	g_string_append (res, q);
+
+	return value_new_string_nocopy (g_string_free (res, FALSE));
 }
 
 /***************************************************************************/
@@ -1030,26 +1369,34 @@ gnumeric_replaceb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	gnm_float pos = value_get_as_float (argv[1]);
 	gnm_float len = value_get_as_float (argv[2]);
 	char const *new = value_peek_string (argv[3]);
- 	int slen = strlen (old);
-	int ipos, ilen, newlen;
-	char *res;
+	size_t slen = strlen (old);
+	size_t ipos, ilen, result_len;
+	GString *res;
 
-	if ((len < 0) || (pos < 1))
+	if (len < 0 || pos < 1)
 		return value_new_error_VALUE (ei->pos);
-	ipos = (int)MIN ((gnm_float)INT_MAX / 2, pos) - 1;
-	ilen = (int)MIN ((gnm_float)INT_MAX / 2, len);
-	if ((ipos > slen) ||
-	    (ipos + ilen > slen) ||
-	    ((gunichar)-1 == g_utf8_get_char_validated (old + ipos, -1)) ||
+
+	/* Excel-compatible clamping */
+	ipos = (size_t)MIN ((gnm_float)slen, pos - 1);
+	ilen = (size_t)MIN ((gnm_float)(slen - ipos), len);
+
+	/* |<----precut----><cut><---postcut--->| */
+	/*  ^old            ^pos ^pos+len         */
+
+	if (((gunichar)-1 == g_utf8_get_char_validated (old + ipos, -1)) ||
 	    ((gunichar)-1 == g_utf8_get_char_validated (old + ipos + ilen, -1)) ||
 	    !g_utf8_validate (old + ipos, ilen, NULL))
 		return value_new_error_VALUE (ei->pos);
-	newlen = strlen (new);
-	res = g_malloc (slen - ilen + newlen + 1);
-	memcpy (res, old, ipos);
-	memcpy (res + ipos, new, newlen);
-	memcpy (res + ipos + newlen, old + ipos + ilen, slen - ipos - ilen + 1);
-	return value_new_string_nocopy (res);
+
+	/* Exact length: slen - removed + new */
+	result_len = slen - ilen + strlen (new);
+	res = g_string_sized_new (result_len);
+
+	g_string_append_len (res, old, ipos);
+	g_string_append (res, new);
+	g_string_append (res, old + ipos + ilen);
+
+	return value_new_string_nocopy (g_string_free (res, FALSE));
 }
 
 /***************************************************************************/
@@ -1144,31 +1491,25 @@ static GnmFuncHelp const help_trim[] = {
 static GnmValue *
 gnumeric_trim (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	char const *s;
+	char const *s = value_peek_string (argv[0]);
 	GString  *res   = g_string_new (NULL);
 	gboolean  space = TRUE;
 	size_t    last_len = 0;
 
-	s = value_peek_string (argv[0]);
 	while (*s) {
-		gunichar uc = g_utf8_get_char (s);
-
-		/*
-		 * FIXME: This takes care of tabs and the likes too
-		 * is that the desired behaviour?
-		 */
-		if (g_unichar_isspace (uc)) {
+		if (*s == ' ') {
 			if (!space) {
 				last_len = res->len;
-				g_string_append_unichar (res, uc);
+				g_string_append_c (res, ' ');
 				space = TRUE;
 			}
+			s++;
 		} else {
+			gunichar uc = g_utf8_get_char (s);
 			g_string_append_unichar (res, uc);
 			space = FALSE;
+			s = g_utf8_next_char (s);
 		}
-
-		s = g_utf8_next_char (s);
 	}
 
 	if (space)
@@ -1216,10 +1557,12 @@ static GnmFuncHelp const help_numbervalue[] = {
         { GNM_FUNC_HELP_NAME, F_("NUMBERVALUE:numeric value of @{text}")},
         { GNM_FUNC_HELP_ARG, F_("text:string")},
         { GNM_FUNC_HELP_ARG, F_("separator:decimal separator")},
+        { GNM_FUNC_HELP_ARG, F_("group_separator:group separator")},
 	{ GNM_FUNC_HELP_NOTE, F_("If @{text} does not look like a decimal number, "
 				 "NUMBERVALUE returns the value VALUE would "
 				 "return (ignoring the given @{separator}).")},
- 	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
+	{ GNM_FUNC_HELP_EXCEL, F_("This function is Excel compatible.") },
+	{ GNM_FUNC_HELP_ODF, F_("This function is OpenFormula compatible.") },
         { GNM_FUNC_HELP_EXAMPLES, "=NUMBERVALUE(\"$1,000\",\",\")" },
         { GNM_FUNC_HELP_SEEALSO, "VALUE"},
         { GNM_FUNC_HELP_END}
@@ -1228,45 +1571,58 @@ static GnmFuncHelp const help_numbervalue[] = {
 static GnmValue *
 gnumeric_numbervalue (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
-	char const *sep = value_peek_string (argv[1]);
-	if (strlen(sep) != 1 || (*sep != '.' && *sep != ',')) {
+	GnmValue const *arg = argv[0];
+	char const *sep = argv[1] ? value_peek_string (argv[1]) : NULL;
+	char const *grp = argv[2] ? value_peek_string (argv[2]) : NULL;
+
+	if (sep == NULL)
+		sep = go_locale_get_decimal ()->str;
+	else if (g_utf8_strlen (sep, -1) != 1)
 		return value_new_error_VALUE (ei->pos);
-	}
 
-	if (VALUE_IS_EMPTY (argv[0]) || VALUE_IS_NUMBER (argv[0]))
-		return value_dup (argv[0]);
-	else {
-		GnmValue *v;
-		char const *p = value_peek_string (argv[0]);
-		GString *curr;
-		GString *thousand;
-		GString *decimal;
-		GOFormatFamily family = GO_FORMAT_GENERAL;
-
-		decimal = g_string_new (sep);
-		thousand = g_string_new ((*sep == '.') ? ",":".");
-		curr = g_string_new ("$");
-
-		/* Skip leading spaces */
-		while (*p && g_unichar_isspace (g_utf8_get_char (p)))
-		       p = g_utf8_next_char (p);
-
-		v = format_match_decimal_number_with_locale
-			(p, &family, curr, thousand, decimal);
-
-		g_string_free (decimal, TRUE);
-		g_string_free (thousand, TRUE);
-		g_string_free (curr, TRUE);
-
-		if (v == NULL)
-			v = format_match_number
-				(p, NULL,
-				 sheet_date_conv (ei->pos->sheet));
-
-		if (v != NULL)
-			return v;
+	if (grp == NULL)
+		grp = go_locale_get_thousand ()->str;
+	else if (g_utf8_strlen (grp, -1) != 1)
 		return value_new_error_VALUE (ei->pos);
-	}
+
+	if (strcmp (sep, grp) == 0)
+		return value_new_error_VALUE (ei->pos);
+
+
+	if (VALUE_IS_EMPTY (arg) || VALUE_IS_NUMBER (arg))
+		return value_dup (arg);
+
+	GnmValue *v;
+	char const *p = value_peek_string (argv[0]);
+	GString *curr;
+	GString *thousand;
+	GString *decimal;
+	GOFormatFamily family = GO_FORMAT_GENERAL;
+
+	decimal = g_string_new (sep);
+	thousand = g_string_new (grp);
+	curr = g_string_new ("$");
+
+	/* Skip leading spaces */
+	while (*p && g_unichar_isspace (g_utf8_get_char (p)))
+		p = g_utf8_next_char (p);
+
+	v = format_match_decimal_number_with_locale
+		(p, &family, curr, thousand, decimal);
+
+	g_string_free (decimal, TRUE);
+	g_string_free (thousand, TRUE);
+	g_string_free (curr, TRUE);
+
+	if (v == NULL)
+		v = format_match_number
+			(p, NULL,
+			 sheet_date_conv (ei->pos->sheet));
+
+	if (v != NULL)
+		return v;
+
+	return value_new_error_VALUE (ei->pos);
 }
 
 /***************************************************************************/
@@ -1345,6 +1701,295 @@ gnumeric_substitute (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 /***************************************************************************/
 
+static GnmFuncHelp const help_textbefore[] = {
+	{ GNM_FUNC_HELP_NAME, F_("TEXTBEFORE:text before @{delimiter}")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("delimiter:delimiter string or array of strings")},
+	{ GNM_FUNC_HELP_ARG, F_("instance_num:the instance of the delimiter; defaults to 1")},
+	{ GNM_FUNC_HELP_ARG, F_("match_mode:0 for case-sensitive (default), 1 for case-insensitive")},
+	{ GNM_FUNC_HELP_ARG, F_("match_end:0 for no match at the end (default), 1 to match the end of the text")},
+	{ GNM_FUNC_HELP_ARG, F_("if_not_found:value to return if no match is found; defaults to #N/A")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("TEXTBEFORE returns the text that occurs before the given @{delimiter}.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=TEXTBEFORE(\"Red-Fish-Blue-Fish\", \"-\")" },
+	{ GNM_FUNC_HELP_EXAMPLES, "=TEXTBEFORE(\"Red-Fish-Blue-Fish\", \"-\", 2)" },
+	{ GNM_FUNC_HELP_SEEALSO, "TEXTAFTER,TEXTSPLIT,FIND,SEARCH"},
+	{ GNM_FUNC_HELP_END}
+};
+
+static GArray *
+find_delimiter_matches (GnmEvalPos const *pos, char const *text,
+			GnmValue const *col_delim_val,
+			GnmValue const *row_delim_val,
+			int match_mode)
+{
+	GSList *delims = NULL, *l;
+	char *folded_text = NULL;
+	GArray *matches;
+	int k;
+
+	if (match_mode == 1)
+		folded_text = g_utf8_casefold (text, -1);
+
+	matches = g_array_new (FALSE, FALSE, sizeof (Match));
+
+	for (k = 0; k < 2; k++) {
+		GnmValue const *v = (k == 0) ? col_delim_val : row_delim_val;
+		if (!v) continue;
+
+		delims = NULL;
+		value_area_foreach (v, pos, CELL_ITER_ALL, cb_collect_delims, &delims);
+
+		for (l = delims; l; l = l->next) {
+			char const *d = (char const *)l->data;
+			char *folded_d = (match_mode == 1) ? g_utf8_casefold (d, -1) : NULL;
+			char const *search_needle = folded_d ? folded_d : d;
+			char const *search_haystack = folded_text ? folded_text : text;
+			int d_len_bytes = strlen (d);
+			char const *p = search_haystack;
+			size_t search_needle_bytes = strlen (search_needle);
+
+			while ((p = strstr (p, search_needle))) {
+				Match m;
+				m.byte_offset = p - search_haystack;
+				m.byte_len = d_len_bytes;
+				m.is_row_delim = (k == 1);
+				g_array_append_val (matches, m);
+				p += search_needle_bytes;
+				if (search_needle_bytes == 0) break;
+			}
+			g_free (folded_d);
+		}
+		g_slist_free_full (delims, g_free);
+	}
+	g_free (folded_text);
+
+	if (matches->len == 0) {
+		g_array_free (matches, TRUE);
+		return NULL;
+	}
+
+	g_array_sort (matches, (GCompareFunc)compare_matches);
+
+	GArray *clean_matches = g_array_new (FALSE, FALSE, sizeof (Match));
+	size_t last_pos = 0;
+	guint i;
+	for (i = 0; i < matches->len; i++) {
+		Match *m = &g_array_index (matches, Match, i);
+		if (m->byte_offset >= last_pos) {
+			g_array_append_val (clean_matches, *m);
+			last_pos = m->byte_offset + m->byte_len;
+		}
+	}
+	g_array_free (matches, TRUE);
+
+	return clean_matches;
+}
+
+static GnmValue *
+gnumeric_textbefore (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	GnmValue const *delim_val = argv[1];
+	int instance_num = argv[2] ? value_get_as_int (argv[2]) : 1;
+	int match_mode = argv[3] ? value_get_as_int (argv[3]) : 0;
+	int match_end = argv[4] ? value_get_as_int (argv[4]) : 0;
+	GnmValue const *if_not_found = argv[5];
+	GArray *matches;
+
+	if (instance_num == 0)
+		return value_new_error_VALUE (ei->pos);
+
+	matches = find_delimiter_matches (ei->pos, text, delim_val, NULL, match_mode);
+
+	int n = matches ? matches->len : 0;
+	int target_idx = -1;
+	if (instance_num > 0) {
+		if (instance_num <= n) {
+			target_idx = instance_num - 1;
+		} else if (match_end == 1) {
+			if (matches) g_array_free (matches, TRUE);
+			return value_dup (argv[0]);
+		}
+	} else {
+		int abs_inst = -instance_num;
+		if (abs_inst <= n) {
+			target_idx = n - abs_inst;
+		} else if (match_end == 1) {
+			if (matches) g_array_free (matches, TRUE);
+			return value_new_string ("");
+		}
+	}
+
+	if (target_idx != -1) {
+		Match *m = &g_array_index (matches, Match, target_idx);
+		char *res = g_strndup (text, m->byte_offset);
+		g_array_free (matches, TRUE);
+		return value_new_string_nocopy (res);
+	}
+
+	if (matches) g_array_free (matches, TRUE);
+	if (if_not_found)
+		return value_dup (if_not_found);
+	return value_new_error_NA (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_textafter[] = {
+	{ GNM_FUNC_HELP_NAME, F_("TEXTAFTER:text after @{delimiter}")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("delimiter:delimiter string or array of strings")},
+	{ GNM_FUNC_HELP_ARG, F_("instance_num:the instance of the delimiter; defaults to 1")},
+	{ GNM_FUNC_HELP_ARG, F_("match_mode:0 for case-sensitive (default), 1 for case-insensitive")},
+	{ GNM_FUNC_HELP_ARG, F_("match_end:0 for no match at the end (default), 1 to match the end of the text")},
+	{ GNM_FUNC_HELP_ARG, F_("if_not_found:value to return if no match is found; defaults to #N/A")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("TEXTAFTER returns the text that occurs after the given @{delimiter}.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=TEXTAFTER(\"Red-Fish-Blue-Fish\", \"-\")" },
+	{ GNM_FUNC_HELP_EXAMPLES, "=TEXTAFTER(\"Red-Fish-Blue-Fish\", \"-\", -1)" },
+	{ GNM_FUNC_HELP_SEEALSO, "TEXTBEFORE,TEXTSPLIT,FIND,SEARCH"},
+	{ GNM_FUNC_HELP_END}
+};
+
+static GnmValue *
+gnumeric_textafter (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	GnmValue const *delim_val = argv[1];
+	int instance_num = argv[2] ? value_get_as_int (argv[2]) : 1;
+	int match_mode = argv[3] ? value_get_as_int (argv[3]) : 0;
+	int match_end = argv[4] ? value_get_as_int (argv[4]) : 0;
+	GnmValue const *if_not_found = argv[5];
+	GArray *matches;
+
+	if (instance_num == 0)
+		return value_new_error_VALUE (ei->pos);
+
+	matches = find_delimiter_matches (ei->pos, text, delim_val, NULL, match_mode);
+
+	int n = matches ? matches->len : 0;
+	int target_idx = -1;
+	if (instance_num > 0) {
+		if (instance_num <= n) {
+			target_idx = instance_num - 1;
+		} else if (match_end == 1) {
+			if (matches) g_array_free (matches, TRUE);
+			return value_new_string ("");
+		}
+	} else {
+		int abs_inst = -instance_num;
+		if (abs_inst <= n) {
+			target_idx = n - abs_inst;
+		} else if (match_end == 1) {
+			if (matches) g_array_free (matches, TRUE);
+			return value_dup (argv[0]);
+		}
+	}
+
+	if (target_idx != -1) {
+		Match *m = &g_array_index (matches, Match, target_idx);
+		char const *res_start = text + m->byte_offset + m->byte_len;
+		char *res = g_strdup (res_start);
+		g_array_free (matches, TRUE);
+		return value_new_string_nocopy (res);
+	}
+
+	if (matches) g_array_free (matches, TRUE);
+	if (if_not_found)
+		return value_dup (if_not_found);
+	return value_new_error_NA (ei->pos);
+}
+
+/***************************************************************************/
+
+static GnmFuncHelp const help_textsplit[] = {
+	{ GNM_FUNC_HELP_NAME, F_("TEXTSPLIT:split @{text} into an array using delimiters")},
+	{ GNM_FUNC_HELP_ARG, F_("text:string")},
+	{ GNM_FUNC_HELP_ARG, F_("col_delimiter:delimiter(s) for columns")},
+	{ GNM_FUNC_HELP_ARG, F_("row_delimiter:delimiter(s) for rows; optional")},
+	{ GNM_FUNC_HELP_ARG, F_("ignore_empty:TRUE to ignore empty cells in the result; defaults to FALSE")},
+	{ GNM_FUNC_HELP_ARG, F_("match_mode:0 for case-sensitive (default), 1 for case-insensitive")},
+	{ GNM_FUNC_HELP_ARG, F_("pad_with:value to pad the result array with; defaults to #N/A")},
+	{ GNM_FUNC_HELP_DESCRIPTION, F_("TEXTSPLIT splits @{text} into multiple cells using the provided column and row delimiters.")},
+	{ GNM_FUNC_HELP_EXAMPLES, "=TEXTSPLIT(\"A,B,C\", \",\")" },
+	{ GNM_FUNC_HELP_SEEALSO, "TEXTBEFORE,TEXTAFTER,CONCATENATE,TEXTJOIN"},
+	{ GNM_FUNC_HELP_END}
+};
+
+static GnmValue *
+gnumeric_textsplit (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
+{
+	char const *text = value_peek_string (argv[0]);
+	GnmValue const *col_delim_val = argv[1];
+	GnmValue const *row_delim_val = argv[2];
+	gboolean ignore_empty = argv[3] ? value_get_as_checked_bool (argv[3]) : FALSE;
+	int match_mode = argv[4] ? value_get_as_int (argv[4]) : 0;
+	GnmValue const *pad_with = argv[5];
+	GArray *matches;
+
+	matches = find_delimiter_matches (ei->pos, text, col_delim_val, row_delim_val, match_mode);
+
+	GPtrArray *all_rows = g_ptr_array_new_with_free_func ((GDestroyNotify)g_ptr_array_unref);
+	GPtrArray *current_row = g_ptr_array_new_with_free_func ((GDestroyNotify)value_release);
+	g_ptr_array_add (all_rows, current_row);
+
+	size_t last_pos = 0;
+	int i;
+	if (matches) {
+		for (i = 0; i < (int)matches->len; i++) {
+			Match *m = &g_array_index (matches, Match, i);
+			if (!ignore_empty || m->byte_offset > last_pos) {
+				char *part = g_strndup (text + last_pos, m->byte_offset - last_pos);
+				g_ptr_array_add (current_row, value_new_string_nocopy (part));
+			}
+
+			if (m->is_row_delim) {
+				if (!ignore_empty || current_row->len > 0) {
+					current_row = g_ptr_array_new_with_free_func ((GDestroyNotify)value_release);
+					g_ptr_array_add (all_rows, current_row);
+				}
+			}
+			last_pos = m->byte_offset + m->byte_len;
+		}
+		g_array_free (matches, TRUE);
+	}
+
+	if (!ignore_empty || last_pos < strlen (text)) {
+		char *part = g_strdup (text + last_pos);
+		g_ptr_array_add (current_row, value_new_string_nocopy (part));
+	}
+	if (ignore_empty && current_row->len == 0 && all_rows->len > 1)
+		g_ptr_array_remove_index (all_rows, all_rows->len - 1);
+
+	int max_cols = 0;
+	for (i = 0; i < (int)all_rows->len; i++) {
+		GPtrArray *r = g_ptr_array_index (all_rows, i);
+		if ((int)r->len > max_cols) max_cols = r->len;
+	}
+
+	if (all_rows->len == 0 || max_cols == 0) {
+		g_ptr_array_unref (all_rows);
+		return value_new_empty ();
+	}
+
+	GnmValue *res = value_new_array_non_init (max_cols, all_rows->len);
+	for (i = 0; i < (int)all_rows->len; i++) {
+		GPtrArray *r = g_ptr_array_index (all_rows, i);
+		int j;
+		for (j = 0; j < max_cols; j++) {
+			if (j < (int)r->len) {
+				res->v_array.vals[j][i] = value_dup (g_ptr_array_index (r, j));
+			} else {
+				res->v_array.vals[j][i] = pad_with ? value_dup (pad_with) : value_new_error_NA (ei->pos);
+			}
+		}
+	}
+
+	g_ptr_array_unref (all_rows);
+	return res;
+}
+
+/***************************************************************************/
+
 static GnmFuncHelp const help_dollar[] = {
         { GNM_FUNC_HELP_NAME, F_("DOLLAR:@{num} formatted as currency")},
         { GNM_FUNC_HELP_ARG, F_("num:number")},
@@ -1363,7 +2008,7 @@ gnumeric_dollar (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 	GnmValue *v;
 	char *s;
         gnm_float number = value_get_as_float (argv[0]);
-        gnm_float decimals = argv[1] ? value_get_as_float (argv[1]) : 2.0;
+        gnm_float decimals = argv[1] ? value_get_as_float (argv[1]) : 2;
 	gboolean precedes, space_sep;
 	const GString *curr = go_locale_get_currency (&precedes, &space_sep);
 	GString *fmt_str;
@@ -1446,7 +2091,7 @@ gnumeric_search (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	char const *needle = value_peek_string (argv[0]);
 	char const *haystack = value_peek_string (argv[1]);
-	gnm_float start = argv[2] ? value_get_as_float (argv[2]) : 1.0;
+	gnm_float start = argv[2] ? value_get_as_float (argv[2]) : 1;
 	int res;
 
 	if (start < 1 || start >= INT_MAX)
@@ -1493,34 +2138,24 @@ gnumeric_searchb (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 {
 	char const *needle = value_peek_string (argv[0]);
 	char const *haystack = value_peek_string (argv[1]);
-	gnm_float start = argv[2] ? value_get_as_float (argv[2]) : 1.0;
-	size_t istart;
+	gnm_float start = argv[2] ? value_get_as_float (argv[2]) : 1;
+	size_t istart, hlen;
 	GORegexp r;
 
-	if (start < 1 || start >= INT_MAX || start > strlen (haystack))
+	hlen = strlen (haystack);
+	if (start < 1 || start > hlen)
 		return value_new_error_VALUE (ei->pos);
-	/* Make istart zero-based.  */
-	istart = (int)(start - 1);
 
-	if (istart > 0)
-		istart = g_utf8_next_char(haystack + istart - 1) - haystack;
+	/* Make istart zero-based.  */
+	istart = (size_t)start - 1;
 
 	if (gnm_regcomp_XL (&r, needle, GO_REG_ICASE, FALSE, FALSE) == GO_REG_OK) {
 		GORegmatch rm;
-
-		switch (go_regexec (&r, haystack + istart, 1, &rm, 0)) {
-		case GO_REG_NOMATCH:
-			break;
-		case GO_REG_OK:
-			go_regfree (&r);
-			return value_new_int
-				(1 + istart + rm.rm_so);
-		default:
-			g_warning ("Unexpected go_regexec result");
-		}
+		int res = go_regexec (&r, haystack + istart, 1, &rm, 0);
 		go_regfree (&r);
-	} else {
-		g_warning ("Unexpected regcomp result");
+
+		if (res == GO_REG_OK)
+			return value_new_int (1 + istart + rm.rm_so);
 	}
 
 	return value_new_error_VALUE (ei->pos);
@@ -1544,99 +2179,218 @@ static GnmFuncHelp const help_asc[] = {
 static gunichar
 gnm_asc_half (gunichar c, GString *str)
 {
-	if (c < 0x2015)
-		return c;
-	if (c == 0x2015)
-		return (0xff70);
-	if (c == 0x2018)
-		return (0x0060);
-	if (c == 0x2019)
-		return (0x0027);
-	if (c == 0x201d)
-		return (0x0022);
-	if (c < 0x3001)
-		return c;
-	if (c == 0x3001)
-		return (0xff64);
-	if (c == 0x3002)
-		return (0xff61);
-	if (c == 0x300c)
-		return (0xff62);
-	if (c == 0x300d)
-		return (0xff63);
-	if (c == 0x309b)
-		return (0xff9e);
-	if (c == 0x309c)
-		return (0xff9f);
-	if (c < 0x30a1)
-		return c;
-	if (0x30a1 <= c && c <= 0x30aa)
-		return (c%2 == 0) ? ((c - 0x30a2)/2 + 0xff71)
-			: ((c - 0x30a1)/2 + 0xff67);
-	if (c <= 0x30c2) {
-		if (c%2 == 1)
-			return ((c - 0x30ab)/2 + 0xff76);
-		else {
-			g_string_append_unichar
-				(str, (c - 0x30ac)/2 + 0xff76);
-			return 0xff9e;
-		}
+	switch (c) {
+	/* Individual mappings & Punctuation */
+	case 0x2015:
+		return 0xff70; /* HORIZONTAL BAR -> HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK */
+	case 0x2018:
+		return 0x0060; /* LEFT SINGLE QUOTATION MARK -> GRAVE ACCENT */
+	case 0x2019:
+		return 0x0027; /* RIGHT SINGLE QUOTATION MARK -> APOSTROPHE */
+	case 0x201d:
+		return 0x0022; /* RIGHT DOUBLE QUOTATION MARK -> QUOTATION MARK */
+	case 0x3001:
+		return 0xff64; /* IDEOGRAPHIC COMMA -> HALFWIDTH IDEOGRAPHIC COMMA */
+	case 0x3002:
+		return 0xff61; /* IDEOGRAPHIC FULL STOP -> HALFWIDTH IDEOGRAPHIC FULL STOP */
+	case 0x300c:
+		return 0xff62; /* LEFT CORNER BRACKET -> HALFWIDTH LEFT CORNER BRACKET */
+	case 0x300d:
+		return 0xff63; /* RIGHT CORNER BRACKET -> HALFWIDTH RIGHT CORNER BRACKET */
+	case 0x309b:
+		return 0xff9e; /* KATAKANA-HIRAGANA VOICED SOUND MARK -> HALFWIDTH KATAKANA VOICED SOUND MARK */
+	case 0x309c:
+		return 0xff9f; /* KATAKANA-HIRAGANA SEMI-VOICED SOUND MARK -> HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK */
+	case 0x30fb:
+		return 0xff65; /* KATAKANA MIDDLE DOT -> HALFWIDTH KATAKANA MIDDLE DOT */
+	case 0x30fc:
+		return 0xff70; /* KATAKANA-HIRAGANA PROLONGED SOUND MARK -> HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK */
+	case 0xffe5:
+		return 0x005c; /* FULLWIDTH YEN SIGN -> REVERSE SOLIDUS */
+
+	/* Katakana (Base & Small) */
+	case 0x30a1:
+		return 0xff67; /* KATAKANA LETTER SMALL A */
+	case 0x30a2:
+		return 0xff71; /* KATAKANA LETTER A */
+	case 0x30a3:
+		return 0xff68; /* KATAKANA LETTER SMALL I */
+	case 0x30a4:
+		return 0xff72; /* KATAKANA LETTER I */
+	case 0x30a5:
+		return 0xff69; /* KATAKANA LETTER SMALL U */
+	case 0x30a6:
+		return 0xff73; /* KATAKANA LETTER U */
+	case 0x30a7:
+		return 0xff6a; /* KATAKANA LETTER SMALL E */
+	case 0x30a8:
+		return 0xff74; /* KATAKANA LETTER E */
+	case 0x30a9:
+		return 0xff6b; /* KATAKANA LETTER SMALL O */
+	case 0x30aa:
+		return 0xff75; /* KATAKANA LETTER O */
+
+	case 0x30ab:
+		return 0xff76; /* KATAKANA LETTER KA */
+	case 0x30ad:
+		return 0xff77; /* KATAKANA LETTER KI */
+	case 0x30af:
+		return 0xff78; /* KATAKANA LETTER KU */
+	case 0x30b1:
+		return 0xff79; /* KATAKANA LETTER KE */
+	case 0x30b3:
+		return 0xff7a; /* KATAKANA LETTER KO */
+	case 0x30b5:
+		return 0xff7b; /* KATAKANA LETTER SA */
+	case 0x30b7:
+		return 0xff7c; /* KATAKANA LETTER SI */
+	case 0x30b9:
+		return 0xff7d; /* KATAKANA LETTER SU */
+	case 0x30bb:
+		return 0xff7e; /* KATAKANA LETTER SE */
+	case 0x30bd:
+		return 0xff7f; /* KATAKANA LETTER SO */
+	case 0x30bf:
+		return 0xff80; /* KATAKANA LETTER TA */
+	case 0x30c1:
+		return 0xff81; /* KATAKANA LETTER TI */
+	case 0x30c3:
+		return 0xff6f; /* KATAKANA LETTER SMALL TU */
+	case 0x30c4:
+		return 0xff82; /* KATAKANA LETTER TU */
+	case 0x30c6:
+		return 0xff83; /* KATAKANA LETTER TE */
+	case 0x30c8:
+		return 0xff84; /* KATAKANA LETTER TO */
+
+	case 0x30ca:
+		return 0xff85; /* KATAKANA LETTER NA */
+	case 0x30cb:
+		return 0xff86; /* KATAKANA LETTER NI */
+	case 0x30cc:
+		return 0xff87; /* KATAKANA LETTER NU */
+	case 0x30cd:
+		return 0xff88; /* KATAKANA LETTER NE */
+	case 0x30ce:
+		return 0xff89; /* KATAKANA LETTER NO */
+
+	case 0x30cf:
+		return 0xff8a; /* KATAKANA LETTER HA */
+	case 0x30d2:
+		return 0xff8b; /* KATAKANA LETTER HI */
+	case 0x30d5:
+		return 0xff8c; /* KATAKANA LETTER HU */
+	case 0x30d8:
+		return 0xff8d; /* KATAKANA LETTER HE */
+	case 0x30db:
+		return 0xff8e; /* KATAKANA LETTER HO */
+
+	case 0x30de:
+		return 0xff8f; /* KATAKANA LETTER MA */
+	case 0x30df:
+		return 0xff90; /* KATAKANA LETTER MI */
+	case 0x30e0:
+		return 0xff91; /* KATAKANA LETTER MU */
+	case 0x30e1:
+		return 0xff92; /* KATAKANA LETTER ME */
+	case 0x30e2:
+		return 0xff93; /* KATAKANA LETTER MO */
+
+	case 0x30e3:
+		return 0xff6c; /* KATAKANA LETTER SMALL YA */
+	case 0x30e4:
+		return 0xff94; /* KATAKANA LETTER YA */
+	case 0x30e5:
+		return 0xff6d; /* KATAKANA LETTER SMALL YU */
+	case 0x30e6:
+		return 0xff95; /* KATAKANA LETTER YU */
+	case 0x30e7:
+		return 0xff6e; /* KATAKANA LETTER SMALL YO */
+	case 0x30e8:
+		return 0xff96; /* KATAKANA LETTER YO */
+
+	case 0x30e9:
+		return 0xff97; /* KATAKANA LETTER RA */
+	case 0x30ea:
+		return 0xff98; /* KATAKANA LETTER RI */
+	case 0x30eb:
+		return 0xff99; /* KATAKANA LETTER RU */
+	case 0x30ec:
+		return 0xff9a; /* KATAKANA LETTER RE */
+	case 0x30ed:
+		return 0xff9b; /* KATAKANA LETTER RO */
+	case 0x30ef:
+		return 0xff9c; /* KATAKANA LETTER WA */
+	case 0x30f2:
+		return 0xff66; /* KATAKANA LETTER WO */
+	case 0x30f3:
+		return 0xff9d; /* KATAKANA LETTER N */
+
+	/* Katakana with Voicing Marks (GA, GI, ...) */
+	case 0x30ac:
+		g_string_append_unichar (str, 0xff76); return 0xff9e; /* KATAKANA LETTER KA + Voicing Mark */
+	case 0x30ae:
+		g_string_append_unichar (str, 0xff77); return 0xff9e; /* KATAKANA LETTER KI + Voicing Mark */
+	case 0x30b0:
+		g_string_append_unichar (str, 0xff78); return 0xff9e; /* KATAKANA LETTER KU + Voicing Mark */
+	case 0x30b2:
+		g_string_append_unichar (str, 0xff79); return 0xff9e; /* KATAKANA LETTER KE + Voicing Mark */
+	case 0x30b4:
+		g_string_append_unichar (str, 0xff7a); return 0xff9e; /* KATAKANA LETTER KO + Voicing Mark */
+	case 0x30b6:
+		g_string_append_unichar (str, 0xff7b); return 0xff9e; /* KATAKANA LETTER SA + Voicing Mark */
+	case 0x30b8:
+		g_string_append_unichar (str, 0xff7c); return 0xff9e; /* KATAKANA LETTER SI + Voicing Mark */
+	case 0x30ba:
+		g_string_append_unichar (str, 0xff7d); return 0xff9e; /* KATAKANA LETTER SU + Voicing Mark */
+	case 0x30bc:
+		g_string_append_unichar (str, 0xff7e); return 0xff9e; /* KATAKANA LETTER SE + Voicing Mark */
+	case 0x30be:
+		g_string_append_unichar (str, 0xff7f); return 0xff9e; /* KATAKANA LETTER SO + Voicing Mark */
+	case 0x30c0:
+		g_string_append_unichar (str, 0xff80); return 0xff9e; /* KATAKANA LETTER TA + Voicing Mark */
+	case 0x30c2:
+		g_string_append_unichar (str, 0xff81); return 0xff9e; /* KATAKANA LETTER TI + Voicing Mark */
+	case 0x30c5:
+		g_string_append_unichar (str, 0xff82); return 0xff9e; /* KATAKANA LETTER TU + Voicing Mark */
+	case 0x30c7:
+		g_string_append_unichar (str, 0xff83); return 0xff9e; /* KATAKANA LETTER TE + Voicing Mark */
+	case 0x30c9:
+		g_string_append_unichar (str, 0xff84); return 0xff9e; /* KATAKANA LETTER TO + Voicing Mark */
+
+	case 0x30d0:
+		g_string_append_unichar (str, 0xff8a); return 0xff9e; /* KATAKANA LETTER HA + Voicing Mark */
+	case 0x30d3:
+		g_string_append_unichar (str, 0xff8b); return 0xff9e; /* KATAKANA LETTER HI + Voicing Mark */
+	case 0x30d6:
+		g_string_append_unichar (str, 0xff8c); return 0xff9e; /* KATAKANA LETTER HU + Voicing Mark */
+	case 0x30d9:
+		g_string_append_unichar (str, 0xff8d); return 0xff9e; /* KATAKANA LETTER HE + Voicing Mark */
+	case 0x30dc:
+		g_string_append_unichar (str, 0xff8e); return 0xff9e; /* KATAKANA LETTER HO + Voicing Mark */
+
+	/* Katakana with Semi-Voicing Marks (PA, PI, ...) */
+	case 0x30d1:
+		g_string_append_unichar (str, 0xff8a); return 0xff9f; /* KATAKANA LETTER HA + Semi-Voicing Mark */
+	case 0x30d4:
+		g_string_append_unichar (str, 0xff8b); return 0xff9f; /* KATAKANA LETTER HI + Semi-Voicing Mark */
+	case 0x30d7:
+		g_string_append_unichar (str, 0xff8c); return 0xff9f; /* KATAKANA LETTER HU + Semi-Voicing Mark */
+	case 0x30da:
+		g_string_append_unichar (str, 0xff8d); return 0xff9f; /* KATAKANA LETTER HE + Semi-Voicing Mark */
+	case 0x30dd:
+		g_string_append_unichar (str, 0xff8e); return 0xff9f; /* KATAKANA LETTER HO + Semi-Voicing Mark */
+
+	default:
+		/* Full-width ASCII range */
+		if (c >= 0xff01 && c <= 0xff5e)
+			return (c - 0xff01 + 0x0021);
+		break;
 	}
-	if (c == 0x30c3)
-		return (0xff6f);
-	if (c <= 0x30c9) {
-		if (c%2 == 0)
-			return ((c - 0x30c4)/2 + 0xff82);
-		else {
-			g_string_append_unichar
-				(str, (c - 0x30c5)/2 + 0xff82);
-			return 0xff9e;
-		}
-	}
-	if (c <= 0x30ce)
-		return (c - 0x30ca + 0xff85);
-	if (c <= 0x30dd)
-		switch (c%2) {
-		case 0:
-			return ((c - 0x30cf)/3 + 0xff8a);
-		case 1:
-			g_string_append_unichar
-				(str, (c - 0x30d0)/3 + 0xff8a);
-			return 0xff9e;
-		case 2:
-		default:
-			g_string_append_unichar
-				(str, (c - 0x30d1)/3 + 0xff8a);
-			return 0xff9f;
-		}
-	if (c <= 30e2)
-		return (c - 0x30de + 0xff8f);
-	if (c <= 0x30e8) {
-		if (c%2 == 0)
-			return ((c - 0x30e4)/2 + 0xff94);
-		else
-			return ((c - 0x30e3)/2 + 0xff6c);
-	}
-	if (c <= 0x30ed)
-		return (c - 0x30e9 + 0xff97);
-	if (c == 0x30ef)
-		return (0xff9c);
-	if (c == 0x30f2)
-		return (0xff66);
-	if (c == 0x30f3)
-		return (0xff9d);
-	if (c == 0x30fb)
-		return (0xff65);
-	if (c == 0x30fc)
-		return (0xff70);
-	if (c < 0xff01)
-		return c;
-	if (c <= 0xff5e)
-		return (c - 0xff01 + 0x0021);
-	if (c == 0xffe5)
-		return (0x005c);
+
 	return c;
 }
+
 
 static GnmValue *
 gnumeric_asc (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
@@ -1674,78 +2428,173 @@ static GnmFuncHelp const help_jis[] = {
 static gunichar
 gnm_asc_full (gunichar c, gunichar fc)
 {
-	if (c < 0x0021)
-		return c;
-	if (c == 0x0022)
-		return (0x201d);
-	if (c == 0x0027)
-		return (0x2019);
-	if (c == 0x005c)
-		return (0xffe5);
-	if (c == 0x0060)
-		return (0x2018);
-	if (c <= 0x007e)
-		return (c - 0x0021 + 0xff01);
-	if (c < 0xff61)
-		return c;
-	if (c == 0xff61)
-		return (0x3002);
-	if (c == 0xff62)
-		return (0x300c);
-	if (c == 0xff63)
-		return (0x300d);
-	if (c == 0xff64)
-		return (0x3001);
-	if (c == 0xff65)
-		return (0x30fb);
-	if (c == 0xff66)
-		return (0x30f2);
-	if (c <= 0xff6b)
-		return ((c - 0xff67)*2 + 0x30a1);
-	if (c <= 0xff6e)
-		return ((c - 0xff6c)*2 + 0x30e3);
-	if (c == 0xff6f)
-		return (0x30c3);
-	if (c == 0xff70)
-		return (0x30fc);
-	if (c <= 0xff75)
-		return ((c - 0xff71)*2 + 0x30a2);
-	if (c <= 0xff81) {
-		if (fc == 0xff9e)
-			return ((c - 0xff76)*2 + 0x30ac);
-		else
-			return ((c - 0xff76)*2 + 0x30ab);
+	switch (c) {
+	/* Individual mappings & Punctuation */
+	case 0x0022:
+		return 0x201d; /* QUOTATION MARK -> RIGHT DOUBLE QUOTATION MARK */
+	case 0x0027:
+		return 0x2019; /* APOSTROPHE -> RIGHT SINGLE QUOTATION MARK */
+	case 0x005c:
+		return 0xffe5; /* REVERSE SOLIDUS -> FULLWIDTH YEN SIGN */
+	case 0x0060:
+		return 0x2018; /* GRAVE ACCENT -> LEFT SINGLE QUOTATION MARK */
+
+	case 0xff61:
+		return 0x3002; /* HALFWIDTH IDEOGRAPHIC FULL STOP -> IDEOGRAPHIC FULL STOP */
+	case 0xff62:
+		return 0x300c; /* HALFWIDTH LEFT CORNER BRACKET -> LEFT CORNER BRACKET */
+	case 0xff63:
+		return 0x300d; /* HALFWIDTH RIGHT CORNER BRACKET -> RIGHT CORNER BRACKET */
+	case 0xff64:
+		return 0x3001; /* HALFWIDTH IDEOGRAPHIC COMMA -> IDEOGRAPHIC COMMA */
+	case 0xff65:
+		return 0x30fb; /* HALFWIDTH KATAKANA MIDDLE DOT -> KATAKANA MIDDLE DOT */
+	case 0xff66:
+		return 0x30f2; /* HALFWIDTH KATAKANA LETTER WO -> KATAKANA LETTER WO */
+
+	/* Half-width Katakana (Base & Small) */
+	case 0xff67:
+		return 0x30a1; /* HALFWIDTH KATAKANA LETTER SMALL A */
+	case 0xff68:
+		return 0x30a3; /* HALFWIDTH KATAKANA LETTER SMALL I */
+	case 0xff69:
+		return 0x30a5; /* HALFWIDTH KATAKANA LETTER SMALL U */
+	case 0xff6a:
+		return 0x30a7; /* HALFWIDTH KATAKANA LETTER SMALL E */
+	case 0xff6b:
+		return 0x30a9; /* HALFWIDTH KATAKANA LETTER SMALL O */
+	case 0xff6c:
+		return 0x30e3; /* HALFWIDTH KATAKANA LETTER SMALL YA */
+	case 0xff6d:
+		return 0x30e5; /* HALFWIDTH KATAKANA LETTER SMALL YU */
+	case 0xff6e:
+		return 0x30e7; /* HALFWIDTH KATAKANA LETTER SMALL YO */
+	case 0xff6f:
+		return 0x30c3; /* HALFWIDTH KATAKANA LETTER SMALL TU */
+	case 0xff70:
+		return 0x30fc; /* HALFWIDTH KATAKANA-HIRAGANA PROLONGED SOUND MARK */
+
+	case 0xff71:
+		return 0x30a2; /* HALFWIDTH KATAKANA LETTER A */
+	case 0xff72:
+		return 0x30a4; /* HALFWIDTH KATAKANA LETTER I */
+	case 0xff73:
+		return 0x30a6; /* HALFWIDTH KATAKANA LETTER U */
+	case 0xff74:
+		return 0x30a8; /* HALFWIDTH KATAKANA LETTER E */
+	case 0xff75:
+		return 0x30aa; /* HALFWIDTH KATAKANA LETTER O */
+
+	case 0xff76:
+		return (fc == 0xff9e) ? 0x30ac : 0x30ab; /* KA -> GA or KA */
+	case 0xff77:
+		return (fc == 0xff9e) ? 0x30ae : 0x30ad; /* KI -> GI or KI */
+	case 0xff78:
+		return (fc == 0xff9e) ? 0x30b0 : 0x30af; /* KU -> GU or KU */
+	case 0xff79:
+		return (fc == 0xff9e) ? 0x30b2 : 0x30b1; /* KE -> GE or KE */
+	case 0xff7a:
+		return (fc == 0xff9e) ? 0x30b4 : 0x30b3; /* KO -> GO or KO */
+
+	case 0xff7b:
+		return (fc == 0xff9e) ? 0x30b6 : 0x30b5; /* SA -> ZA or SA */
+	case 0xff7c:
+		return (fc == 0xff9e) ? 0x30b8 : 0x30b7; /* SI -> ZI or SI */
+	case 0xff7d:
+		return (fc == 0xff9e) ? 0x30ba : 0x30b9; /* SU -> ZU or SU */
+	case 0xff7e:
+		return (fc == 0xff9e) ? 0x30bc : 0x30bb; /* SE -> ZE or SE */
+	case 0xff7f:
+		return (fc == 0xff9e) ? 0x30be : 0x30bd; /* SO -> ZO or SO */
+
+	case 0xff80:
+		return (fc == 0xff9e) ? 0x30c0 : 0x30bf; /* TA -> DA or TA */
+	case 0xff81:
+		return (fc == 0xff9e) ? 0x30c2 : 0x30c1; /* TI -> DI or TI */
+	case 0xff82:
+		return (fc == 0xff9e) ? 0x30c5 : 0x30c4; /* TU -> DU or TU */
+	case 0xff83:
+		return (fc == 0xff9e) ? 0x30c7 : 0x30c6; /* TE -> DE or TE */
+	case 0xff84:
+		return (fc == 0xff9e) ? 0x30c9 : 0x30c8; /* TO -> DO or TO */
+
+	case 0xff85:
+		return 0x30ca; /* HALFWIDTH KATAKANA LETTER NA */
+	case 0xff86:
+		return 0x30cb; /* HALFWIDTH KATAKANA LETTER NI */
+	case 0xff87:
+		return 0x30cc; /* HALFWIDTH KATAKANA LETTER NU */
+	case 0xff88:
+		return 0x30cd; /* HALFWIDTH KATAKANA LETTER NE */
+	case 0xff89:
+		return 0x30ce; /* HALFWIDTH KATAKANA LETTER NO */
+
+	case 0xff8a:
+		if (fc == 0xff9e) return 0x30d0; /* HA -> BA */
+		if (fc == 0xff9f) return 0x30d1; /* HA -> PA */
+		return 0x30cf; /* HA */
+	case 0xff8b:
+		if (fc == 0xff9e) return 0x30d3; /* HI -> BI */
+		if (fc == 0xff9f) return 0x30d4; /* HI -> PI */
+		return 0x30d2; /* HI */
+	case 0xff8c:
+		if (fc == 0xff9e) return 0x30d6; /* HU -> BU */
+		if (fc == 0xff9f) return 0x30d7; /* HU -> PU */
+		return 0x30d5; /* HU */
+	case 0xff8d:
+		if (fc == 0xff9e) return 0x30d9; /* HE -> BE */
+		if (fc == 0xff9f) return 0x30da; /* HE -> PE */
+		return 0x30d8; /* HE */
+	case 0xff8e:
+		if (fc == 0xff9e) return 0x30dc; /* HO -> BO */
+		if (fc == 0xff9f) return 0x30dd; /* HO -> PO */
+		return 0x30db; /* HO */
+
+	case 0xff8f:
+		return 0x30de; /* HALFWIDTH KATAKANA LETTER MA */
+	case 0xff90:
+		return 0x30df; /* HALFWIDTH KATAKANA LETTER MI */
+	case 0xff91:
+		return 0x30e0; /* HALFWIDTH KATAKANA LETTER MU */
+	case 0xff92:
+		return 0x30e1; /* HALFWIDTH KATAKANA LETTER ME */
+	case 0xff93:
+		return 0x30e2; /* HALFWIDTH KATAKANA LETTER MO */
+
+	case 0xff94:
+		return 0x30e4; /* HALFWIDTH KATAKANA LETTER YA */
+	case 0xff95:
+		return 0x30e6; /* HALFWIDTH KATAKANA LETTER YU */
+	case 0xff96:
+		return 0x30e8; /* HALFWIDTH KATAKANA LETTER YO */
+
+	case 0xff97:
+		return 0x30e9; /* HALFWIDTH KATAKANA LETTER RA */
+	case 0xff98:
+		return 0x30ea; /* HALFWIDTH KATAKANA LETTER RI */
+	case 0xff99:
+		return 0x30eb; /* HALFWIDTH KATAKANA LETTER RU */
+	case 0xff9a:
+		return 0x30ec; /* HALFWIDTH KATAKANA LETTER RE */
+	case 0xff9b:
+		return 0x30ed; /* HALFWIDTH KATAKANA LETTER RO */
+
+	case 0xff9c:
+		return 0x30ef; /* HALFWIDTH KATAKANA LETTER WA */
+	case 0xff9d:
+		return 0x30f3; /* HALFWIDTH KATAKANA LETTER N */
+	case 0xff9e:
+		return 0x309b; /* HALFWIDTH KATAKANA VOICED SOUND MARK */
+	case 0xff9f:
+		return 0x309c; /* HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK */
+
+	default:
+		/* ASCII range: 0x0021-0x007e -> 0xff01-0xff5e */
+		if (c >= 0x0021 && c <= 0x007e)
+			return (c - 0x0021 + 0xff01);
+		break;
 	}
-	if (c <= 0xff84) {
-		if (fc == 0xff9e)
-			return ((c - 0xff82)*2 + 0x30c5);
-		else
-			return ((c - 0xff82)*2 + 0x30c4);
-	}
-	if (c <= 0xff89)
-		return ((c - 0xff85)*2 + 0x30ca);
-	if (c <= 0xff8e) {
-		if (fc == 0xff9e)
-			return ((c - 0xff8a)*3 + 0x30d0);
-		else if (fc == 0xff9f)
-			return ((c - 0xff8a)*3 + 0x30d1);
-		else
-			return ((c - 0xff8a)*3 + 0x30cf);
-	}
-	if (c <= 0xff93)
-		return (c - 0xff8f + 0x30de);
-	if (c <= 0xff96)
-		return ((c - 0xff94)*2 + 0x30e4);
-	if (c <= 0xff9b)
-		return (c - 0xff97 + 0x30e9);
-	if (c == 0xff9c)
-		return (0x30ef);
-	if (c == 0xff9d)
-		return (0x30f3);
-	if (c == 0xff9e)
-		return (0x309b);
-	if (c == 0xff9f)
-		return (0x309c);
+
 	return c;
 }
 
@@ -1767,7 +2616,9 @@ gnumeric_jis (GnmFuncEvalInfo *ei, GnmValue const * const *argv)
 
 	return value_new_string_nocopy (g_string_free (str, FALSE));
 }
+
 /***************************************************************************/
+
 GnmFuncDescriptor const string_functions[] = {
         { "asc",       "s",                       help_asc,
 	  gnumeric_asc, NULL,
@@ -1777,7 +2628,7 @@ GnmFuncDescriptor const string_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "unichar",    "f",                       help_unichar,
 	  gnumeric_unichar, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "clean",      "S",                         help_clean,
           gnumeric_clean, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
@@ -1786,7 +2637,7 @@ GnmFuncDescriptor const string_functions[] = {
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "unicode",    "S",                         help_unicode,
 	  gnumeric_unicode, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "concat", NULL,               help_concat,
 	  NULL, gnumeric_concat,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
@@ -1835,11 +2686,20 @@ GnmFuncDescriptor const string_functions[] = {
         { "midb",        "Sff",               help_midb,
 	  gnumeric_midb, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
-        { "numbervalue",      "SS",          help_numbervalue,
+        { "numbervalue",      "S|SS",          help_numbervalue,
 	  gnumeric_numbervalue, NULL,
-	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_UNIQUE_TO_GNUMERIC, GNM_FUNC_TEST_STATUS_BASIC },
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "proper",     "S",                         help_proper,
 	  gnumeric_proper, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+        { "regexreplace", "SSS|fb",     help_regexreplace,
+	  gnumeric_regexreplace, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+        { "regexextract", "SS|fb",      help_regexextract,
+	  gnumeric_regexextract, NULL,
+	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
+        { "regextest",  "SS|b",         help_regextest,
+	  gnumeric_regextest, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
         { "replace",    "SffS",         help_replace,
 	  gnumeric_replace, NULL,
@@ -1871,9 +2731,18 @@ GnmFuncDescriptor const string_functions[] = {
         { "text",       "Ss",           help_text,
 	  gnumeric_text, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },
-        { "textjoin", NULL, help_textjoin,
-	  NULL, gnumeric_textjoin,
+        { "textafter",   "SA|ffff",      help_textafter,
+	  gnumeric_textafter, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+        { "textbefore",  "SA|ffff",      help_textbefore,
+	  gnumeric_textbefore, NULL,
+	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+        { "textjoin", NULL, help_textjoin,
+          NULL, gnumeric_textjoin,
+          GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
+        { "textsplit",  "SA|A?f?",      help_textsplit,
+	  gnumeric_textsplit, NULL,
+	  GNM_FUNC_RETURNS_NON_SCALAR, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_NO_TESTSUITE },
         { "trim",       "S",                         help_trim,
 	  gnumeric_trim, NULL,
 	  GNM_FUNC_SIMPLE, GNM_FUNC_IMPL_STATUS_COMPLETE, GNM_FUNC_TEST_STATUS_BASIC },

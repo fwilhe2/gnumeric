@@ -1,6 +1,5 @@
-
 /*
- * value-sheet.c:  Utilies for sheet specific value handling
+ * value-sheet.c:  Utilities for sheet specific value handling
  *
  * Author:
  *   Miguel de Icaza (miguel@gnu.org).
@@ -49,7 +48,7 @@ value_dump (GnmValue const *value)
 		g_print ("Array: { ");
 		for (y = 0; y < value->v_array.y; y++)
 			for (x = 0; x < value->v_array.x; x++)
-				value_dump (value->v_array.vals [x][y]);
+				value_dump (value->v_array.vals[x][y]);
 		g_print ("}\n");
 		break;
 	}
@@ -67,16 +66,16 @@ value_dump (GnmValue const *value)
 		else if (sheet)
 			g_print ("%p :", (void *)sheet);
 		g_print ("%s%s%s%s\n",
-			(c->col_relative ? "":"$"), col_name(c->col),
-			(c->row_relative ? "":"$"), row_name(c->row));
+			(c->col_relative ? "":"$"), col_name (c->col),
+			(c->row_relative ? "":"$"), row_name (c->row));
 		c = &value->v_range.cell.b;
 		if (sheet && sheet->name_quoted)
 			g_print ("%s:", sheet->name_unquoted);
 		else if (sheet)
 			g_print ("%p :", (void *)sheet);
 		g_print ("%s%s%s%s\n",
-			(c->col_relative ? "":"$"), col_name(c->col),
-			(c->row_relative ? "":"$"), row_name(c->row));
+			(c->col_relative ? "":"$"), col_name (c->col),
+			(c->row_relative ? "":"$"), row_name (c->row));
 		break;
 	}
 	default:
@@ -128,7 +127,7 @@ value_area_get_height (GnmValue const *v, GnmEvalPos const *ep)
  * An internal routine to get a cell from an array or range.
  * Ensures that elements of CELLRANGE are evaluated
  *
- * Returns the element if it exists and is non-empty otherwise returns 0
+ * Returns: (nullable): the element if it exists and is non-empty.
  **/
 GnmValue const *
 value_area_fetch_x_y (GnmValue const *v, int x, int y, GnmEvalPos const *ep)
@@ -150,7 +149,7 @@ value_area_fetch_x_y (GnmValue const *v, int x, int y, GnmEvalPos const *ep)
  * An internal routine to get a cell from an array or range.
  * Ensures that elements of CELLRANGE are evaluated
  *
- * If any problems occur a NULL is returned.
+ * If any problems occur a %NULL is returned.
  **/
 GnmValue const *
 value_area_get_x_y (GnmValue const *v, int x, int y, GnmEvalPos const *ep)
@@ -161,7 +160,7 @@ value_area_get_x_y (GnmValue const *v, int x, int y, GnmEvalPos const *ep)
 		g_return_val_if_fail (x < v->v_array.x &&
 				      y < v->v_array.y,
 				      NULL);
-		return v->v_array.vals [x][y];
+		return v->v_array.vals[x][y];
 	} else if (VALUE_IS_CELLRANGE (v)) {
 		GnmRange r;
 		Sheet *start_sheet, *end_sheet;
@@ -184,14 +183,61 @@ value_area_get_x_y (GnmValue const *v, int x, int y, GnmEvalPos const *ep)
 
 		cell = sheet_cell_get (start_sheet, x, y);
 		if (cell != NULL) {
-			gnm_cell_eval (cell);
-			return cell->value;
+			return gnm_cell_eval (cell);
 		}
 
 		return value_new_empty ();
 	} else
 		return v;
 }
+
+GnmValue *
+value_area_slice (GnmValue const *v,
+		  int x0, int y0, int x1, int y1,
+		  GnmEvalPos const *ep)
+{
+	g_return_val_if_fail (0 <= x0 && 0 <= y0, NULL);
+	g_return_val_if_fail (x0 <= x1 && y0 <= y1, NULL);
+
+	if (VALUE_IS_ARRAY (v)) {
+		g_return_val_if_fail (x1 < v->v_array.x && y1 < v->v_array.y, NULL);
+
+		int r_width = x1 - x0 + 1;
+		int r_height = y1 - y0 + 1;
+
+		GnmValue *res = value_new_array_non_init (r_width, r_height);
+		for (int y = 0; y < r_height; y++) {
+			for (int x = 0; x < r_width; x++) {
+				GnmValue const *v0 =  v->v_array.vals[x0 + x][y0 + y];
+				res->v_array.vals[x][y] = value_dup (v0);
+			}
+		}
+		return res;
+	} else if (VALUE_IS_CELLRANGE (v)) {
+		GnmRangeRef const *src = &v->v_range.cell;
+		GnmCellRef a = src->a, b = src->b;
+		Sheet *start_sheet, *end_sheet;
+		GnmRange r;
+
+		gnm_rangeref_normalize (src, ep, &start_sheet, &end_sheet, &r);
+		int w = range_width (&r), h = range_height (&r);
+		g_return_val_if_fail (x1 < w && y1 < h, NULL);
+
+		a.col += x0;
+		a.row += y0;
+		b.col -= w - 1 - x1;
+		b.row -= h - 1 - y1;
+
+		return value_new_cellrange_unsafe (&a, &b);
+	} else {
+		g_warning ("This should not happen");
+	}
+
+	return NULL;
+}
+
+
+
 
 typedef struct {
 	GnmValueIter	 v_iter;
@@ -204,8 +250,7 @@ static GnmValue *
 cb_wrapper_foreach_cell_in_area (GnmCellIter const *iter, WrapperClosure *wrap)
 {
 	if (iter->cell != NULL) {
-		gnm_cell_eval (iter->cell);
-		wrap->v_iter.v = iter->cell->value;
+		wrap->v_iter.v = gnm_cell_eval (iter->cell);
 	} else
 		wrap->v_iter.v = NULL;
 	wrap->v_iter.x		= iter->pp.eval.col - wrap->base_col;
@@ -222,11 +267,11 @@ cb_wrapper_foreach_cell_in_area (GnmCellIter const *iter, WrapperClosure *wrap)
  * @func: (scope call): #GnmValueIterFunc
  * @user_data:
  *
- * For each existing element in an array or range , invoke the
+ * For each existing element in an array or range, invoke the
  * callback routine.
  *
  * Returns:
- *    non-%NULL on error, or VALUE_TERMINATE if some the handler requested
+ *    non-%NULL on error, or VALUE_TERMINATE if the handler requested
  *    to stop (by returning non-%NULL).
  **/
 GnmValue *
@@ -270,7 +315,7 @@ value_area_foreach (GnmValue const *v, GnmEvalPos const *ep,
 
 	for (v_iter.x = v->v_array.x; v_iter.x-- > 0;)
 		for (v_iter.y = v->v_array.y; v_iter.y-- > 0;) {
-			v_iter.v = v->v_array.vals [v_iter.x][v_iter.y];
+			v_iter.v = v->v_array.vals[v_iter.x][v_iter.y];
 			if ((tmp = (*func)(&v_iter, user_data)) != NULL)
 				return tmp;
 		}

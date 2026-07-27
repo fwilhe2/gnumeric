@@ -1,5 +1,5 @@
-#ifndef _GNM_GUI_UTIL_H_
-# define _GNM_GUI_UTIL_H_
+#ifndef GNM_GUI_UTIL_H_
+#define GNM_GUI_UTIL_H_
 
 #include <gnumeric-fwd.h>
 #include <goffice/goffice.h>
@@ -12,16 +12,16 @@ G_BEGIN_DECLS
 
 GtkWidget* gnm_go_error_info_dialog_create (GOErrorInfo *error);
 void       gnm_go_error_info_dialog_show (GtkWindow *parent,
-					       GOErrorInfo *error);
+					  GOErrorInfo *error);
 void       gnm_go_error_info_list_dialog_show (GtkWindow *parent,
-						    GSList *errs);
+					       GSList *errors);
 void       gnm_restore_window_geometry (GtkWindow *dialog,
 					     const char *key);
 void       gnm_keyed_dialog (WBCGtk *wbcg,
-				  GtkWindow *dialog,
-				  char const *key);
+			     GtkWindow *dialog,
+			     char const *key);
 gpointer   gnm_dialog_raise_if_exists (WBCGtk *wbcg,
-					    char const *key);
+				       char const *key);
 void       gnm_editable_enters	(GtkWindow *window, GtkWidget *editable);
 
 /* Utility routine as Gtk does not have any decent routine to do this */
@@ -36,10 +36,10 @@ void gnumeric_popup_menu (GtkMenu *menu, GdkEvent *event);
  * Pseudo-tooltip support code.
  */
 void        gnm_position_tooltip (GtkWidget *tip, int px, int py,
-				       gboolean horizontal);
+				  gboolean horizontal);
 GtkWidget  *gnm_create_tooltip (GtkWidget *ref_widget);
 GtkWidget  *gnm_convert_to_tooltip (GtkWidget *ref_widget,
-					 GtkWidget *widget);
+				    GtkWidget *widget);
 
 GtkBuilder *gnm_gtk_builder_load (char const *uifile, char const *domain,
 				 GOCmdContext *cc);
@@ -100,7 +100,7 @@ void	 int_to_entry	(GtkEntry *entry, gint the_int);
 void gnm_link_button_and_entry (GtkWidget *button, GtkWidget *entry);
 
 void gnm_widget_set_cursor_type (GtkWidget *w, GdkCursorType ct);
-void gnm_widget_set_cursor (GtkWidget *w, GdkCursor *ct);
+void gnm_widget_set_cursor (GtkWidget *w, GdkCursor *cursor);
 
 int gnm_widget_measure_string (GtkWidget *w, const char *s);
 
@@ -125,6 +125,7 @@ void gnm_dialog_setup_destroy_handlers (GtkDialog *dialog,
 					WBCGtk *wbcg,
 					GnmDialogDestroyOptions what);
 
+#define GNM_CANVAS_INF (G_MAXINT64 / 2 >> 10 << 10)
 void gnm_canvas_get_position (GocCanvas *canvas, int *x, int *y,
 			      gint64 px, gint64 py);
 void gnm_canvas_get_screen_position (GocCanvas *canvas,
@@ -198,4 +199,4 @@ void gnm_css_debug_int (const char *name, int i);
 
 G_END_DECLS
 
-#endif /* _GNM_GUI_UTIL_H_ */
+#endif /* GNM_GUI_UTIL_H_ */

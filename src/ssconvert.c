@@ -2,7 +2,7 @@
  * ssconvert.c: A wrapper application to convert spreadsheet formats
  *
  * Author:
- *   Jon Kåre Hellan <hellan@acm.org>
+ *   Jon KÃ¥re Hellan <hellan@acm.org>
  *   Morten Welinder <terra@gnome.org>
  *   Jody Goldberg <jody@gnome.org>
  *
@@ -35,6 +35,25 @@
 #include <gnumeric-conf.h>
 #include <gui-clipboard.h>
 #include <tools/analysis-tools.h>
+#include <tools/analysis-anova.h>
+#include <tools/analysis-auto-expression.h>
+#include <tools/analysis-chi-squared.h>
+#include <tools/analysis-exp-smoothing.h>
+#include <tools/analysis-frequency.h>
+#include <tools/analysis-ftest.h>
+#include <tools/analysis-histogram.h>
+#include <tools/analysis-kaplan-meier.h>
+#include <tools/analysis-normality.h>
+#include <tools/analysis-one-mean-test.h>
+#include <tools/analysis-principal-components.h>
+#include <tools/analysis-regression.h>
+#include <tools/analysis-sign-test.h>
+#include <tools/analysis-signed-rank-test.h>
+#include <tools/analysis-ttest.h>
+#include <tools/analysis-wilcoxon-mann-whitney.h>
+#include <tools/analysis-ztest.h>
+#include <tools/fill-series.h>
+#include <tools/filter.h>
 #include <dialogs/dialogs.h>
 #include <goffice/goffice.h>
 #include <gsf/gsf-utils.h>
@@ -74,7 +93,7 @@ static char **ssconvert_goal_seek = NULL;
 static char **ssconvert_tool_test = NULL;
 static const char *ssconvert_image_format = "auto";
 
-static const GOptionEntry ssconvert_options [] = {
+static const GOptionEntry ssconvert_options[] = {
 	{
 		"version", 0,
 		0, G_OPTION_ARG_NONE, &ssconvert_show_version,
@@ -548,7 +567,7 @@ merge_single_names (Workbook *wb, Workbook *wb2, GOCmdContext *cc)
 
 		/* Move name scope to workbook wb */
 		newpos.wb = wb;
-		expr_name_set_pos (nexpr, &newpos);
+		expr_name_set_pos (nexpr, &newpos, NULL);
 	}
 	g_slist_free (names);
 
@@ -592,7 +611,7 @@ merge_single (Workbook *wb, Workbook *wb2,
 			if (nexpr->pos.wb) {
 				GnmParsePos newpos = nexpr->pos;
 				newpos.wb = wb;
-				expr_name_set_pos (nexpr, &newpos);
+				expr_name_set_pos (nexpr, &newpos, NULL);
 			}
 			expr_name_unref (nexpr);
 		}
@@ -775,7 +794,7 @@ run_solver (Sheet *sheet, WorkbookView *wbv)
 
 	gnm_solver_store_result (sol);
 
-	gnm_solver_create_report (sol, "Solver");
+	gnm_solver_create_report (sol, wbc, "Solver");
 
  done:
 	if (sol)
@@ -786,23 +805,98 @@ run_solver (Sheet *sheet, WorkbookView *wbv)
 	}
 }
 
-#define GET_ARG(conv_,name_,def_) (g_hash_table_lookup_extended(args,(name_),NULL,&arg) ? conv_((const char *)arg) : (def_))
-#define RANGE_ARG(s_) value_new_cellrange_str(sheet,(s_))
-#define RANGE_LIST_ARG(s_) g_slist_prepend (NULL, value_new_cellrange_str(sheet,(s_)))
-#define SHEET_ARG(s_) workbook_sheet_by_name(wb,(s_))
+static gboolean
+parse_bool (const char *s)
+{
+	return (g_str_equal (s, "yes") ||
+		g_str_equal (s, "y") ||
+		g_str_equal (s, "true") ||
+		g_str_equal (s, "1"));
+}
 
-static void
+static gboolean
+parse_property_based_options (GnmAnalysisTool *atool, GHashTable *args)
+{
+	int n;
+	GParamSpec **specs;
+	GObjectClass *klass = G_OBJECT_GET_CLASS (atool);
+	gboolean err = FALSE;
+
+	specs = g_object_class_list_properties (klass, &n);
+	for (int i = 0; i < n; i++) {
+		GParamSpec *spec = specs[i];
+		gpointer arg_;
+		const char *arg;
+
+		if (!(spec->flags & G_PARAM_WRITABLE)) {
+			// Can't write it so...
+			continue;
+		}
+
+		if (!g_hash_table_lookup_extended (args, spec->name, NULL, &arg_)) {
+			// We don't have it.  Note that this implies
+			// that the property name in args must be
+			// canonical.  ("-" and not "_".)
+			continue;
+		}
+		arg = arg_;
+
+		if (spec->value_type == G_TYPE_STRING) {
+			g_object_set (atool, spec->name, arg, NULL);
+		} else if (spec->value_type == G_TYPE_DOUBLE) {
+			g_object_set (atool, spec->name, atof (arg), NULL);
+		} else if (spec->value_type == G_TYPE_INT) {
+			g_object_set (atool, spec->name, atoi (arg), NULL);
+		} else if (spec->value_type == G_TYPE_UINT) {
+			unsigned u = atoi (arg);
+			g_object_set (atool, spec->name, u, NULL);
+		} else if (spec->value_type == G_TYPE_BOOLEAN) {
+			g_object_set (atool, spec->name, parse_bool (arg), NULL);
+		} else if (G_TYPE_FUNDAMENTAL (spec->value_type) == G_TYPE_ENUM) {
+			GEnumClass *eclass = G_ENUM_CLASS (g_type_class_ref (spec->value_type));
+			GEnumValue *ev = g_enum_get_value_by_nick (eclass, arg);
+			int i;
+			g_type_class_unref (eclass);
+			if (ev)
+				i = ev->value;
+			else if (g_ascii_isdigit (*arg)) {
+				i = atoi (arg);
+			} else {
+				g_printerr ("Cannot parse \"%s\" as value for \"%s\"\n",
+					    arg, spec->name);
+				err = TRUE;
+				break;
+			}
+			g_object_set (atool, spec->name, i, NULL);
+		} else {
+			// A type we don't handle
+			continue;
+		}
+
+		g_hash_table_remove (args, spec->name);
+	}
+
+	g_free (specs);
+
+	return err;
+}
+
+#define GET_ARG(conv_,name_,def_) (g_hash_table_lookup_extended (args, (name_), NULL, &arg) ? conv_((const char *)arg) : (def_))
+#define RANGE_ARG(s_) value_new_cellrange_str (sheet, (s_))
+#define RANGE_LIST_ARG(s_) g_slist_prepend (NULL, value_new_cellrange_str (sheet, (s_)))
+#define SHEET_ARG(s_) workbook_sheet_by_name (wb, (s_))
+
+static gboolean
 run_tool_test (const char *tool, char **argv, WorkbookView *wbv)
 {
 	int i;
 	WorkbookControl *wbc;
-	gpointer specs;
-	data_analysis_output_t *dao;
-	analysis_tool_engine engine;
+	GnmAnalysisTool *atool = NULL;
 	Workbook *wb;
 	Sheet *sheet;
 	GHashTable *args;
 	gpointer arg;
+	gboolean err;
 
 	/*
 	 * Arguments in argv are of the form key:value.
@@ -827,45 +921,120 @@ run_tool_test (const char *tool, char **argv, WorkbookView *wbv)
 	wb_control_set_view (wbc, wbv, NULL);
 
 	sheet = GET_ARG (SHEET_ARG, "sheet", wb_view_cur_sheet (wbv));
+	g_hash_table_remove (args, "sheet");
 
 	if (g_str_equal (tool, "regression")) {
-		analysis_tools_data_regression_t *data =
-			g_new0 (analysis_tools_data_regression_t, 1);
-
-		data->base.wbc = wbc;
-		data->base.range_1 = GET_ARG (RANGE_ARG, "x", value_new_error_REF (NULL));
-		data->base.range_2 = GET_ARG (RANGE_ARG, "y", value_new_error_REF (NULL));
-		data->base.labels = GET_ARG (atoi, "labels", FALSE);
-		data->base.alpha = GET_ARG (atof, "alpha", 0.05);
-		data->group_by = GET_ARG ((group_by_t)atoi, "grouped-by", GROUPED_BY_COL);
-		data->intercept = GET_ARG (atoi, "intercept", TRUE);
-		data->multiple_regression = GET_ARG (atoi, "multiple", TRUE);
-		data->multiple_y = GET_ARG (atoi, "multiple-y", FALSE);
-		data->residual = GET_ARG (atoi, "residual", TRUE);
-
-		engine = analysis_tool_regression_engine;
-		specs = data;
+		atool = gnm_regression_tool_new ();
+	} else if (g_str_equal (tool, "moving-average")) {
+		atool = gnm_moving_average_tool_new ();
 	} else if (g_str_equal (tool, "anova")) {
-		analysis_tools_data_anova_single_t *data =
-			g_new0 (analysis_tools_data_anova_single_t, 1);
-
-		data->base.input = GET_ARG (RANGE_LIST_ARG, "data", NULL);
-		data->base.labels = GET_ARG (atoi, "labels", FALSE);
-		data->base.group_by = GET_ARG ((group_by_t)atoi, "grouped-by", GROUPED_BY_COL);
-		data->alpha = GET_ARG (atof, "alpha", 0.05);
-
-		engine = analysis_tool_anova_single_engine;
-		specs = data;
+		atool = gnm_anova_single_tool_new ();
+	} else if (g_str_equal (tool, "anova2")) {
+		atool = gnm_anova_two_factor_tool_new ();
+		GnmAnovaTwoFactorTool *tool = GNM_ANOVA_TWO_FACTOR_TOOL (atool);
+		tool->input = GET_ARG (RANGE_ARG, "data", NULL);
+		g_hash_table_remove (args, "data");
+	} else if (g_str_equal (tool, "chi-squared-test")) {
+		atool = gnm_chi_squared_tool_new ();
+		GnmChiSquaredTool *tool = GNM_CHI_SQUARED_TOOL (atool);
+		tool->input = GET_ARG (RANGE_ARG, "data", NULL);
+		g_hash_table_remove (args, "data");
+	} else if (g_str_equal (tool, "descriptive-statistics")) {
+		atool = gnm_descriptive_tool_new ();
+	} else if (g_str_equal (tool, "correlation")) {
+		atool = gnm_correlation_tool_new ();
+	} else if (g_str_equal (tool, "covariance")) {
+		atool = gnm_covariance_tool_new ();
+	} else if (g_str_equal (tool, "fourier-analysis")) {
+		atool = gnm_fourier_tool_new ();
+	} else if (g_str_equal (tool, "sampling")) {
+		atool = gnm_sampling_tool_new ();
+	} else if (g_str_equal (tool, "ranking")) {
+		atool = gnm_ranking_tool_new ();
+	} else if (g_str_equal (tool, "exponential-smoothing")) {
+		atool = gnm_exp_smoothing_tool_new ();
+	} else if (g_str_equal (tool, "histogram")) {
+		atool = gnm_histogram_tool_new ();
+	} else if (g_str_equal (tool, "sign-test")) {
+		atool = gnm_sign_test_tool_new ();
+	} else if (g_str_equal (tool, "frequency-tables")) {
+		atool = gnm_frequency_tool_new ();
+	} else if (g_str_equal (tool, "principal-components")) {
+		atool = gnm_principal_components_tool_new ();
+	} else if (g_str_equal (tool, "auto-expression")) {
+		atool = gnm_auto_expression_tool_new ();
+	} else if (g_str_equal (tool, "normality-test")) {
+		atool = gnm_normality_tool_new ();
+	} else if (g_str_equal (tool, "one-mean-test")) {
+		atool = gnm_one_mean_test_tool_new ();
+	} else if (g_str_equal (tool, "wilcoxon-signed-rank-test")) {
+		atool = gnm_signed_rank_test_tool_new ();
+	} else if (g_str_equal (tool, "wilcoxon-signed-rank-test-two-samples")) {
+		atool = gnm_signed_rank_test_two_tool_new ();
+	} else if (g_str_equal (tool, "advanced-filter")) {
+		atool = gnm_advanced_filter_tool_new ();
+	} else if (g_str_equal (tool, "wilcoxon-mann-whitney")) {
+		atool = gnm_wilcoxon_mann_whitney_tool_new ();
+	} else if (g_str_equal (tool, "sign-test-two-samples")) {
+		atool = gnm_sign_test_two_tool_new ();
+	} else if (g_str_equal (tool, "f-test")) {
+		atool = gnm_ftest_tool_new ();
+	} else if (g_str_equal (tool, "t-test-paired")) {
+		atool = gnm_ttest_paired_tool_new ();
+	} else if (g_str_equal (tool, "t-test-equal-variances")) {
+		atool = gnm_ttest_eqvar_tool_new ();
+	} else if (g_str_equal (tool, "t-test-unequal-variances")) {
+		atool = gnm_ttest_neqvar_tool_new ();
+	} else if (g_str_equal (tool, "kaplan-meier")) {
+		atool = gnm_kaplan_meier_tool_new ();
+	} else if (g_str_equal (tool, "z-test")) {
+		atool = gnm_ztest_tool_new ();
+	} else if (g_str_equal (tool, "fill-series")) {
+		atool = gnm_fill_series_tool_new ();
 	} else {
+		// Known missing:
+		//
+		// consolidate
+		// random-generator
+		// random-generator-cor
 		g_printerr ("no test for tool \"%s\"\n", tool);
-		return;
+		err = TRUE;
+		goto out;
 	}
 
-	dao = dao_init_new_sheet (NULL);
-	dao->put_formulas = TRUE;
-	cmd_analysis_tool (wbc, sheet, dao, specs, engine, TRUE);
+	// Handle generic arguments that don't have gobject properties
+	if (GNM_IS_GENERIC_ANALYSIS_TOOL (atool)) {
+		GnmGenericAnalysisTool *gtool = GNM_GENERIC_ANALYSIS_TOOL (atool);
+		gtool->base.input = GET_ARG (RANGE_LIST_ARG, "data", NULL);
+		g_hash_table_remove (args, "data");
+	}
+	if (GNM_IS_GENERIC_B_ANALYSIS_TOOL (atool)) {
+		GnmGenericBAnalysisTool *gtool = GNM_GENERIC_B_ANALYSIS_TOOL (atool);
+		gtool->base.range_1 = GET_ARG (RANGE_ARG, "x", value_new_error_REF (NULL));
+		gtool->base.range_2 = GET_ARG (RANGE_ARG, "y", value_new_error_REF (NULL));
+		g_hash_table_remove (args, "x");
+		g_hash_table_remove (args, "y");
+	}
 
+	err = parse_property_based_options (atool, args);
+	gboolean qformulas = GET_ARG (parse_bool, "formulas", TRUE);
+	g_hash_table_remove (args, "formulas");
+
+	if (!err) {
+		data_analysis_output_t *dao = dao_init_new_sheet (sheet);
+		dao->put_formulas = qformulas;
+		err = cmd_analysis_tool (wbc, sheet, dao, atool);
+	}
+	if (err)
+		g_printerr ("Analysis tool failed\n");
+
+out:
 	g_hash_table_destroy (args);
+	if (atool)
+		g_object_unref (atool);
+	g_object_unref (wbc);
+
+	return err;
 }
 
 #undef GET_ARG
@@ -1156,7 +1325,7 @@ convert (char const *inarg, char const *outarg, char const *mergeargs[],
 			if (*infile) {
 				GString *res = g_string_new (NULL);
 				g_string_append_len (res, infile, ext - infile);
-				g_string_append (res, go_file_saver_get_extension(fs));
+				g_string_append (res, go_file_saver_get_extension (fs));
 				outfile = g_string_free (res, FALSE);
 			}
 		}
@@ -1263,9 +1432,12 @@ convert (char const *inarg, char const *outarg, char const *mergeargs[],
 	}
 
 	if (ssconvert_tool_test && ssconvert_tool_test[0]) {
-		run_tool_test (ssconvert_tool_test[0],
-			       ssconvert_tool_test + 1,
-			       wbv);
+		if (run_tool_test (ssconvert_tool_test[0],
+				   ssconvert_tool_test + 1,
+				   wbv)) {
+			res = 1;
+			goto out;
+		}
 	}
 
 	if (ssconvert_resize) {
@@ -1319,8 +1491,9 @@ convert (char const *inarg, char const *outarg, char const *mergeargs[],
 		sheet_sel = g_ptr_array_new ();
 		if (def_sheet)
 			g_ptr_array_add (sheet_sel, def_sheet);
-		g_object_set_data (G_OBJECT (wb),
-				   SHEET_SELECTION_KEY, sheet_sel);
+		g_object_set_data_full (G_OBJECT (wb),
+					SHEET_SELECTION_KEY, sheet_sel,
+					(GDestroyNotify)g_ptr_array_unref);
 	}
 
 	if (ssconvert_one_file_per_sheet) {
@@ -1329,12 +1502,7 @@ convert (char const *inarg, char const *outarg, char const *mergeargs[],
 		res = !workbook_view_save_as (wbv, fs, outfile, cc);
 	}
 
-	if (sheet_sel) {
-		g_object_set_data (G_OBJECT (wb),
-				   SHEET_SELECTION_KEY, NULL);
-		g_ptr_array_free (sheet_sel, TRUE);
-	}
-
+	g_object_set_data (G_OBJECT (wb), SHEET_SELECTION_KEY, NULL);
  out:
 	if (wbv)
 		wb = wb_view_get_workbook (wbv);

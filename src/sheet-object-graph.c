@@ -1,4 +1,3 @@
-
 /*
  * sheet-object-graph.c: Wrapper for GNOME Office graphs in gnumeric
  *
@@ -60,12 +59,12 @@ so_graph_view_set_bounds (SheetObjectView *sov, double const *coords, gboolean v
 
 	if (visible) {
 		goc_item_set (GOC_ITEM (sov),
-			"x", MIN (coords [0], coords[2]) / scale,
-			"y", MIN (coords [3], coords[1]) / scale,
+			"x", MIN (coords[0], coords[2]) / scale,
+			"y", MIN (coords[3], coords[1]) / scale,
 			NULL);
 		goc_item_set (item,
-			"width", (fabs (coords [2] - coords [0]) + 1.) / scale,
-			"height", (fabs (coords [3] - coords [1]) + 1.) / scale,
+			"width", (fabs (coords[2] - coords[0]) + 1.) / scale,
+			"height", (fabs (coords[3] - coords[1]) + 1.) / scale,
 			NULL);
 
 		goc_item_show (item);
@@ -631,7 +630,7 @@ GSF_CLASS_FULL (SheetObjectGraph, sheet_object_graph,
 
 /**
  * sheet_object_graph_new:
- * @graph: (allow-none): #GogGraph
+ * @graph: (nullable): #GogGraph
  *
  * Adds a reference to @graph and creates a gnumeric sheet object wrapper
  * Returns: (transfer full): the newly allocated #SheetObject.
@@ -668,7 +667,7 @@ sheet_object_graph_get_gog (SheetObject *sog)
 /**
  * sheet_object_graph_set_gog:
  * @sog: #SheetObjectGraph
- * @graph: (allow-none): #GogGraph
+ * @graph: (nullable): #GogGraph
  *
  * If @graph is non-%NULL add a reference to it, otherwise create a new graph.
  * Assign the graph to its SheetObjectGraph wrapper and initialize the
@@ -765,6 +764,14 @@ cb_sheet_target_changed (GtkToggleButton *btn, GnmGraphDataClosure *data)
 	data->new_sheet = gtk_toggle_button_get_active (btn);
 }
 
+/**
+ * sheet_object_graph_guru:
+ * @wbcg: #WBCGtk
+ * @graph: (nullable): #GogGraph
+ * @closure: (nullable): #GClosure
+ *
+ * Pop up the graph guru.
+ **/
 void
 sheet_object_graph_guru (WBCGtk *wbcg, GogGraph *graph,
 			 GClosure *closure)
@@ -816,7 +823,7 @@ sheet_object_graph_guru (WBCGtk *wbcg, GogGraph *graph,
 	gnm_keyed_dialog (wbcg, GTK_WINDOW (dialog), "graph-guru");
 	g_object_set_data_full (G_OBJECT (dialog),
 		"guru", wbcg, (GDestroyNotify) cb_graph_guru_done);
-	wbc_gtk_attach_guru (wbcg, dialog);
+	wbcg_attach_guru (wbcg, dialog);
 	gtk_widget_show (dialog);
 }
 
@@ -955,8 +962,7 @@ series_start (GsfXMLIn *xin, xmlChar const **attrs)
 		                     data, &err);
 		g_free (name);
 	}
-	if (err)
-		g_error_free (err);
+	g_clear_error (&err);
 }
 
 static void
@@ -989,8 +995,7 @@ dim_start (GsfXMLIn *xin, xmlChar const **attrs)
 			                     &err);
 			break;
 		}
-	if (err)
-		g_error_free (err);
+	g_clear_error (&err);
 }
 
 static void

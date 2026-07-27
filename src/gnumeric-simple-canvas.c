@@ -39,10 +39,21 @@ gnm_simple_canvas_class_init (GtkWidgetClass *klass)
 	debug_canvas_grab = gnm_debug_flag ("canvas-grab");
 }
 
+/**
+ * gnm_simple_canvas_get_type:
+ *
+ * Returns: the #GType for #GnmSimpleCanvas.
+ **/
 GSF_CLASS (GnmSimpleCanvas, gnm_simple_canvas,
 	   gnm_simple_canvas_class_init, NULL,
 	   GOC_TYPE_CANVAS)
 
+/**
+ * gnm_simple_canvas_new:
+ * @scg: #SheetControlGUI
+ *
+ * Returns: (transfer full): a new #GocCanvas.
+ **/
 GocCanvas *
 gnm_simple_canvas_new (SheetControlGUI *scg)
 {
@@ -52,6 +63,12 @@ gnm_simple_canvas_new (SheetControlGUI *scg)
 	return GOC_CANVAS (gcanvas);
 }
 
+/**
+ * gnm_simple_canvas_ungrab:
+ * @item: #GocItem
+ *
+ * Releases a grab on the canvas.
+ **/
 void
 gnm_simple_canvas_ungrab (GocItem *item)
 {
@@ -65,6 +82,12 @@ gnm_simple_canvas_ungrab (GocItem *item)
 	goc_item_ungrab (item);
 }
 
+/**
+ * gnm_simple_canvas_grab:
+ * @item: #GocItem
+ *
+ * Grabs the canvas for @item.
+ **/
 void
 gnm_simple_canvas_grab (GocItem *item)
 {

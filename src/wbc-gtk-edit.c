@@ -54,11 +54,14 @@
 #include <glib/gi18n-lib.h>
 #include <string.h>
 
-#define GNM_RESPONSE_REMOVE -1000
+#define GNM_RESPONSE_REMOVE (-1000)
 
-/*
- * Shuts down the auto completion engine
- */
+/**
+ * wbcg_auto_complete_destroy:
+ * @wbcg: #WBCGtk
+ *
+ * Shuts down the auto completion engine.
+ **/
 void
 wbcg_auto_complete_destroy (WBCGtk *wbcg)
 {
@@ -85,7 +88,7 @@ wbcg_auto_complete_destroy (WBCGtk *wbcg)
  * @result: what should we do with the content
  * @showed_dialog: (optional) (out): indicates whether a dialog was displayed.
  *
- * Returns: %TRUE if editing completed successfully, or we were no editing.
+ * Returns: %TRUE if editing completed successfully, or we were not editing.
  **/
 gboolean
 wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
@@ -119,7 +122,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 		 */
 		if (wbcg->edit_line.guru != NULL) {
 			GtkWidget *w = wbcg->edit_line.guru;
-			wbc_gtk_detach_guru (wbcg);
+			wbcg_detach_guru (wbcg);
 			gtk_widget_destroy (w);
 		}
 
@@ -309,8 +312,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 				 * focused on the edit line (eg hit F2) */
 				wbcg_focus_cur_scg (wbcg);
 			}
-			if (texpr_test != NULL)
-				gnm_expr_top_unref (texpr_test);
+			gnm_expr_top_unref (texpr_test);
 		}
 
 		/* We only enter an array formula if the text is a formula */
@@ -404,8 +406,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 				gtk_window_set_focus (wbcg_toplevel (wbcg),
 					(GtkWidget *) wbcg_get_entry (wbcg));
 				g_free (free_txt);
-				if (texpr != NULL)
-					gnm_expr_top_unref (texpr);
+				gnm_expr_top_unref (texpr);
 				return FALSE;
 			}
 		} else {
@@ -426,8 +427,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 					pango_attr_list_unref (res_markup);
 			}
 		}
-		if (texpr != NULL)
-			gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 		g_free (free_txt);
 	} else {
 		if (sv == wb_control_cur_sheet_view (wbc)) {
@@ -448,7 +448,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 
 	if (wbcg->edit_line.guru != NULL) {
 		GtkWidget *w = wbcg->edit_line.guru;
-		wbc_gtk_detach_guru (wbcg);
+		wbcg_detach_guru (wbcg);
 		gtk_widget_destroy (w);
 	}
 
@@ -514,7 +514,7 @@ wbcg_edit_finish (WBCGtk *wbcg, WBCEditResult result,
 }
 
 static void
-workbook_edit_complete_notify (char const *text, void *closure)
+workbook_edit_complete_notify (G_GNUC_UNUSED GnmComplete *comp, char const *text, void *closure)
 {
 	WBCGtk *wbcg = closure;
 
@@ -756,9 +756,7 @@ set_or_unset (PangoAttrList *dst, const PangoAttribute *attr,
 /**
  * wbcg_edit_add_markup:
  * @wbcg: #WBCGtk
- * @attr: #PangoAttribute
- *
- * Absorbs the ref to @attr.
+ * @attr: (transfer full): #PangoAttribute
  **/
 void
 wbcg_edit_add_markup (WBCGtk *wbcg, PangoAttribute *attr)
@@ -791,9 +789,10 @@ wbcg_edit_add_markup (WBCGtk *wbcg, PangoAttribute *attr)
 /**
  * wbcg_edit_get_markup:
  * @wbcg: #WBCGtk
+ * @full: if %TRUE, return full content markup
  *
- * Returns: a potentially NULL PangoAttrList of the current markup while
- * editing.  The list belongs to @wbcg and should not be freed.
+ * Returns: (transfer none) (nullable): a PangoAttrList of the current markup while
+ * editing.
  **/
 PangoAttrList *
 wbcg_edit_get_markup (WBCGtk *wbcg, gboolean full)
@@ -814,7 +813,7 @@ cb_warn_toggled (GtkToggleButton *button, gboolean *b)
  * @blankp:   If true, erase current cell contents first.  If false, leave the
  *            contents alone.
  * @cursorp:  If true, create an editing cursor in the current sheet.  (If
- *            false, the text will be editing in the edit box above the sheet,
+ *            false, the text will be edited in the edit box above the sheet,
  *            but this is not handled by this function.)
  *
  * Initiate editing of a cell in the sheet.  Note that we have two modes of
@@ -845,7 +844,7 @@ wbcg_edit_start (WBCGtk *wbcg,
 		return TRUE;
 
 	/* Avoid recursion, and do not begin editing if a guru is up */
-	if (wbcg->inside_editing || wbc_gtk_get_guru (wbcg) != NULL)
+	if (wbcg->inside_editing || wbcg_get_guru (wbcg) != NULL)
 		return TRUE;
 	wbcg->inside_editing = TRUE;
 
@@ -962,8 +961,9 @@ wbcg_edit_start (WBCGtk *wbcg,
 	    wbv->do_auto_completion &&
 	    (text == NULL || g_unichar_isalpha (g_utf8_get_char (text)))) {
 		wbcg->auto_complete = gnm_complete_sheet_new (
-			sv->sheet, col, row,
-			workbook_edit_complete_notify, wbcg);
+			sv->sheet, col, row);
+		g_signal_connect (wbcg->auto_complete, "notify-match",
+				  G_CALLBACK (workbook_edit_complete_notify), wbcg);
 		wbcg->auto_completing = TRUE;
 		wbcg->auto_max_size = 0;
 	} else
@@ -1016,12 +1016,10 @@ wbcg_edit_start (WBCGtk *wbcg,
 /**
  * wbcg_insert_object:
  * @wbcg: #WBCGtk *
- * @so: The object the needs to be placed
+ * @so: (transfer full): The object that needs to be placed
  *
  * Takes a newly created #SheetObject that has not yet been realized and
  * prepares to place it on the sheet.
- *
- * NOTE : Absorbs a reference to the object.
  **/
 void
 wbcg_insert_object (WBCGtk *wbcg, SheetObject *so)
@@ -1126,6 +1124,14 @@ wbcg_get_entry_underlying (WBCGtk const *wbcg)
 	return GTK_WIDGET (entry);
 }
 
+/**
+ * wbcg_set_entry:
+ * @wbcg: #WBCGtk
+ * @entry: (nullable): #GnmExprEntry
+ *
+ * Redirects the edit entry to @entry. If @entry is %NULL, use the default edit
+ * line.
+ **/
 void
 wbcg_set_entry (WBCGtk *wbcg, GnmExprEntry *entry)
 {
@@ -1174,7 +1180,7 @@ wbcg_edit_attach_guru_main (WBCGtk *wbcg, GtkWidget *guru)
 	wb_control_menu_state_update (wbc, MS_GURU_MENU_ITEMS);
 
 	g_signal_connect_object (guru, "destroy",
-		G_CALLBACK (wbc_gtk_detach_guru), wbcg, G_CONNECT_SWAPPED);
+		G_CALLBACK (wbcg_detach_guru), wbcg, G_CONNECT_SWAPPED);
 }
 
 static void
@@ -1190,8 +1196,15 @@ cb_guru_set_focus (G_GNUC_UNUSED GtkWidget *window,
 
 /****************************************************************************/
 
+/**
+ * wbcg_attach_guru:
+ * @wbcg: #WBCGtk
+ * @guru: #GtkWidget
+ *
+ * Connects @guru to @wbcg and handles focus changes.
+ **/
 void
-wbc_gtk_attach_guru (WBCGtk *wbcg, GtkWidget *guru)
+wbcg_attach_guru (WBCGtk *wbcg, GtkWidget *guru)
 {
 	g_return_if_fail (guru != NULL);
 	g_return_if_fail (GNM_IS_WBC_GTK (wbcg));
@@ -1201,8 +1214,16 @@ wbc_gtk_attach_guru (WBCGtk *wbcg, GtkWidget *guru)
 		G_CALLBACK (cb_guru_set_focus), wbcg, 0);
 }
 
+/**
+ * wbcg_attach_guru_with_unfocused_rs:
+ * @wbcg: #WBCGtk
+ * @guru: #GtkWidget
+ * @gee: (nullable): #GnmExprEntry
+ *
+ * Connects @guru to @wbcg, optionally redirecting range selection to @gee.
+ **/
 void
-wbc_gtk_attach_guru_with_unfocused_rs (WBCGtk *wbcg, GtkWidget *guru,
+wbcg_attach_guru_with_unfocused_rs (WBCGtk *wbcg, GtkWidget *guru,
 				       GnmExprEntry *gee)
 {
 	g_return_if_fail (guru != NULL);
@@ -1218,8 +1239,14 @@ wbc_gtk_attach_guru_with_unfocused_rs (WBCGtk *wbcg, GtkWidget *guru,
 			G_CALLBACK (cb_guru_set_focus), wbcg);
 }
 
+/**
+ * wbcg_detach_guru:
+ * @wbcg: #WBCGtk
+ *
+ * Disconnects the currently attached guru from @wbcg.
+ **/
 void
-wbc_gtk_detach_guru (WBCGtk *wbcg)
+wbcg_detach_guru (WBCGtk *wbcg)
 {
 	WorkbookControl *wbc = GNM_WBC (wbcg);
 
@@ -1238,13 +1265,13 @@ wbc_gtk_detach_guru (WBCGtk *wbcg)
 }
 
 /**
- * wbc_gtk_get_guru:
+ * wbcg_get_guru:
  * @wbcg: #WBCGtk
  *
  * Returns: (transfer none): the guru attached to the workbook view.
  **/
 GtkWidget *
-wbc_gtk_get_guru (WBCGtk const *wbcg)
+wbcg_get_guru (WBCGtk const *wbcg)
 {
 	return wbcg->edit_line.guru;
 }
@@ -1264,10 +1291,13 @@ auto_complete_matches (WBCGtk *wbcg)
 	}
 }
 
-/*
- * Returns the text that must be shown by the editing entry, takes
- * into account the auto-completion text.
- */
+/**
+ * wbcg_edit_get_display_text:
+ * @wbcg: #WBCGtk
+ *
+ * Returns: (transfer none): the text that must be shown by the editing entry,
+ * takes into account the auto-completion text.
+ **/
 char const *
 wbcg_edit_get_display_text (WBCGtk *wbcg)
 {
@@ -1277,8 +1307,14 @@ wbcg_edit_get_display_text (WBCGtk *wbcg)
 		return gtk_entry_get_text (wbcg_get_entry (wbcg));
 }
 
+/**
+ * wbcg_init_editline:
+ * @wbcg: #WBCGtk
+ *
+ * Initializes the edit line for @wbcg.
+ **/
 void
-wbc_gtk_init_editline (WBCGtk *wbcg)
+wbcg_init_editline (WBCGtk *wbcg)
 {
 	g_assert (GNM_IS_WBC_GTK (wbcg));
 	g_assert (wbcg->edit_line.entry == NULL);

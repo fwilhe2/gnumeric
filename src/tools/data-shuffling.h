@@ -1,16 +1,21 @@
-#ifndef __DATA_SHUFFLING_H__
-#define __DATA_SHUFFLING_H__
+#ifndef GNM_TOOLS_DATA_SHUFFLING_H_
+#define GNM_TOOLS_DATA_SHUFFLING_H_
 
 #include <gnumeric.h>
-#include <tools/dao.h>
 
+#include <glib-object.h>
 
-#define SHUFFLE_COLS  0
-#define SHUFFLE_ROWS  1
-#define SHUFFLE_AREA  2
+#define GNM_DATA_SHUFFLE_TYPE (gnm_data_shuffle_get_type ())
+G_DECLARE_FINAL_TYPE (GnmDataShuffle, gnm_data_shuffle, GNM, DATA_SHUFFLE, GObject)
 
+typedef enum {
+	GNM_DATA_SHUFFLE_COLS,
+	GNM_DATA_SHUFFLE_ROWS,
+	GNM_DATA_SHUFFLE_AREA
+} GnmDataShuffleType;
 
-typedef struct _data_shuffling_t {
+struct _GnmDataShuffle {
+	GObject parent;
 	GSList  *changes;
 	int     a_col;
 	int     b_col;
@@ -18,22 +23,19 @@ typedef struct _data_shuffling_t {
 	int     b_row;
 	int     cols;
 	int     rows;
-        int     type;
+        GnmDataShuffleType  type;
 
-        WorkbookControl *wbc;
 	data_analysis_output_t *dao;
 	Sheet                  *sheet;
 
         GnmRange tmp_area;
-} data_shuffling_t;
+};
 
 
-void              data_shuffling_redo (data_shuffling_t *st);
-void              data_shuffling_free (data_shuffling_t *st);
-data_shuffling_t *data_shuffling      (WorkbookControl        *wbc,
-				       data_analysis_output_t *dao,
-				       Sheet                  *sheet,
-				       GnmValue               *input,
-				       int                    shuffling_type);
+void              gnm_data_shuffle_redo (GnmDataShuffle *st, WorkbookControl *wbc);
+GnmDataShuffle   *gnm_data_shuffle_new  (data_analysis_output_t *dao,
+					 Sheet                  *sheet,
+					 GnmValue const         *input_range,
+					 GnmDataShuffleType     shuffling_type);
 
 #endif

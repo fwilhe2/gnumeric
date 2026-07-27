@@ -1,4 +1,3 @@
-
 /*
  * commands.c: Handlers to undo & redo commands
  *
@@ -54,6 +53,7 @@
 #include <selection.h>
 #include <colrow.h>
 #include <style-border.h>
+#include <tools/analysis-tools.h>
 #include <tools/auto-correct.h>
 #include <sheet-autofill.h>
 #include <mstyle.h>
@@ -135,11 +135,10 @@ gnm_command_finalize (GObject *obj)
 	GnmCommand *cmd = GNM_COMMAND (obj);
 	GObjectClass *parent;
 
-	/* The const was to avoid accidental changes elsewhere */
-	g_free ((gchar *)cmd->cmd_descriptor);
+	g_free (cmd->cmd_descriptor);
 	cmd->cmd_descriptor = NULL;
 
-	parent = g_type_class_peek (g_type_parent(G_TYPE_FROM_INSTANCE (obj)));
+	parent = g_type_class_peek (g_type_parent (G_TYPE_FROM_INSTANCE (obj)));
 	(*parent->finalize) (obj);
 }
 
@@ -155,8 +154,8 @@ gnm_cmd_trunc_descriptor (GString *src, gboolean *truncated)
 	if (max_len < 5)
 		max_len = 5;
 
-	while ((pos = strchr(src->str, '\n')) != NULL ||
-	       (pos = strchr(src->str, '\r')) != NULL)
+	while ((pos = strchr (src->str, '\n')) != NULL ||
+	       (pos = strchr (src->str, '\r')) != NULL)
 		*pos = ' ';
 
 	len = g_utf8_strlen (src->str, -1);
@@ -234,25 +233,27 @@ cmd_dao_is_locked_effective (data_analysis_output_t  *dao,
 	GnmRange range;
 	range_init (&range, dao->start_col, dao->start_row,
 		    dao->start_col +  dao->cols - 1,  dao->start_row +  dao->rows - 1);
-	return (dao->type != NewWorkbookOutput &&
-		cmd_cell_range_is_locked_effective (dao->sheet, &range, wbc, cmd_name));
+	return (dao->type != GNM_DAO_OUTPUT_NEWWORKBOOK &&
+		cmd_cell_range_is_locked_effective (dao->dst_sheet, &range, wbc, cmd_name));
 }
 
 /**
- * cmd_selection_is_locked_effective: (skip)
+ * cmd_selection_is_locked_effective:
+ * @sheet: #Sheet
+ * @selection: (element-type GnmRange): list of ranges
+ * @wbc: #WorkbookControl
+ * @cmd_name: name of the command
+ *
  * checks whether the selection is effectively locked
  *
- * static gboolean cmd_selection_is_locked_effective
- *
- * Do not use this function unless the sheet is part of the
- * workbook with the given wbcg (otherwise the results may be strange)
- *
- * Returns: %TRUE if there was a problem, %FALSE otherwise.
- */
+ * Returns: %TRUE if any cell in the selection is locked.
+ **/
 gboolean
 cmd_selection_is_locked_effective (Sheet *sheet, GSList *selection,
 				   WorkbookControl *wbc, char const *cmd_name)
 {
+	g_return_val_if_fail (sheet->workbook == wb_control_get_workbook (wbc), FALSE);
+
 	for (; selection; selection = selection->next) {
 		GnmRange *range = selection->data;
 		if (cmd_cell_range_is_locked_effective (sheet, range, wbc, cmd_name))
@@ -310,11 +311,10 @@ select_selection (Sheet *sheet, GSList *selection, WorkbookControl *wbc)
 
 /**
  * get_menu_label:
- *     with a list of commands.
  * @cmd_list: The command list to check.
  *
  * Utility routine to get the descriptor associated
- * Returns : A static reference to a descriptor.  DO NOT free this.
+ * Returns: (transfer none) (nullable): A static reference to a descriptor.
  */
 static char const *
 get_menu_label (GSList *cmd_list)
@@ -365,6 +365,27 @@ update_after_action (Sheet *sheet, WorkbookControl *wbc)
 	}
 }
 
+static GTimer *
+undo_redo_timer_start (GnmCommand *cmd, const char *what)
+{
+	if (gnm_debug_flag("time-actions")) {
+		g_printerr ("%s %s...\n", what, cmd->cmd_descriptor);
+		return g_timer_new ();
+	} else
+		return NULL;
+}
+
+static void
+undo_redo_timer_stop (GnmCommand *cmd, const char *what, GTimer *timer)
+{
+	if (!timer)
+		return;
+
+	double elapsed = g_timer_elapsed (timer, NULL);
+	g_timer_destroy (timer);
+	g_printerr ("%s %s...done [%.0fms]\n",
+		    what, cmd->cmd_descriptor, 1000 * elapsed);
+}
 
 /**
  * command_undo:
@@ -393,7 +414,11 @@ command_undo (WorkbookControl *wbc)
 	g_object_ref (cmd);
 
 	/* TRUE indicates a failure to undo.  Leave the command where it is */
-	if (!klass->undo_cmd (cmd, wbc)) {
+	GTimer *timer = undo_redo_timer_start (cmd, "Undo");
+	gboolean fail = klass->undo_cmd (cmd, wbc);
+	undo_redo_timer_stop (cmd, "Undo", timer);
+
+	if (!fail) {
 		gboolean undo_cleared;
 
 		update_after_action (cmd->sheet, wbc);
@@ -450,8 +475,11 @@ command_redo (WorkbookControl *wbc)
 
 	cmd->state_before_do = go_doc_get_state (wb_control_get_doc (wbc));
 
-	/* TRUE indicates a failure to redo.  Leave the command where it is */
-	if (!klass->redo_cmd (cmd, wbc)) {
+	GTimer *timer = undo_redo_timer_start (cmd, "Redo");
+	gboolean fail = klass->redo_cmd (cmd, wbc);
+	undo_redo_timer_stop (cmd, "Redo", timer);
+
+	if (!fail) {
 		gboolean redo_cleared;
 
 		update_after_action (cmd->sheet, wbc);
@@ -502,8 +530,11 @@ command_repeat (WorkbookControl *wbc)
 	klass = CMD_CLASS (cmd);
 	g_return_if_fail (klass != NULL);
 
-	if (klass->repeat_cmd != NULL)
-		(*klass->repeat_cmd) (cmd, wbc);
+	if (klass->repeat_cmd != NULL) {
+		GTimer *timer = undo_redo_timer_start (cmd, "Repeat");
+		klass->repeat_cmd (cmd, wbc);
+		undo_redo_timer_stop (cmd, "Repeat", timer);
+	}
 }
 
 /**
@@ -543,12 +574,10 @@ command_setup_combos (WorkbookControl *wbc)
 
 /**
  * command_list_release:
- * @cmds: (element-type GObject): the set of commands to free.
+ * @cmds: (transfer full) (element-type GObject): the set of commands to free.
  *
  * command_list_release : utility routine to free the resources associated
  *    with a list of commands.
- *
- * NOTE : remember to NULL the list when you are done.
  */
 void
 command_list_release (GSList *cmd_list)
@@ -577,7 +606,7 @@ command_list_release (GSList *cmd_list)
 /*
  * Truncate the undo list if it is too big.
  *
- * Returns -1 if no truncation was done, or else the number of elements
+ * Returns: -1 if no truncation was done, or else the number of elements
  * left.
  */
 static int
@@ -739,7 +768,7 @@ gnm_command_push_undo (WorkbookControl *wbc, GObject *obj)
 
 /*
  * command_undo_sheet_delete deletes the sheet without deleting the current cmd.
- * returns true if it indeed deleted the sheet.
+ * returns %TRUE if it indeed deleted the sheet.
  * Note: only call this for a sheet of your current workbook from the undo procedure
  */
 
@@ -1389,7 +1418,7 @@ static gboolean
 cmd_ins_del_colrow (WorkbookControl *wbc,
 		    Sheet *sheet,
 		    gboolean is_cols, gboolean is_insert,
-		    char const *descriptor, int index, int count)
+		    char *descriptor, int index, int count)
 {
 	CmdInsDelColRow *me;
 	int first, last;
@@ -1445,6 +1474,15 @@ cmd_ins_del_colrow (WorkbookControl *wbc,
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
 }
 
+/**
+ * cmd_insert_cols:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @start_col: first column to insert
+ * @count: number of columns
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_insert_cols (WorkbookControl *wbc,
 		 Sheet *sheet, int start_col, int count)
@@ -1474,6 +1512,15 @@ cmd_insert_cols (WorkbookControl *wbc,
 	return cmd_ins_del_colrow (wbc, sheet, TRUE, TRUE, mesg, start_col, count);
 }
 
+/**
+ * cmd_insert_rows:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @start_row: first row to insert
+ * @count: number of rows
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_insert_rows (WorkbookControl *wbc,
 		 Sheet *sheet, int start_row, int count)
@@ -1503,6 +1550,15 @@ cmd_insert_rows (WorkbookControl *wbc,
 	return cmd_ins_del_colrow (wbc, sheet, FALSE, TRUE, mesg, start_row, count);
 }
 
+/**
+ * cmd_delete_cols:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @start_col: first column to delete
+ * @count: number of columns
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_delete_cols (WorkbookControl *wbc,
 		 Sheet *sheet, int start_col, int count)
@@ -1514,6 +1570,15 @@ cmd_delete_cols (WorkbookControl *wbc,
 	return cmd_ins_del_colrow (wbc, sheet, TRUE, FALSE, mesg, start_col, count);
 }
 
+/**
+ * cmd_delete_rows:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @start_row: first row to delete
+ * @count: number of rows
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_delete_rows (WorkbookControl *wbc,
 		 Sheet *sheet, int start_row, int count)
@@ -1544,6 +1609,13 @@ cmd_selection_clear_row_handler (GnmColRowIter const *iter,
 	return FALSE;
 }
 
+/**
+ * cmd_selection_clear:
+ * @wbc: #WorkbookControl
+ * @clear_flags: flags indicating what to clear
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_selection_clear (WorkbookControl *wbc, int clear_flags)
 {
@@ -1680,7 +1752,7 @@ cmd_format_repeat (GnmCommand const *cmd, WorkbookControl *wbc)
 		gnm_style_ref (orig->new_style);
 	if (orig->borders)
 		for (i = GNM_STYLE_BORDER_TOP; i < GNM_STYLE_BORDER_EDGE_MAX; i++)
-			gnm_style_border_ref (orig->borders [i]);
+			gnm_style_border_ref (orig->borders[i]);
 
 	cmd_selection_format (wbc, orig->new_style, orig->borders, NULL);
 }
@@ -1759,7 +1831,8 @@ cmd_format_redo (GnmCommand *cmd, WorkbookControl *wbc)
 			if (re_fit_height)
 				colrow_autofit (me->cmd.sheet, r, FALSE, FALSE,
 						TRUE, FALSE,
-						&os->rows, &os->old_heights);
+						&os->rows, &os->old_heights,
+						TRUE);
 		}
 
 		sheet_flag_style_update_range (me->cmd.sheet, r);
@@ -1784,7 +1857,7 @@ cmd_format_finalize (GObject *cmd)
 
 	if (me->borders) {
 		for (i = GNM_STYLE_BORDER_TOP; i < GNM_STYLE_BORDER_EDGE_MAX; i++)
-			gnm_style_border_unref (me->borders [i]);
+			gnm_style_border_unref (me->borders[i]);
 		g_free (me->borders);
 		me->borders = NULL;
 	}
@@ -1795,7 +1868,7 @@ cmd_format_finalize (GObject *cmd)
 		for (l = me->old_styles ; l != NULL ; l = g_slist_remove (l, l->data)) {
 			CmdFormatOldStyle *os = l->data;
 
-			style_list_free (os->styles);
+			sheet_style_list_free (os->styles);
 			colrow_index_list_destroy (os->rows);
 			colrow_state_group_destroy (os->old_heights);
 			g_free (os);
@@ -1810,15 +1883,12 @@ cmd_format_finalize (GObject *cmd)
 }
 
 /**
- * cmd_format: (skip)
+ * cmd_format:
  * @wbc: the workbook control.
  * @sheet: the sheet
  * @style: (transfer full): style to apply to the selection
  * @borders: (nullable) (transfer full): borders to apply to the selection
- * @opt_translated_name: An optional name to use in place of 'Format Cells'
- *
- * If borders is non-%NULL, then the GnmBorder references are passed,
- * the GnmStyle reference is also passed.
+ * @opt_translated_name: (nullable): A name to use in place of 'Format Cells'
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  **/
@@ -1869,7 +1939,7 @@ cmd_selection_format (WorkbookControl *wbc,
 
 		me->borders = g_new (GnmBorder *, GNM_STYLE_BORDER_EDGE_MAX);
 		for (i = GNM_STYLE_BORDER_TOP; i < GNM_STYLE_BORDER_EDGE_MAX; i++)
-			me->borders [i] = borders [i];
+			me->borders[i] = borders[i];
 	} else
 		me->borders = NULL;
 
@@ -1926,6 +1996,14 @@ cmd_selection_format_toggle_font_style_cb (GnmCellIter const *iter, csftfs *clos
 	return NULL;
 }
 
+/**
+ * cmd_selection_format_toggle_font_style:
+ * @wbc: #WorkbookControl
+ * @style: #GnmStyle
+ * @t: style element to toggle
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_selection_format_toggle_font_style (WorkbookControl *wbc,
 					GnmStyle *style, GnmStyleElement t)
@@ -1996,6 +2074,16 @@ cmd_selection_format_toggle_font_style (WorkbookControl *wbc,
 /******************************************************************/
 
 
+/**
+ * cmd_resize_colrow:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @is_cols: whether columns or rows
+ * @selection: (transfer none): list of indices
+ * @new_size: new size in pixels
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_resize_colrow (WorkbookControl *wbc, Sheet *sheet,
 		   gboolean is_cols, ColRowIndexList *selection,
@@ -2039,13 +2127,13 @@ cmd_resize_colrow (WorkbookControl *wbc, Sheet *sheet,
 				: g_strdup_printf (_("Autofitting rows %s"), list->str);
 		else if (new_size >  0)
 			text = is_cols
-				? g_strdup_printf (ngettext("Setting width of columns %s to %d pixel",
-							"Setting width of columns %s to %d pixels",
-							new_size),
+				? g_strdup_printf (ngettext ("Setting width of columns %s to %d pixel",
+							     "Setting width of columns %s to %d pixels",
+							     new_size),
 						   list->str, new_size)
-				: g_strdup_printf (ngettext("Setting height of rows %s to %d pixel",
-							"Setting height of rows %s to %d pixels",
-							new_size),
+				: g_strdup_printf (ngettext ("Setting height of rows %s to %d pixel",
+							     "Setting height of rows %s to %d pixels",
+							     new_size),
 						   list->str, new_size);
 		else text = is_cols
 			     ? g_strdup_printf (
@@ -2059,7 +2147,7 @@ cmd_resize_colrow (WorkbookControl *wbc, Sheet *sheet,
 	undo = gnm_undo_colrow_restore_state_group_new
 		(sheet, is_cols, colrow_index_list_copy (selection), saved_state);
 
- 	redo = gnm_undo_colrow_set_sizes_new (sheet, is_cols, selection, new_size, NULL);
+	redo = gnm_undo_colrow_set_sizes_new (sheet, is_cols, selection, new_size, NULL);
 
 	result = cmd_generic_with_size (wbc, text, size, undo, redo);
 	g_free (text);
@@ -2067,6 +2155,16 @@ cmd_resize_colrow (WorkbookControl *wbc, Sheet *sheet,
 	return result;
 }
 
+/**
+ * cmd_autofit_selection:
+ * @wbc: #WorkbookControl
+ * @sv: #SheetView
+ * @sheet: #Sheet
+ * @fit_width: whether width or height
+ * @selectionlist: (transfer none): list of indices
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_autofit_selection (WorkbookControl *wbc, SheetView *sv, Sheet *sheet, gboolean fit_width,
 		       ColRowIndexList *selectionlist)
@@ -2091,6 +2189,7 @@ cmd_autofit_selection (WorkbookControl *wbc, SheetView *sv, Sheet *sheet, gboole
 		redo = go_undo_combine
 			(redo, gnm_undo_colrow_set_sizes_new
 			 (sheet, fit_width, NULL, -1, l->data));
+	range_fragment_free (selection);
 
 	result = cmd_generic (wbc, text, undo, redo);
 	g_free (text);
@@ -2118,8 +2217,7 @@ cmd_sort_finalize (GObject *cmd)
 {
 	CmdSort *me = CMD_SORT (cmd);
 
-	if (me->data != NULL)
-		gnm_sort_data_destroy (me->data);
+	g_clear_object (&me->data);
 	g_free (me->perm);
 	if (me->old_contents != NULL)
 		cellregion_unref (me->old_contents);
@@ -2134,7 +2232,7 @@ cmd_sort_undo (GnmCommand *cmd, WorkbookControl *wbc)
 	GnmSortData *data = me->data;
 	GnmPasteTarget pt;
 
-	paste_target_init (&pt, data->sheet, data->range,
+	paste_target_init (&pt, data->sheet, &data->range,
 			   PASTE_CONTENTS | PASTE_FORMATS | PASTE_COMMENTS |
 			   (data->retain_formats ? PASTE_FORMATS : 0));
 	clipboard_paste_region (me->old_contents,
@@ -2152,14 +2250,14 @@ cmd_sort_redo (GnmCommand *cmd, WorkbookControl *wbc)
 
 	/* Check for locks */
 	if (cmd_cell_range_is_locked_effective
-	    (data->sheet, data->range, wbc, _("Sorting")))
+	    (data->sheet, &data->range, wbc, _("Sorting")))
 		return TRUE;
 
 	if (me->perm)
 		gnm_sort_position (data, me->perm, GO_CMD_CONTEXT (wbc));
 	else {
 		me->old_contents =
-			clipboard_copy_range (data->sheet, data->range);
+			clipboard_copy_range (data->sheet, &data->range);
 		me->cmd.size = cellregion_cmd_size (me->old_contents);
 		me->perm = gnm_sort_contents (data, GO_CMD_CONTEXT (wbc));
 	}
@@ -2167,6 +2265,13 @@ cmd_sort_redo (GnmCommand *cmd, WorkbookControl *wbc)
 	return FALSE;
 }
 
+/**
+ * cmd_sort:
+ * @wbc: #WorkbookControl
+ * @data: (transfer full): sort information
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_sort (WorkbookControl *wbc, GnmSortData *data)
 {
@@ -2175,9 +2280,9 @@ cmd_sort (WorkbookControl *wbc, GnmSortData *data)
 
 	g_return_val_if_fail (data != NULL, TRUE);
 
-	desc = g_strdup_printf (_("Sorting %s"), range_as_string (data->range));
-	if (sheet_range_contains_merges_or_arrays (data->sheet, data->range, GO_CMD_CONTEXT (wbc), desc, TRUE, TRUE)) {
-		gnm_sort_data_destroy (data);
+	desc = g_strdup_printf (_("Sorting %s"), range_as_string (&data->range));
+	if (sheet_range_contains_merges_or_arrays (data->sheet, &data->range, GO_CMD_CONTEXT (wbc), desc, TRUE, TRUE)) {
+		g_object_unref (data);
 		g_free (desc);
 		return TRUE;
 	}
@@ -2220,7 +2325,7 @@ MAKE_GNM_COMMAND (CmdColRowHide, cmd_colrow_hide, cmd_colrow_hide_repeat)
  *
  * Added to fix bug 38179
  * Removed because the result is irritating and the bug is actually XL
- * compatibile
+ * compatibility
  **/
 static void
 cmd_colrow_hide_correct_selection (G_GNUC_UNUSED CmdColRowHide *me, G_GNUC_UNUSED WorkbookControl *wbc)
@@ -2298,6 +2403,14 @@ cmd_colrow_hide_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_selection_colrow_hide:
+ * @wbc: #WorkbookControl
+ * @is_cols: whether columns or rows
+ * @visible: whether to show or hide
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_selection_colrow_hide (WorkbookControl *wbc,
 			   gboolean is_cols, gboolean visible)
@@ -2367,6 +2480,15 @@ cmd_selection_colrow_hide (WorkbookControl *wbc,
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
 }
 
+/**
+ * cmd_selection_outline_change:
+ * @wbc: #WorkbookControl
+ * @is_cols: whether columns or rows
+ * @index: column or row index
+ * @depth: new outline depth
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_selection_outline_change (WorkbookControl *wbc,
 			      gboolean is_cols, int index, int depth)
@@ -2448,6 +2570,14 @@ cmd_selection_outline_change (WorkbookControl *wbc,
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
 }
 
+/**
+ * cmd_global_outline_change:
+ * @wbc: #WorkbookControl
+ * @is_cols: whether columns or rows
+ * @depth: new outline depth
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_global_outline_change (WorkbookControl *wbc, gboolean is_cols, int depth)
 {
@@ -2519,6 +2649,14 @@ cmd_group_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_selection_group:
+ * @wbc: #WorkbookControl
+ * @is_cols: whether columns or rows
+ * @group: whether to group or ungroup
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_selection_group (WorkbookControl *wbc,
 		     gboolean is_cols, gboolean group)
@@ -2767,8 +2905,7 @@ cmd_paste_cut_finalize (GObject *cmd)
 {
 	CmdPasteCut *me = CMD_PASTE_CUT (cmd);
 
-	if (me->saved_sizes)
-		me->saved_sizes = colrow_state_list_destroy (me->saved_sizes);
+	colrow_state_list_destroy (me->saved_sizes);
 	while (me->paste_contents) {
 		PasteContent *pc = me->paste_contents->data;
 		me->paste_contents = g_slist_remove (me->paste_contents, pc);
@@ -2787,6 +2924,15 @@ cmd_paste_cut_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_paste_cut:
+ * @wbc: #WorkbookControl
+ * @info: (transfer none): relocation information
+ * @move_selection: whether to move selection
+ * @descriptor: (transfer full) (nullable): command description
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_paste_cut (WorkbookControl *wbc, GnmExprRelocateInfo const *info,
 	       gboolean move_selection, char *descriptor)
@@ -2872,7 +3018,7 @@ warn_if_date_trouble (WorkbookControl *wbc, GnmCellRegion *cr)
 	/* We would like to show a warning, but it seems we cannot via a context.  */
 	{
 		GError *err;
-		err = g_error_new (go_error_invalid(), 0,
+		err = g_error_new (go_error_invalid (), 0,
 				   _("Copying between files with different date conventions.\n"
 				     "It is possible that some dates could be copied\n"
 				     "incorrectly."));
@@ -3013,10 +3159,12 @@ cmd_paste_copy_impl (GnmCommand *cmd, WorkbookControl *wbc,
 	if (!is_undo && !me->has_been_through_cycle) {
 		colrow_autofit (me->dst.sheet, &me->dst.range, FALSE, FALSE,
 				TRUE, FALSE,
-				NULL, NULL);
+				NULL, NULL, TRUE);
+
 		colrow_autofit (me->dst.sheet, &me->dst.range, TRUE, TRUE,
 				TRUE, FALSE,
-				NULL, NULL);
+				NULL, NULL,
+				TRUE);
 	}
 
 	if (is_undo) {
@@ -3086,11 +3234,11 @@ cmd_paste_copy_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
-/*
+/**
  * cmd_paste_copy:
- * @wbc:
+ * @wbc: #WorkbookControl
  * @pt:
- * @cr: (transfer none):
+ * @content: (transfer none):
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  */
@@ -3202,9 +3350,8 @@ cmd_paste_copy (WorkbookControl *wbc,
 		}
 	}
 
-	if (n_c * (gnm_float)n_r > 10000.) {
-		char *number = g_strdup_printf ("%0.0" GNM_FORMAT_f,
-						(gnm_float)n_c * (gnm_float)n_r);
+	if (n_c * (long)n_r > 10000) {
+		char *number = g_strdup_printf ("%ld",	(long)n_c * n_r);
 		gboolean result = go_gtk_query_yes_no (wbcg_toplevel (WBC_GTK (wbc)), FALSE,
 						       _("Do you really want to paste "
 							 "%s copies?"), number);
@@ -3344,7 +3491,7 @@ cmd_autofill_redo (GnmCommand *cmd, WorkbookControl *wbc)
 
 	colrow_autofit (me->cmd.sheet, &me->dst.range, TRUE, TRUE,
 			TRUE, FALSE,
-			&me->columns, &me->old_widths);
+			&me->columns, &me->old_widths, TRUE);
 
 	sheet_region_queue_recalc (me->dst.sheet, &me->dst.range);
 	sheet_range_calc_spans (me->dst.sheet, &me->dst.range, GNM_SPANCALC_RENDER);
@@ -3370,6 +3517,21 @@ cmd_autofill_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_autofill:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @default_increment: whether to use default increment
+ * @base_col: source start column
+ * @base_row: source start row
+ * @w: width of source
+ * @h: height of source
+ * @end_col: target end column
+ * @end_row: target end row
+ * @inverse_autofill: whether to autofill in inverse direction
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_autofill (WorkbookControl *wbc, Sheet *sheet,
 	      gboolean default_increment,
@@ -3529,6 +3691,15 @@ cmd_copyrel_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_copyrel:
+ * @wbc: #WorkbookControl
+ * @dx: column offset
+ * @dy: row offset
+ * @name: command name
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_copyrel (WorkbookControl *wbc,
 	     int dx, int dy,
@@ -3654,15 +3825,13 @@ cmd_autoformat_undo (GnmCommand *cmd,
 }
 
 static gboolean
-cmd_autoformat_redo (GnmCommand *cmd,
-		     G_GNUC_UNUSED WorkbookControl *wbc)
+cmd_autoformat_redo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
 {
 	CmdAutoFormat *me = CMD_AUTOFORMAT (cmd);
 
 	g_return_val_if_fail (me != NULL, TRUE);
 
-	gnm_ft_apply_to_sheet_regions (me->ft,
-		me->cmd.sheet, me->selection);
+	gnm_ft_apply_to_sheet_regions (me->ft, me->cmd.sheet, me->selection);
 
 	return FALSE;
 }
@@ -3679,7 +3848,7 @@ cmd_autoformat_finalize (GObject *cmd)
 			CmdAutoFormatOldStyle *os = l->data;
 
 			if (os->styles)
-				style_list_free (os->styles);
+				sheet_style_list_free (os->styles);
 
 			g_free (os);
 		}
@@ -3690,7 +3859,7 @@ cmd_autoformat_finalize (GObject *cmd)
 	range_fragment_free (me->selection);
 	me->selection = NULL;
 
-	gnm_ft_free (me->ft);
+	g_object_unref (me->ft);
 
 	gnm_command_finalize (cmd);
 }
@@ -3698,7 +3867,7 @@ cmd_autoformat_finalize (GObject *cmd)
 /**
  * cmd_selection_autoformat:
  * @wbc: the context.
- * @ft: The format template that was applied
+ * @ft: (transfer full): The format template that was applied
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  **/
@@ -4055,7 +4224,7 @@ cmd_merge_cells (WorkbookControl *wbc, Sheet *sheet, GSList const *selection,
 
 /******************************************************************/
 
-#define CMD_SEARCH_REPLACE_TYPE		(cmd_search_replace_get_type())
+#define CMD_SEARCH_REPLACE_TYPE		(cmd_search_replace_get_type ())
 #define CMD_SEARCH_REPLACE(o)		(G_TYPE_CHECK_INSTANCE_CAST ((o), CMD_SEARCH_REPLACE_TYPE, CmdSearchReplace))
 
 typedef struct {
@@ -4200,10 +4369,11 @@ cmd_search_replace_do_cell (CmdSearchReplace *me, GnmEvalPos *ep,
 		 * does not have a better way of signaling an error.
 		 */
 		err = (val &&
+		       VALUE_IS_STRING (val) &&
 		       gnm_expr_char_start_p (cell_res.new_text) &&
 		       !go_format_is_text (gnm_cell_get_format (cell_res.cell)));
 		value_release (val);
-		if (texpr) gnm_expr_top_unref (texpr);
+		gnm_expr_top_unref (texpr);
 
 		if (err) {
 			if (test_run) {
@@ -4383,6 +4553,13 @@ cmd_search_replace_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_search_replace:
+ * @wbc: #WorkbookControl
+ * @sr: (transfer none): search and replace settings
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_search_replace (WorkbookControl *wbc, GnmSearchReplace *sr)
 {
@@ -4472,6 +4649,15 @@ cmd_colrow_std_size_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_colrow_std_size:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @is_cols: whether columns or rows
+ * @new_default: new standard size
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_colrow_std_size (WorkbookControl *wbc, Sheet *sheet,
 		     gboolean is_cols, double new_default)
@@ -4637,7 +4823,7 @@ cmd_objects_restore_location (SheetObject *so, gint location)
 {
 	gint loc = sheet_object_get_stacking (so);
 	if (loc != location)
-		sheet_object_adjust_stacking(so, location - loc);
+		sheet_object_adjust_stacking (so, location - loc);
 }
 
 static gboolean
@@ -4653,7 +4839,7 @@ cmd_objects_delete_undo (GnmCommand *cmd,
 
 	for (l = me->objects, i = 0; l; l = l->next, i++)
 		cmd_objects_restore_location (GNM_SO (l->data),
-					      g_array_index(me->location,
+					      g_array_index (me->location,
 							    gint, i));
 	return FALSE;
 }
@@ -4796,10 +4982,8 @@ cmd_reorganize_sheets_finalize (GObject *cmd)
 {
 	CmdReorganizeSheets *me = CMD_REORGANIZE_SHEETS (cmd);
 
-	if (me->old)
-		workbook_sheet_state_unref (me->old);
-	if (me->new)
-		workbook_sheet_state_unref (me->new);
+	workbook_sheet_state_unref (me->old);
+	workbook_sheet_state_unref (me->new);
 
 	gnm_command_finalize (cmd);
 }
@@ -4836,6 +5020,14 @@ cmd_reorganize_sheets (WorkbookControl *wbc,
 
 /******************************************************************/
 
+/**
+ * cmd_rename_sheet:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @new_name: (transfer none): new sheet name
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_rename_sheet (WorkbookControl *wbc,
 		  Sheet *sheet,
@@ -4854,7 +5046,7 @@ cmd_rename_sheet (WorkbookControl *wbc,
 
 	collision = workbook_sheet_by_name (sheet->workbook, new_name);
 	if (collision && collision != sheet) {
-		GError *err = g_error_new (go_error_invalid(), 0,
+		GError *err = g_error_new (go_error_invalid (), 0,
 					   _("A workbook cannot have two sheets with the same name."));
 		go_cmd_context_error (GO_CMD_CONTEXT (wbc), err);
 		g_error_free (err);
@@ -5074,6 +5266,17 @@ cmd_set_comment_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_set_comment:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @pos: #GnmCellPos
+ * @new_text: (transfer none): new comment text
+ * @attr: (transfer none) (nullable): markup
+ * @new_author: (transfer none) (nullable): new author
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_set_comment (WorkbookControl *wbc,
 		 Sheet *sheet, GnmCellPos const *pos,
@@ -5140,9 +5343,7 @@ typedef struct {
 	GnmCommand         cmd;
 
 	data_analysis_output_t  *dao;
-	gpointer                specs;
-	gboolean                specs_owned;
-	analysis_tool_engine    engine;
+	GnmAnalysisTool         *tool;
 	data_analysis_output_type_t type;
 
 	ColRowStateList         *col_info;
@@ -5162,44 +5363,41 @@ cmd_analysis_tool_undo (GnmCommand *cmd, WorkbookControl *wbc)
 
 	g_return_val_if_fail (me != NULL, TRUE);
 
-	/* The old view might not exist anymore */
-	me->dao->wbc = wbc;
-
 	switch (me->type) {
-	case NewSheetOutput:
-		if (!command_undo_sheet_delete (me->dao->sheet))
+	case GNM_DAO_OUTPUT_NEWSHEET:
+		if (!command_undo_sheet_delete (me->dao->dst_sheet))
 			return TRUE;
-		me->dao->sheet = NULL;
+		me->dao->dst_sheet = NULL;
 		break;
-	case NewWorkbookOutput:
+	case GNM_DAO_OUTPUT_NEWWORKBOOK:
 		g_warning ("How did we get here?");
 		return TRUE;
 		break;
-	case RangeOutput:
+	case GNM_DAO_OUTPUT_RANGE:
 	default:
-		sheet_clear_region (me->dao->sheet,
+		sheet_clear_region (me->dao->dst_sheet,
 				    me->old_range.start.col, me->old_range.start.row,
 				    me->old_range.end.col, me->old_range.end.row,
 				    CLEAR_COMMENTS | CLEAR_FORMATS | CLEAR_NOCHECKARRAY |
 				    CLEAR_RECALC_DEPS | CLEAR_VALUES | CLEAR_MERGES,
 				    GO_CMD_CONTEXT (wbc));
 		clipboard_paste_region (me->old_contents,
-			paste_target_init (&pt, me->dao->sheet, &me->old_range, PASTE_ALL_SHEET),
+			paste_target_init (&pt, me->dao->dst_sheet, &me->old_range, PASTE_ALL_SHEET),
 			GO_CMD_CONTEXT (wbc));
 		cellregion_unref (me->old_contents);
 		me->old_contents = NULL;
 		if (me->col_info) {
 			dao_set_colrow_state_list (me->dao, TRUE, me->col_info);
-			me->col_info = colrow_state_list_destroy (me->col_info);
+			colrow_state_list_destroy (me->col_info);
 		}
 		if (me->row_info) {
 			dao_set_colrow_state_list (me->dao, FALSE, me->row_info);
-			me->row_info = colrow_state_list_destroy (me->row_info);
+			colrow_state_list_destroy (me->row_info);
 		}
 		if (me->newSheetObjects == NULL)
 			me->newSheetObjects = dao_surrender_so (me->dao);
 		g_slist_foreach (me->newSheetObjects, (GFunc)sheet_object_clear_sheet, NULL);
-		sheet_update (me->dao->sheet);
+		sheet_update (me->dao->dst_sheet);
 	}
 
 	return FALSE;
@@ -5215,54 +5413,46 @@ cmd_analysis_tool_draw_old_so (SheetObject *so, data_analysis_output_t *dao)
 static gboolean
 cmd_analysis_tool_redo (GnmCommand *cmd, WorkbookControl *wbc)
 {
-	gpointer continuity = NULL;
 	CmdAnalysis_Tool *me = CMD_ANALYSIS_TOOL (cmd);
-	GOCmdContext *cc = GO_CMD_CONTEXT (wbc);
 
 	g_return_val_if_fail (me != NULL, TRUE);
 
-	/* The old view might not exist anymore */
-	me->dao->wbc = wbc;
-
-	if (me->col_info)
-		me->col_info = colrow_state_list_destroy (me->col_info);
+	colrow_state_list_destroy (me->col_info);
 	me->col_info = dao_get_colrow_state_list (me->dao, TRUE);
-	if (me->row_info)
-		me->row_info = colrow_state_list_destroy (me->row_info);
+	colrow_state_list_destroy (me->row_info);
 	me->row_info = dao_get_colrow_state_list (me->dao, FALSE);
 
-	if (me->engine (cc, me->dao, me->specs, TOOL_ENGINE_PREPARE_OUTPUT_RANGE, NULL)
-	    || me->engine (cc, me->dao, me->specs, TOOL_ENGINE_UPDATE_DESCRIPTOR,
-			   &me->cmd.cmd_descriptor)
+	if (gnm_analysis_tool_prepare_output_range (me->tool, wbc, me->dao)
+	    || ((me->cmd.cmd_descriptor = gnm_analysis_tool_update_descriptor (me->tool, me->dao)) == NULL)
 	    || cmd_dao_is_locked_effective (me->dao, wbc, me->cmd.cmd_descriptor)
-	    || me->engine (cc, me->dao, me->specs, TOOL_ENGINE_LAST_VALIDITY_CHECK, &continuity))
+	    || gnm_analysis_tool_last_validity_check (me->tool, wbc, me->dao))
 		return TRUE;
 
 	switch (me->type) {
-	case NewSheetOutput:
+	case GNM_DAO_OUTPUT_NEWSHEET:
 		me->old_contents = NULL;
 		break;
-	case NewWorkbookOutput:
+	case GNM_DAO_OUTPUT_NEWWORKBOOK:
 		/* No undo in this case (see below) */
 		me->old_contents = NULL;
 		break;
-	case RangeOutput:
+	case GNM_DAO_OUTPUT_RANGE:
 	default:
 		range_init (&me->old_range, me->dao->start_col, me->dao->start_row,
 			    me->dao->start_col + me->dao->cols - 1,
 			    me->dao->start_row + me->dao->rows - 1);
-		me->old_contents = clipboard_copy_range (me->dao->sheet, &me->old_range);
+		me->old_contents = clipboard_copy_range (me->dao->dst_sheet, &me->old_range);
 		break;
 	}
 
 	if (me->newSheetObjects != NULL)
 		dao_set_omit_so (me->dao, TRUE);
 
-	if (me->engine (cc, me->dao, me->specs, TOOL_ENGINE_FORMAT_OUTPUT_RANGE, NULL))
+	if (gnm_analysis_tool_format_output_range (me->tool, wbc, me->dao))
 		return TRUE;
 
-	if (me->engine (cc, me->dao, me->specs, TOOL_ENGINE_PERFORM_CALC, &continuity)) {
-		if (me->type == RangeOutput) {
+	if (gnm_analysis_tool_perform_calc (me->tool, wbc, me->dao)) {
+		if (me->type == GNM_DAO_OUTPUT_RANGE) {
 			g_warning ("This is too late for failure! The target region has "
 				   "already been formatted!");
 		} else
@@ -5280,20 +5470,16 @@ cmd_analysis_tool_redo (GnmCommand *cmd, WorkbookControl *wbc)
 		g_slist_free (l);
 	}
 
-	if (continuity) {
-		g_warning ("There shouldn't be any data left in here!");
-	}
-
 	dao_autofit_columns (me->dao);
-	sheet_mark_dirty (me->dao->sheet);
-	sheet_update (me->dao->sheet);
+	sheet_mark_dirty (me->dao->dst_sheet);
+	sheet_update (me->dao->dst_sheet);
 
 	/* The concept of an undo if we create a new worksheet is extremely strange,
 	 * since we have separate undo/redo queues per worksheet.
 	 * Users can simply delete the worksheet if they so desire.
 	 */
 
-	return (me->type == NewWorkbookOutput);
+	return (me->type == GNM_DAO_OUTPUT_NEWWORKBOOK);
 }
 
 static void
@@ -5301,17 +5487,12 @@ cmd_analysis_tool_finalize (GObject *cmd)
 {
 	CmdAnalysis_Tool *me = CMD_ANALYSIS_TOOL (cmd);
 
-	if (me->col_info)
-		me->col_info = colrow_state_list_destroy (me->col_info);
-	if (me->row_info)
-		me->row_info = colrow_state_list_destroy (me->row_info);
+	colrow_state_list_destroy (me->col_info);
+	colrow_state_list_destroy (me->row_info);
 
-	me->engine (NULL, me->dao, me->specs, TOOL_ENGINE_CLEAN_UP, NULL);
+	g_object_unref (me->tool);
+	dao_free (me->dao);
 
-	if (me->specs_owned) {
-		g_free (me->specs);
-		dao_free (me->dao);
-	}
 	if (me->old_contents)
 		cellregion_unref (me->old_contents);
 
@@ -5321,41 +5502,34 @@ cmd_analysis_tool_finalize (GObject *cmd)
 }
 
 /**
- * cmd_analysis_tool: (skip)
- * Note: this takes ownership of specs and dao if the command
- * succeeds.
+ * cmd_analysis_tool:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @dao: (transfer full):
+ * @tool: (transfer none):
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  **/
 gboolean
 cmd_analysis_tool (WorkbookControl *wbc, G_GNUC_UNUSED Sheet *sheet,
-		   data_analysis_output_t *dao, gpointer specs,
-		   analysis_tool_engine engine, gboolean always_take_ownership)
+		   data_analysis_output_t *dao, GnmAnalysisTool *tool)
 {
 	CmdAnalysis_Tool *me;
 	gboolean trouble;
-	GOCmdContext *cc = GO_CMD_CONTEXT (wbc);
 
 	g_return_val_if_fail (dao != NULL, TRUE);
-	g_return_val_if_fail (specs != NULL, TRUE);
-	g_return_val_if_fail (engine != NULL, TRUE);
+	g_return_val_if_fail (GNM_IS_ANALYSIS_TOOL (tool), TRUE);
 
 	me = g_object_new (CMD_ANALYSIS_TOOL_TYPE, NULL);
 
-	dao->wbc = wbc;
-
 	/* Store the specs for the object */
-	me->specs = specs;
-	me->specs_owned = always_take_ownership;
+	me->tool = g_object_ref (tool);
 	me->dao = dao;
-	me->engine = engine;
 	me->cmd.cmd_descriptor = NULL;
-	if (me->engine (cc, me->dao, me->specs, TOOL_ENGINE_UPDATE_DAO, NULL)) {
+	if (gnm_analysis_tool_update_dao (me->tool, me->dao)) {
 		g_object_unref (me);
 		return TRUE;
 	}
-	me->engine (cc, me->dao, me->specs, TOOL_ENGINE_UPDATE_DESCRIPTOR,
-		    &me->cmd.cmd_descriptor);
 	me->cmd.sheet = NULL;
 	me->type = dao->type;
 	me->row_info = NULL;
@@ -5366,9 +5540,6 @@ cmd_analysis_tool (WorkbookControl *wbc, G_GNUC_UNUSED Sheet *sheet,
 
 	/* Register the command object */
 	trouble = gnm_command_push_undo (wbc, G_OBJECT (me));
-
-	if (!trouble)
-		me->specs_owned = TRUE;
 
 	return trouble;
 }
@@ -5592,7 +5763,7 @@ cmd_change_summary_undo (GnmCommand *cmd, WorkbookControl *wbc)
 		if (NULL != (prop = gsf_doc_meta_data_steal (meta, name)))
 			old_vals = g_slist_prepend (old_vals, prop);
 		else
-			dropped = g_slist_prepend (old_vals, g_strdup (name));
+			dropped = g_slist_prepend (dropped, g_strdup (name));
 		gsf_doc_meta_data_store (meta, ptr->data);
 	}
 	g_slist_free (me->changed_props);
@@ -5700,6 +5871,14 @@ cmd_object_raise_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_object_raise:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @dir: direction to move
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_object_raise (WorkbookControl *wbc, SheetObject *so, CmdObjectRaiseSelector dir)
 {
@@ -5773,7 +5952,7 @@ cmd_print_setup_undo (GnmCommand *cmd, WorkbookControl *wbc)
 		if (me->cmd.sheet->sheet_type == GNM_SHEET_OBJECT)
 			update_sheet_graph_cb (me->cmd.sheet);
 	} else {
-		book = wb_control_get_workbook(wbc);
+		book = wb_control_get_workbook (wbc);
 		n = workbook_sheet_count (book);
 		infos = me->old_pi;
 		g_return_val_if_fail (g_slist_length (infos) == n, TRUE);
@@ -5811,7 +5990,7 @@ cmd_print_setup_redo (GnmCommand *cmd, WorkbookControl *wbc)
 		if (me->cmd.sheet->sheet_type == GNM_SHEET_OBJECT)
 			update_sheet_graph_cb (me->cmd.sheet);
 	} else {
-		book = wb_control_get_workbook(wbc);
+		book = wb_control_get_workbook (wbc);
 		n = workbook_sheet_count (book);
 		for (i = 0 ; i < n ; i++) {
 			Sheet *sheet = workbook_sheet_by_index (book, i);
@@ -5917,7 +6096,7 @@ cmd_define_name_redo (GnmCommand *cmd, WorkbookControl *wbc)
 
 	if (me->new_name || me->placeholder) {
 		char *err = NULL;
-		nexpr = expr_name_add (&me->pp, me->name, me->texpr, &err, TRUE, NULL);
+		nexpr = expr_name_add (&me->pp, me->name, me->texpr, &err, NULL);
 		if (nexpr == NULL) {
 			go_cmd_context_error_invalid (GO_CMD_CONTEXT (wbc), _("Name"), err);
 			g_free (err);
@@ -5944,10 +6123,9 @@ cmd_define_name_finalize (GObject *cmd)
 
 	g_free (me->name); me->name = NULL;
 
-	if (me->texpr) {
-		gnm_expr_top_unref (me->texpr);
-		me->texpr = NULL;
-	}
+	gnm_expr_top_unref (me->texpr);
+
+	me->texpr = NULL;
 
 	gnm_command_finalize (cmd);
 }
@@ -5958,11 +6136,11 @@ cmd_define_name_finalize (GObject *cmd)
  * @name:
  * @pp:
  * @texpr: (transfer full): #GnmExprTop
- * @descriptor: optional descriptor.
+ * @descriptor: (nullable): Descriptor.
  *
  * If the @name has never been defined in context @pp create a new name
  * If it is a placeholder, assign @texpr to it and make it real
- * If it already exists as a real name just assign @expr.
+ * If it already exists as a real name just assign @texpr.
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  **/
@@ -6067,7 +6245,7 @@ cmd_remove_name_undo (GnmCommand *cmd,
 	CmdRemoveName *me = CMD_REMOVE_NAME (cmd);
 	GnmNamedExpr *nexpr =
 		expr_name_add (&me->nexpr->pos, expr_name_name (me->nexpr),
-			       me->texpr, NULL, TRUE, NULL);
+			       me->texpr, NULL, NULL);
 	if (nexpr) {
 		me->texpr = NULL;
 		expr_name_ref (nexpr);
@@ -6099,10 +6277,9 @@ cmd_remove_name_finalize (GObject *cmd)
 
 	expr_name_unref (me->nexpr);
 
-	if (me->texpr) {
-		gnm_expr_top_unref (me->texpr);
-		me->texpr = NULL;
-	}
+	gnm_expr_top_unref (me->texpr);
+
+	me->texpr = NULL;
 
 	gnm_command_finalize (cmd);
 }
@@ -6112,7 +6289,7 @@ cmd_remove_name_finalize (GObject *cmd)
  * @wbc:
  * @nexpr: name to remove.
  *
- * Returns TRUE on error
+ * Returns: %TRUE on error
  **/
 gboolean
 cmd_remove_name (WorkbookControl *wbc, GnmNamedExpr *nexpr)
@@ -6158,9 +6335,7 @@ cmd_rescope_name_redo (GnmCommand *cmd, WorkbookControl *wbc)
 	GnmParsePos pp = me->nexpr->pos;
 
 	pp.sheet = me->scope;
-	err = expr_name_set_pos (me->nexpr, &pp);
-
-	if (err != NULL) {
+	if (expr_name_set_pos (me->nexpr, &pp, &err)) {
 		go_cmd_context_error_invalid (GO_CMD_CONTEXT (wbc), _("Change Scope of Name"), err);
 		g_free (err);
 		return TRUE;
@@ -6256,13 +6431,13 @@ cmd_scenario_add_finalize (GObject *cmd)
 }
 
 /**
- * cmd_scenario_add: (skip)
- * @wbc:
- * @s: (transfer full):
- * @sheet:
+ * cmd_scenario_add:
+ * @wbc: #WorkbookControl
+ * @s: (transfer full): #GnmScenario
+ * @sheet: #Sheet
  *
- * Returns: %TRUE if there was a problem, %FALSE otherwise.
- */
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_scenario_add (WorkbookControl *wbc, GnmScenario *s, Sheet *sheet)
 {
@@ -6326,6 +6501,14 @@ cmd_scenario_mngr_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_scenario_mngr:
+ * @wbc: #WorkbookControl
+ * @sc: (transfer none): #GnmScenario
+ * @undo: (transfer full) (nullable): undo object
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_scenario_mngr (WorkbookControl *wbc, GnmScenario *sc, GOUndo *undo)
 {
@@ -6352,27 +6535,26 @@ cmd_scenario_mngr (WorkbookControl *wbc, GnmScenario *sc, GOUndo *undo)
 
 typedef struct {
 	GnmCommand  cmd;
-	data_shuffling_t *ds;
+	GnmDataShuffle *ds;
 } CmdDataShuffle;
 
 MAKE_GNM_COMMAND (CmdDataShuffle, cmd_data_shuffle, NULL)
 
 static gboolean
-cmd_data_shuffle_redo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
+cmd_data_shuffle_redo (GnmCommand *cmd, WorkbookControl *wbc)
 {
 	CmdDataShuffle *me = CMD_DATA_SHUFFLE (cmd);
 
-	data_shuffling_redo (me->ds);
+	gnm_data_shuffle_redo (me->ds, wbc);
 	return FALSE;
 }
 
 static gboolean
-cmd_data_shuffle_undo (GnmCommand *cmd,
-		       G_GNUC_UNUSED WorkbookControl *wbc)
+cmd_data_shuffle_undo (GnmCommand *cmd, WorkbookControl *wbc)
 {
 	CmdDataShuffle *me = CMD_DATA_SHUFFLE (cmd);
 
-	data_shuffling_redo (me->ds);
+	gnm_data_shuffle_redo (me->ds, wbc);
 	return FALSE;
 }
 
@@ -6380,13 +6562,20 @@ static void
 cmd_data_shuffle_finalize (GObject *cmd)
 {
 	CmdDataShuffle *me = CMD_DATA_SHUFFLE (cmd);
-
-	data_shuffling_free (me->ds);
+	g_object_unref (me->ds);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_data_shuffle:
+ * @wbc: #WorkbookControl
+ * @sc: (transfer full): #GnmDataShuffle
+ * @sheet: #Sheet
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
-cmd_data_shuffle (WorkbookControl *wbc, data_shuffling_t *sc, Sheet *sheet)
+cmd_data_shuffle (WorkbookControl *wbc, GnmDataShuffle *sc, Sheet *sheet)
 {
 	CmdDataShuffle *me;
 
@@ -6475,8 +6664,7 @@ cmd_text_to_columns_finalize (GObject *cmd)
 {
 	CmdTextToColumns *me = CMD_TEXT_TO_COLUMNS (cmd);
 
-	if (me->saved_sizes)
-		me->saved_sizes = colrow_state_list_destroy (me->saved_sizes);
+	colrow_state_list_destroy (me->saved_sizes);
 	if (me->contents) {
 		cellregion_unref (me->contents);
 		me->contents = NULL;
@@ -6484,6 +6672,17 @@ cmd_text_to_columns_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_text_to_columns:
+ * @wbc: #WorkbookControl
+ * @src: source range
+ * @src_sheet: source sheet
+ * @target: target range
+ * @target_sheet: target sheet
+ * @contents: (transfer full): contents to paste
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_text_to_columns (WorkbookControl *wbc,
 		     GnmRange const *src, Sheet *src_sheet,
@@ -6611,7 +6810,7 @@ MAKE_GNM_COMMAND (CmdGoalSeek, cmd_goal_seek, NULL)
 static gboolean
 cmd_goal_seek_impl (GnmCell *cell, GnmValue *value)
 {
-	sheet_cell_set_value (cell, value_dup(value));
+	sheet_cell_set_value (cell, value_dup (value));
 	return FALSE;
 }
 
@@ -6645,11 +6844,21 @@ cmd_goal_seek_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_goal_seek:
+ * @wbc: #WorkbookControl
+ * @cell: #GnmCell
+ * @ov: (nullable) (transfer full): old value
+ * @nv: (nullable) (transfer full): new value
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_goal_seek (WorkbookControl *wbc, GnmCell *cell, GnmValue *ov, GnmValue *nv)
 {
 	CmdGoalSeek *me;
 	GnmRange range;
+	char *name;
 
 	g_return_val_if_fail (cell != NULL, TRUE);
 	g_return_val_if_fail (ov != NULL || nv != NULL, TRUE);
@@ -6659,8 +6868,10 @@ cmd_goal_seek (WorkbookControl *wbc, GnmCell *cell, GnmValue *ov, GnmValue *nv)
 	me->cmd.sheet = cell->base.sheet;
 	me->cmd.size = 1;
 	range_init_cellpos (&range, &cell->pos);
-	me->cmd.cmd_descriptor = g_strdup_printf
-		(_("Goal Seek (%s)"), undo_range_name (cell->base.sheet, &range));
+
+	name = undo_range_name (cell->base.sheet, &range);
+	me->cmd.cmd_descriptor = g_strdup_printf (_("Goal Seek (%s)"), name);
+	g_free (name);
 
 	me->cell = cell;
 	me->ov = ov;
@@ -6734,7 +6945,7 @@ cmd_freeze_panes (WorkbookControl *wbc, SheetView *sv,
 
 	me = g_object_new (CMD_FREEZE_PANES_TYPE, NULL);
 	me->sv = sv;
-	me->frozen   = f;
+	me->frozen = f;
 	me->unfrozen = expr;
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
 }
@@ -6751,24 +6962,10 @@ cmd_freeze_panes (WorkbookControl *wbc, SheetView *sv,
 typedef struct {
 	GnmCommand cmd;
 	GSList *sheet_idx;
-	GnmTabulateInfo *data;
+	GnmTabulate *tab;
 } CmdTabulate;
 
 MAKE_GNM_COMMAND (CmdTabulate, cmd_tabulate, NULL)
-
-static gint
-cmd_tabulate_cmp_f (gconstpointer a,
-				    gconstpointer b)
-{
-	guint const a_val = GPOINTER_TO_INT (a);
-	guint const b_val = GPOINTER_TO_INT (b);
-
-	if (a_val > b_val)
-		return -1;
-	if (a_val < b_val)
-		return 1;
-	return 0;
-}
 
 static gboolean
 cmd_tabulate_undo (GnmCommand *cmd, WorkbookControl *wbc)
@@ -6776,17 +6973,23 @@ cmd_tabulate_undo (GnmCommand *cmd, WorkbookControl *wbc)
 	CmdTabulate *me = CMD_TABULATE (cmd);
 	GSList *l;
 	gboolean res = TRUE;
+	Workbook *wb = wb_control_get_workbook (wbc);
+	GSList *sl = NULL;
 
-	me->sheet_idx  = g_slist_sort (me->sheet_idx,
-				       cmd_tabulate_cmp_f);
-
+	// Sheet indices will change.  Lookup all
 	for (l = me->sheet_idx; l != NULL; l = l->next) {
 		int i = GPOINTER_TO_INT (l->data);
-		Sheet *new_sheet =
-			workbook_sheet_by_index (wb_control_get_workbook (wbc),
-						 i);
+		Sheet *sheet = workbook_sheet_by_index (wb, i);
+		sl = g_slist_prepend (sl, sheet);
+	}
+
+	for (l = sl; l != NULL; l = l->next) {
+		Sheet *new_sheet = l->data;
 		res = res && command_undo_sheet_delete (new_sheet);
 	}
+
+	g_slist_free (sl);
+
 	return !res;
 }
 
@@ -6796,7 +6999,7 @@ cmd_tabulate_redo (GnmCommand *cmd, WorkbookControl *wbc)
 	CmdTabulate *me = CMD_TABULATE (cmd);
 
 	g_slist_free (me->sheet_idx);
-	me->sheet_idx = do_tabulation (wbc, me->data);
+	me->sheet_idx = gnm_tabulate (me->tab, wbc);
 
 	return (me->sheet_idx == NULL);
 }
@@ -6806,20 +7009,23 @@ cmd_tabulate_finalize (GObject *cmd)
 {
 	CmdTabulate *me = CMD_TABULATE (cmd);
 
-	g_free (me->data->cells);
-	g_free (me->data->minima);
-	g_free (me->data->maxima);
-	g_free (me->data->steps);
-	g_free (me->data);
+	g_clear_object (&me->tab);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_tabulate:
+ * @wbc: control
+ * @tab: (transfer full): tabulation information
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
-cmd_tabulate (WorkbookControl *wbc, gpointer data)
+cmd_tabulate (WorkbookControl *wbc, GnmTabulate *tab)
 {
 	CmdTabulate *me;
 
-	g_return_val_if_fail (data != NULL, TRUE);
+	g_return_val_if_fail (tab != NULL, TRUE);
 
 	me = g_object_new (CMD_TABULATE_TYPE, NULL);
 
@@ -6827,7 +7033,7 @@ cmd_tabulate (WorkbookControl *wbc, gpointer data)
 	me->cmd.size = 1;
 	me->cmd.cmd_descriptor =
 		g_strdup_printf (_("Tabulating Dependencies"));
-	me->data = data;
+	me->tab = tab;
 	me->sheet_idx = NULL;
 
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
@@ -6877,6 +7083,15 @@ cmd_so_graph_config_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_graph_config:
+ * @wbc: #WorkbookControl
+ * @sog: #SheetObject
+ * @n_graph: (transfer none): new graph
+ * @o_graph: (transfer none): old graph
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_graph_config (WorkbookControl *wbc, SheetObject *so,
 		     GObject *n_graph, GObject *o_graph)
@@ -6949,6 +7164,15 @@ cmd_so_component_config_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_component_config:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @n_obj: (transfer none): new component
+ * @o_obj: (transfer none): old component
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_component_config (WorkbookControl *wbc, SheetObject *so,
 		     GObject *n_obj, GObject *o_obj)
@@ -6977,44 +7201,60 @@ cmd_so_component_config (WorkbookControl *wbc, SheetObject *so,
 
 /******************************************************************/
 
-#define CMD_TOGGLE_RTL_TYPE (cmd_toggle_rtl_get_type ())
-#define CMD_TOGGLE_RTL(o)   (G_TYPE_CHECK_INSTANCE_CAST ((o), CMD_TOGGLE_RTL_TYPE, CmdToggleRTL))
+#define CMD_TOGGLE_SHEET_PROPERTY_TYPE (cmd_toggle_sheet_property_get_type ())
+#define CMD_TOGGLE_SHEET_PROPERTY(o)   (G_TYPE_CHECK_INSTANCE_CAST ((o), CMD_TOGGLE_SHEET_PROPERTY_TYPE, CmdToggleRTL))
 
-typedef GnmCommand CmdToggleRTL;
+typedef struct {
+	GnmCommand cmd;
+	char *property;
+} CmdToggleRTL;
 
-MAKE_GNM_COMMAND (CmdToggleRTL, cmd_toggle_rtl, NULL)
+MAKE_GNM_COMMAND (CmdToggleRTL, cmd_toggle_sheet_property, NULL)
 
 static gboolean
-cmd_toggle_rtl_redo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
+cmd_toggle_sheet_property_redo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
 {
-	go_object_toggle (cmd->sheet, "text-is-rtl");
+	CmdToggleRTL *ctsp = CMD_TOGGLE_SHEET_PROPERTY (cmd);
+	go_object_toggle (cmd->sheet, ctsp->property);
 	return FALSE;
 }
 
 static gboolean
-cmd_toggle_rtl_undo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
+cmd_toggle_sheet_property_undo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
 {
-	return cmd_toggle_rtl_redo (cmd, wbc);
+	return cmd_toggle_sheet_property_redo (cmd, wbc);
 }
 
 static void
-cmd_toggle_rtl_finalize (GObject *cmd)
+cmd_toggle_sheet_property_finalize (GObject *cmd)
 {
+	CmdToggleRTL *ctsp = CMD_TOGGLE_SHEET_PROPERTY (cmd);
+	g_free (ctsp->property);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_toggle_sheet_property:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @property: property name
+ * @desc: description for the undo list
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
-cmd_toggle_rtl (WorkbookControl *wbc, Sheet *sheet)
+cmd_toggle_sheet_property (WorkbookControl *wbc, Sheet *sheet, const char *property, const char *desc)
 {
 	CmdToggleRTL *me;
 
 	g_return_val_if_fail (GNM_IS_WBC (wbc), TRUE);
 	g_return_val_if_fail (IS_SHEET (sheet), TRUE);
 
-	me = g_object_new (CMD_TOGGLE_RTL_TYPE, NULL);
-	me->sheet = sheet;
-	me->size = 1;
-	me->cmd_descriptor = g_strdup (sheet->text_is_rtl ? _("Left to Right") : _("Right to Left"));
+	me = g_object_new (CMD_TOGGLE_SHEET_PROPERTY_TYPE, NULL);
+	me->cmd.sheet = sheet;
+	me->cmd.size = 1;
+	me->cmd.cmd_descriptor = g_strdup (desc);
+	me->property = g_strdup (property);
 
 	return gnm_command_push_undo (wbc, G_OBJECT (me));
 }
@@ -7067,6 +7307,16 @@ cmd_so_set_value_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_value:
+ * @wbc: #WorkbookControl
+ * @text: description
+ * @pref: cell reference
+ * @new_val: (transfer full): new value
+ * @sheet: #Sheet
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_value (WorkbookControl *wbc,
 		  const char *text,
@@ -7232,8 +7482,8 @@ cmd_hyperlink_finalize (GObject *cmd)
  * cmd_selection_hyperlink:
  * @wbc: the workbook control.
  * @style: (transfer full): style to apply to the selection
- * @opt_translated_name: An optional name to use in place of 'Hyperlink Cells'
- * @opt_content: optional content for otherwise empty cells.
+ * @opt_translated_name: (nullable): A name to use in place of 'Hyperlink Cells'
+ * @opt_content: (transfer full) (nullable): content for otherwise empty cells.
  *
  * Returns: %TRUE if there was a problem, %FALSE otherwise.
  **/
@@ -7303,10 +7553,8 @@ cmd_so_set_links_redo (GnmCommand *cmd, G_GNUC_UNUSED WorkbookControl *wbc)
 		sheet_widget_list_base_set_result_type (me->so, me->as_index);
 		me->as_index = old_as_index;
 	}
-	if (me->output)
-		gnm_expr_top_unref (me->output);
-	if (me->content)
-		gnm_expr_top_unref (me->content);
+	gnm_expr_top_unref (me->output);
+	gnm_expr_top_unref (me->content);
 	me->output = old_output;
 	me->content = old_content;
 
@@ -7324,13 +7572,21 @@ cmd_so_set_links_finalize (GObject *cmd)
 {
 	CmdSOSetLink *me = CMD_SO_SET_LINKS (cmd);
 
-	if (me->output)
-		gnm_expr_top_unref (me->output);
-	if (me->content)
-		gnm_expr_top_unref (me->content);
+	gnm_expr_top_unref (me->output);
+	gnm_expr_top_unref (me->content);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_links:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @output: (transfer full) (nullable): new output link
+ * @content: (transfer full) (nullable): new content link
+ * @as_index: whether to use index
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_links (WorkbookControl *wbc,
 		  SheetObject *so,
@@ -7404,6 +7660,15 @@ cmd_so_set_frame_label_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_frame_label:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @old_label: (transfer full): previous label
+ * @new_label: (transfer full): new label
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_frame_label (WorkbookControl *wbc,
 			SheetObject *so,
@@ -7466,15 +7731,23 @@ cmd_so_set_button_finalize (GObject *cmd)
 {
 	CmdSOSetButton *me = CMD_SO_SET_BUTTON (cmd);
 
-	if (me->new_link)
-		gnm_expr_top_unref (me->new_link);
-	if (me->old_link)
-		gnm_expr_top_unref (me->old_link);
+	gnm_expr_top_unref (me->new_link);
+	gnm_expr_top_unref (me->old_link);
 	g_free (me->old_label);
 	g_free (me->new_label);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_button:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @lnk: (transfer full) (nullable): new link
+ * @old_label: (transfer full): previous label
+ * @new_label: (transfer full): new label
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_button (WorkbookControl *wbc,
 		   SheetObject *so, GnmExprTop const *lnk,
@@ -7544,10 +7817,8 @@ cmd_so_set_radio_button_finalize (GObject *cmd)
 {
 	CmdSOSetRadioButton *me = CMD_SO_SET_RADIO_BUTTON (cmd);
 
-	if (me->new_link)
-		gnm_expr_top_unref (me->new_link);
-	if (me->old_link)
-		gnm_expr_top_unref (me->old_link);
+	gnm_expr_top_unref (me->new_link);
+	gnm_expr_top_unref (me->old_link);
 	g_free (me->old_label);
 	g_free (me->new_label);
 	value_release (me->old_value);
@@ -7555,6 +7826,18 @@ cmd_so_set_radio_button_finalize (GObject *cmd)
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_radio_button:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @lnk: (transfer full) (nullable): new link
+ * @old_label: (transfer full): previous label
+ * @new_label: (transfer full): new label
+ * @old_value: (transfer full): previous value
+ * @new_value: (transfer full): new value
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_radio_button (WorkbookControl *wbc,
 			 SheetObject *so, GnmExprTop const *lnk,
@@ -7623,15 +7906,23 @@ cmd_so_set_checkbox_finalize (GObject *cmd)
 {
 	CmdSOSetCheckbox *me = CMD_SO_SET_CHECKBOX (cmd);
 
-	if (me->new_link)
-		gnm_expr_top_unref (me->new_link);
-	if (me->old_link)
-		gnm_expr_top_unref (me->old_link);
+	gnm_expr_top_unref (me->new_link);
+	gnm_expr_top_unref (me->old_link);
 	g_free (me->old_label);
 	g_free (me->new_label);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_checkbox:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @lnk: (transfer full) (nullable): new link
+ * @old_label: (transfer full): previous label
+ * @new_label: (transfer full): new label
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_checkbox (WorkbookControl *wbc,
 		     SheetObject *so, GnmExprTop const *lnk,
@@ -7728,13 +8019,25 @@ cmd_so_set_adjustment_finalize (GObject *cmd)
 {
 	CmdSOSetAdjustment *me = CMD_SO_SET_ADJUSTMENT (cmd);
 
-	if (me->new_link)
-		gnm_expr_top_unref (me->new_link);
-	if (me->old_link)
-		gnm_expr_top_unref (me->old_link);
+	gnm_expr_top_unref (me->new_link);
+	gnm_expr_top_unref (me->old_link);
 	gnm_command_finalize (cmd);
 }
 
+/**
+ * cmd_so_set_adjustment:
+ * @wbc: #WorkbookControl
+ * @so: #SheetObject
+ * @lnk: (transfer full) (nullable): new link
+ * @horizontal: whether horizontal
+ * @lower: lower bound
+ * @upper: upper bound
+ * @step: step increment
+ * @page: page increment
+ * @undo_label: (transfer none) (nullable): undo label
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_so_set_adjustment (WorkbookControl *wbc,
 		       SheetObject *so, GnmExprTop const *lnk,
@@ -7767,6 +8070,12 @@ cmd_so_set_adjustment (WorkbookControl *wbc,
 
 /******************************************************************/
 
+/**
+ * cmd_autofilter_add_remove:
+ * @wbc: #WorkbookControl
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_autofilter_add_remove (WorkbookControl *wbc)
 {
@@ -7800,7 +8109,7 @@ cmd_autofilter_add_remove (WorkbookControl *wbc)
 				error = g_strdup_printf
 					(_("Auto Filter blocked by %s"),
 					 name);
-				g_free(name);
+				g_free (name);
 				go_cmd_context_error_invalid
 					(GO_CMD_CONTEXT (wbc),
 					 _("AutoFilter"), error);
@@ -7889,9 +8198,19 @@ cmd_autofilter_add_remove (WorkbookControl *wbc)
 
 /******************************************************************/
 
-gboolean cmd_autofilter_set_condition (WorkbookControl *wbc,
-				       GnmFilter *filter, unsigned i,
-				       GnmFilterCondition *cond)
+/**
+ * cmd_autofilter_set_condition:
+ * @wbc: #WorkbookControl
+ * @filter: #GnmFilter
+ * @i: column index
+ * @cond: (transfer full) (nullable): new filter condition
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
+gboolean
+cmd_autofilter_set_condition (WorkbookControl *wbc,
+			      GnmFilter *filter, unsigned i,
+			      GnmFilterCondition *cond)
 {
 	char *descr = NULL, *name = NULL;
 	GOUndo *undo = NULL;
@@ -7902,7 +8221,7 @@ gboolean cmd_autofilter_set_condition (WorkbookControl *wbc,
 						  NULL, TRUE);
 	g_return_val_if_fail (undo != NULL, TRUE);
 	redo = gnm_undo_filter_set_condition_new (filter, i,
-						 cond, FALSE);
+						  cond, FALSE);
 	g_return_val_if_fail (redo != NULL, TRUE);
 
 	name = undo_range_name (filter->sheet, &(filter->r));
@@ -7928,6 +8247,13 @@ cmd_page_breaks_set_breaks (Sheet *sheet,
 	SHEET_FOREACH_CONTROL (sheet, sv, sc, wb_control_menu_state_update (sc_wbc (sc), MS_PAGE_BREAKS););
 }
 
+/**
+ * cmd_page_breaks_clear:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_page_breaks_clear (WorkbookControl *wbc, Sheet *sheet)
 {
@@ -7980,6 +8306,14 @@ cmd_page_breaks_clear (WorkbookControl *wbc, Sheet *sheet)
 		return TRUE;
 }
 
+/**
+ * cmd_page_break_toggle:
+ * @wbc: #WorkbookControl
+ * @sheet: #Sheet
+ * @is_vert: whether vertical
+ *
+ * Returns: %TRUE if there was a problem.
+ **/
 gboolean
 cmd_page_break_toggle (WorkbookControl *wbc, Sheet *sheet, gboolean is_vert)
 {

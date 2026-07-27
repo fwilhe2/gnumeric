@@ -276,7 +276,7 @@ sylk_write_sheet (SylkWriter *state)
 	GnmRange extent;
 	unsigned ui;
 	GnmRange whole_sheet;
-	GnmStyle **col_defs;
+	GPtrArray *col_defs;
 	ColRowInfo const *cr_def;
 	int col, row;
 
@@ -305,7 +305,7 @@ sylk_write_sheet (SylkWriter *state)
 
 	// Column styles.
 	for (col = extent.start.col; col <= extent.end.col; col++) {
-		sylk_write_style (state, col_defs[col]);
+		sylk_write_style (state, g_ptr_array_index (col_defs, col));
 		gsf_output_printf (state->output, ";C%d\r\n", col + 1);
 	}
 
@@ -344,7 +344,7 @@ sylk_write_sheet (SylkWriter *state)
 		extent.end.row,		extent.end.col);
 
 /* Global options */
-	gsf_output_printf (state->output, "O;%c%d %f",
+	gsf_output_printf (state->output, "O;%c%d %" GNM_FORMAT_f,
 		(state->wb->iteration.enabled ? 'A' : 'G'),
 		state->wb->iteration.max_number,
 		state->wb->iteration.tolerance);
@@ -363,7 +363,7 @@ sylk_write_sheet (SylkWriter *state)
 	sheet_foreach_cell_in_range (sheet, CELL_ITER_IGNORE_BLANK, &extent,
 				     (CellIterFunc) cb_sylk_write_cell, state);
 
-	g_free (col_defs);
+	g_ptr_array_free (col_defs, TRUE);
 }
 
 static GnmConventions *
@@ -408,7 +408,7 @@ sylk_file_save (GOFileSaver const *fs, GOIOContext *io_context,
 
 	gsf_output_puts (output, "E\r\n");
 	gnm_pop_C_locale (locale);
-	gnm_conventions_unref (state.convs);
+	g_object_unref (state.convs);
 
 	g_hash_table_destroy (state.font_hash);
 	g_ptr_array_free (state.fonts, TRUE);

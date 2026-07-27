@@ -15,9 +15,10 @@
  * range_concatenate:
  * @data: (element-type utf8) (transfer none):
  * @res: (out) (transfer full):
+ * @user: (nullable): ignored.
  *
  * Returns: non-zero on error.
- */
+ **/
 int
 range_concatenate (GPtrArray *data, char **res, gpointer user)
 {
@@ -25,8 +26,11 @@ range_concatenate (GPtrArray *data, char **res, gpointer user)
 	size_t len = 0;
 	GString *str;
 
-	for (ui = 0; ui < data->len; ui++)
+	for (ui = 0; ui < data->len; ui++) {
 		len += strlen (g_ptr_array_index (data, ui));
+		if (len >= INT_MAX)
+			return 1;
+	}
 
 	str = g_string_sized_new (len);
 

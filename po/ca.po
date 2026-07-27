@@ -24,7 +24,7 @@ msgstr ""
 "Project-Id-Version: gnumeric\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gnumeric/issues\n"
 "POT-Creation-Date: 2020-07-25 10:19+0000\n"
-"PO-Revision-Date: 2020-07-28 14:49+0000\n"
+"PO-Revision-Date: 2023-08-17 14:49+0000\n"
 "Last-Translator: Miquel-Àngel Burgos i Fradeja <miquel.angel.burgos@gmail."
 "com>, 2020\n"
 "Language-Team: Catalan (https://www.transifex.com/softcatala/teams/62837/"
@@ -487,14 +487,14 @@ msgstr "S'ignorarà l'objecte amb àncora incompleta %2x"
 
 #: ../plugins/excel/xlsx-read-pivot.c:957
 msgid ""
-"Encountered both the  \"refreshedDate\" and the \"refreshedDateIso\" "
+"Encountered both the \"refreshedDate\" and the \"refreshedDateIso\" "
 "attributes!"
 msgstr ""
 "S'ha trobat tant l'atribut «refreshedDate» com l'atribut «refreshedDateIso»."
 
 #: ../plugins/excel/xlsx-read-pivot.c:1293
 #, c-format
-msgid "Skipping invalid pivot field group for field '%s' because : %s"
+msgid "Skipping invalid pivot field group for field '%s' because: %s"
 msgstr "S'està ometent el grup de camps dinàmics per al camp «%s» perquè: %s"
 
 #: ../plugins/excel/xlsx-read.c:379
@@ -510,7 +510,7 @@ msgstr "No es reconeix el valor enumerable «%s» per a l'atribut %s"
 #: ../plugins/excel/xlsx-read.c:514 ../plugins/excel/xlsx-read.c:573
 #: ../plugins/excel/xlsx-read.c:664
 #, c-format
-msgid "Integer '%s' is out of range, for attribute %s"
+msgid "Integer '%s' is out of range for attribute %s"
 msgstr "L'enter «%s» està fora del rang per a l'atribut %s"
 
 #: ../plugins/excel/xlsx-read.c:518 ../plugins/excel/xlsx-read.c:577
@@ -521,7 +521,7 @@ msgstr "L'enter «%s» no és vàlid per a l'atribut %s"
 
 #: ../plugins/excel/xlsx-read.c:543
 #, c-format
-msgid "Unsigned integer '%s' is out of range, for attribute %s"
+msgid "Unsigned integer '%s' is out of range for attribute %s"
 msgstr "El nombre sencer sense signe «%s» és fora de rang per a l'atribut %s"
 
 #: ../plugins/excel/xlsx-read.c:547
@@ -615,7 +615,7 @@ msgstr "Paper del fitxer XLSX, #%i"
 #: ../plugins/excel/xlsx-read.c:2252
 #: ../plugins/openoffice/openoffice-read.c:2913
 #, c-format
-msgid "Ignoring invalid data validation because : %s"
+msgid "Ignoring invalid data validation because: %s"
 msgstr "S'ignorarà la validació de les dades no vàlides perquè: %s"
 
 #: ../plugins/excel/xlsx-read.c:2774
@@ -728,7 +728,7 @@ msgstr ""
 
 #: ../plugins/excelplugins/excelplugins.c:706
 msgid ""
-"Excel plugin loader / xlfRegister: the second and third argument must be "
+"Excel plugin loader / xlfRegister: the second and third arguments must be "
 "strings (DLL name[ignored],exported name[mandatory],types string[mandatory])."
 msgstr ""
 "Carregador de connectors d'Excel / xlfRegister: el segon i el tercer "
@@ -1338,7 +1338,7 @@ msgstr "Línia no vàlida a la secció ROWS"
 
 #: ../plugins/mps/mps.c:229
 #, c-format
-msgid "Duplicate rows name %s"
+msgid "Duplicate row name %s"
 msgstr "Duplica el nom de les files %s"
 
 #: ../plugins/mps/mps.c:247
@@ -2422,7 +2422,7 @@ msgid "The sheet is wider than Gnumeric can handle."
 msgstr "El full és més ample del que el Gnumeric pot gestionar."
 
 #: ../plugins/sc/sc.c:449
-msgid "Encountered precision dependent format without set precision."
+msgid "Encountered precision-dependent format without set precision."
 msgstr ""
 "S'ha trobat un format depenent de la precisió sense cap precisió establerta."
 
@@ -3114,11 +3114,11 @@ msgstr ""
 
 #: ../schemas/org.gnome.gnumeric.dialogs.gschema.xml.in.in.h:109
 msgid "Search &amp; Replace Preserves Case"
-msgstr "Cerca i reemplaça preserva les majúscules/minúscules"
+msgstr "Cerca i reemplaça conserva les majúscules/minúscules"
 
 #: ../schemas/org.gnome.gnumeric.dialogs.gschema.xml.in.in.h:110
 msgid "Search &amp; Replace preserves case as default"
-msgstr "Cerca i reemplaça preserva les majúscules/minúscules per defecte"
+msgstr "Cerca i reemplaça conserva les majúscules/minúscules per defecte"
 
 #: ../schemas/org.gnome.gnumeric.dialogs.gschema.xml.in.in.h:111
 msgid "Search &amp; Replace Poses Query"
@@ -3265,7 +3265,7 @@ msgstr "Mida màxima de desfer"
 #: ../schemas/org.gnome.gnumeric.gschema.xml.in.in.h:6
 msgid ""
 "This value determines the length of the undo chain. Each editing action has "
-"a size associate with it, to compare it with the memory requirements of a "
+"a size associated with it, to compare it with the memory requirements of a "
 "simple one-cell edit (size of 1). The undo list will be truncated when its "
 "total size exceeds this configurable value."
 msgstr ""
@@ -3689,7 +3689,7 @@ msgstr ""
 #: ../schemas/org.gnome.gnumeric.gschema.xml.in.in.h:77
 #: ../src/dialogs/dialog-preferences.c:808
 msgid "Sorting Preserves Formats"
-msgstr "L'ordenació preserva els formats"
+msgstr "L'ordenació conserva els formats"
 
 #: ../schemas/org.gnome.gnumeric.gschema.xml.in.in.h:78
 msgid ""
@@ -7897,7 +7897,7 @@ msgid "You should introduce a valid number as maximum"
 msgstr "Heu d'introduir un nombre màxim vàlid"
 
 #: ../src/dialogs/dialog-tabulate.c:208
-msgid "The maximum value should be bigger than the minimum"
+msgid "The maximum value should be greater than the minimum"
 msgstr "El valor màxim ha de ser més gran que el mínim"
 
 #: ../src/dialogs/dialog-tabulate.c:217
@@ -8723,7 +8723,7 @@ msgstr "Localització:"
 
 #: ../src/dialogs/cell-sort.ui.h:5
 msgid "Sorting _preserves formats"
-msgstr "L'ordenació _preserva els formats"
+msgstr "L'ordenació _conserva els formats"
 
 #: ../src/dialogs/cell-sort.ui.h:6
 msgid ""
@@ -9199,7 +9199,7 @@ msgstr "N_o seleccionis res"
 
 #: ../src/dialogs/dialog-stf-export.ui.h:28
 msgid ""
-"Move the selected sheet to the top of the list of to be exported sheets to "
+"Move the selected sheet to the top of the list of sheets to "
 "be exported first."
 msgstr ""
 "Mou el full seleccionat al començament de la llista de fulls per a exportar "
@@ -9207,7 +9207,7 @@ msgstr ""
 
 #: ../src/dialogs/dialog-stf-export.ui.h:29
 msgid ""
-"Raise the selected sheet in the list of to be exported sheets to be exported "
+"Raise the selected sheet in the list of sheets to be exported "
 "earlier."
 msgstr ""
 "Puja el full seleccionat en la llista de fulls per a exportar perquè "
@@ -9215,7 +9215,7 @@ msgstr ""
 
 #: ../src/dialogs/dialog-stf-export.ui.h:30
 msgid ""
-"Lower the selected sheet in the list of to be exported sheets to be exported "
+"Lower the selected sheet in the list of sheets to be exported "
 "later."
 msgstr ""
 "Baixa el full seleccionat en la llista de fulls per a exportar perquè "
@@ -9223,7 +9223,7 @@ msgstr ""
 
 #: ../src/dialogs/dialog-stf-export.ui.h:31
 msgid ""
-"Move the selected sheet to the end of the list of to be exported sheets to "
+"Move the selected sheet to the end of the list of sheets to "
 "be exported last."
 msgstr ""
 "Mou el full seleccionat al final de la llista de fulls per a exportar perquè "
@@ -11228,7 +11228,7 @@ msgstr "En definir, no distingeixis entre majúscules i minúscules"
 
 #: ../src/dialogs/search-replace.ui.h:17
 msgid "_Preserve case"
-msgstr "_Preserva majúscula/minúscula"
+msgstr "_Conserva majúscula/minúscula"
 
 #: ../src/dialogs/search-replace.ui.h:18
 msgid "Attempt to preserve case of text when replacing"
@@ -15833,7 +15833,7 @@ msgstr "_Surt"
 
 #: ../src/wbc-gtk-actions.c:2061
 msgid "Quit the application"
-msgstr "Tanca l'aplicació"
+msgstr "Surt de l'aplicació"
 
 #: ../src/wbc-gtk-actions.c:2066
 msgid "_Edit"

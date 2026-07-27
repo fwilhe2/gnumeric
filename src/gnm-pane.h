@@ -1,5 +1,5 @@
-#ifndef _GNM_PANE_H_
-# define _GNM_PANE_H_
+#ifndef GNM_PANE_H_
+#define GNM_PANE_H_
 
 #include <gnumeric-fwd.h>
 #include <goffice/goffice.h>
@@ -88,7 +88,7 @@ gboolean gnm_pane_handle_motion (GnmPane *pane,
 				 GocCanvas    *canvas,
 				 gint64 x, gint64 y,
 				 GnmPaneSlideFlags   slide_flags,
-				 GnmPaneSlideHandler handler,
+				 GnmPaneSlideHandler slide_handler,
 				 gpointer user_data);
 
 /************************************************************************/
@@ -97,4 +97,4 @@ void gnm_pane_set_direction     (GnmPane *pane, GocDirection direction);
 
 G_END_DECLS
 
-#endif /* _GNM_PANE_H_ */
+#endif /* GNM_PANE_H_ */

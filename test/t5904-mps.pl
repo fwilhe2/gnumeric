@@ -8,6 +8,8 @@ use GnumericTest;
 # See test_importer comments for mode definitions.
 my $mode = ((shift @ARGV) || "check");
 
+my $args = { 'mode' => $mode, 'nofont' => 1 };
+
 &message ("Check the mps importer.");
-&test_importer ("$samples/solver/blend.mps", "aaa27556fa3e26bb5abebc42b6eefce78cd2ab07", $mode);
-&test_importer ("$samples/solver/afiro.mps", "ecf8aafd4edcd53336799c85deb31bc4ceb7b0c4", $mode);
+&test_importer ("$samples/solver/blend.mps", "b11ee3fc38845d13eb8b57c8e17ae764d56386f2", $args);
+&test_importer ("$samples/solver/afiro.mps", "467180786aac14a58955335fb6e00d4652cedfbf", $args);

@@ -74,23 +74,23 @@ cb_delete_cell_ok_clicked (DeleteCellState *state)
 	rows = state->sel->end.row - state->sel->start.row + 1;
 
 	switch (i) {
-	case 0 :
+	case 0:
 		cmd_shift_rows (wbc, state->sheet,
 				state->sel->end.col + 1,
 				state->sel->start.row,
 				state->sel->end.row, - cols);
 		break;
-	case 1 :
+	case 1:
 		cmd_shift_cols (wbc, state->sheet,
 				state->sel->start.col,
 				state->sel->end.col,
 				state->sel->end.row + 1, - rows);
 		break;
-	case 2 :
+	case 2:
 		cmd_delete_rows (wbc, state->sheet,
 				 state->sel->start.row, rows);
 		break;
-	default :
+	default:
 		cmd_delete_cols (wbc, state->sheet,
 				 state->sel->start.col, cols);
 		break;
@@ -174,7 +174,7 @@ dialog_delete_cells (WBCGtk *wbcg)
 				     ? "radio_0" : "radio_1")),
 		 TRUE);
 
-	wbc_gtk_attach_guru (state->wbcg, state->dialog);
+	wbcg_attach_guru (state->wbcg, state->dialog);
 	g_object_set_data_full (G_OBJECT (state->dialog),
 		"state", state, (GDestroyNotify) cb_delete_cell_destroy);
 

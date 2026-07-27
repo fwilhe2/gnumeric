@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_OBJECT_IMAGE_H_
-# define _GNM_SHEET_OBJECT_IMAGE_H_
+#ifndef GNM_SHEET_OBJECT_IMAGE_H_
+#define GNM_SHEET_OBJECT_IMAGE_H_
 
 #include <sheet-object.h>
 
@@ -9,7 +9,7 @@ G_BEGIN_DECLS
 #define GNM_SO_IMAGE(o)	 (G_TYPE_CHECK_INSTANCE_CAST((o), GNM_SO_IMAGE_TYPE, SheetObjectImage))
 #define GNM_IS_SO_IMAGE(o) (G_TYPE_CHECK_INSTANCE_TYPE((o), GNM_SO_IMAGE_TYPE))
 
-typedef struct _SheetObjectImage SheetObjectImage;
+typedef struct SheetObjectImage_ SheetObjectImage;
 
 GType	     sheet_object_image_get_type (void);
 void sheet_object_image_set_image (SheetObjectImage *soi,
@@ -22,4 +22,4 @@ void sheet_object_image_set_crop (SheetObjectImage *soi,
 
 G_END_DECLS
 
-#endif /* _GNM_SHEET_OBJECT_IMAGE_H_ */
+#endif /* GNM_SHEET_OBJECT_IMAGE_H_ */

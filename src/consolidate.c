@@ -99,6 +99,11 @@ cb_value_compare (GnmValue const *a, GnmValue const *b)
 
 /**********************************************************************************/
 
+/**
+ * gnm_consolidate_new:
+ *
+ * Returns: (transfer full): a newly allocated #GnmConsolidate.
+ **/
 GnmConsolidate *
 gnm_consolidate_new (void)
 {
@@ -113,6 +118,13 @@ gnm_consolidate_new (void)
 	return cs;
 }
 
+/**
+ * gnm_consolidate_free:
+ * @cs: (transfer full): #GnmConsolidate
+ * @content_only: if %TRUE, only free the contents of @cs, not @cs itself.
+ *
+ * Frees a #GnmConsolidate.
+ **/
 void
 gnm_consolidate_free (GnmConsolidate *cs, gboolean content_only)
 {
@@ -151,6 +163,11 @@ gnm_consolidate_unref (GnmConsolidate *cs)
 		gnm_consolidate_free (cs, TRUE);
 }
 
+/**
+ * gnm_consolidate_get_type:
+ *
+ * Returns: the #GType for #GnmConsolidate.
+ **/
 GType
 gnm_consolidate_get_type (void)
 {
@@ -164,6 +181,13 @@ gnm_consolidate_get_type (void)
 	return t;
 }
 
+/**
+ * gnm_consolidate_set_function:
+ * @cs: #GnmConsolidate
+ * @fd: #GnmFunc
+ *
+ * Sets the function to use for consolidation.
+ **/
 void
 gnm_consolidate_set_function (GnmConsolidate *cs, GnmFunc *fd)
 {
@@ -177,6 +201,13 @@ gnm_consolidate_set_function (GnmConsolidate *cs, GnmFunc *fd)
 	gnm_func_inc_usage (fd);
 }
 
+/**
+ * gnm_consolidate_set_mode:
+ * @cs: #GnmConsolidate
+ * @mode: #GnmConsolidateMode
+ *
+ * Sets the mode for consolidation.
+ **/
 void
 gnm_consolidate_set_mode (GnmConsolidate *cs, GnmConsolidateMode mode)
 {
@@ -185,6 +216,15 @@ gnm_consolidate_set_mode (GnmConsolidate *cs, GnmConsolidateMode mode)
 	cs->mode = mode;
 }
 
+/**
+ * gnm_consolidate_check_destination:
+ * @cs: #GnmConsolidate
+ * @dao: #data_analysis_output_t
+ *
+ * Checks if the destination range is valid and doesn't overlap with sources.
+ *
+ * Returns: %TRUE if the destination is valid.
+ **/
 gboolean
 gnm_consolidate_check_destination (GnmConsolidate *cs, data_analysis_output_t *dao)
 {
@@ -195,13 +235,13 @@ gnm_consolidate_check_destination (GnmConsolidate *cs, data_analysis_output_t *d
 	g_return_val_if_fail (cs != NULL, FALSE);
 	g_return_val_if_fail (dao != NULL, FALSE);
 
-	if (dao->type == NewSheetOutput || dao->type == NewWorkbookOutput)
+	if (dao->type == GNM_DAO_OUTPUT_NEWSHEET || dao->type == GNM_DAO_OUTPUT_NEWWORKBOOK)
 		return TRUE;
 
 	range_init (&r, dao->start_col, dao->start_row,
 		    dao->start_col + dao->cols - 1,
 		    dao->start_row + dao->rows - 1);
-	new = gnm_sheet_range_new (dao->sheet, &r);
+	new = gnm_sheet_range_new (dao->dst_sheet, &r);
 
 	for (l = cs->src; l != NULL; l = l->next) {
 		GnmSheetRange const *gr = l->data;
@@ -216,6 +256,15 @@ gnm_consolidate_check_destination (GnmConsolidate *cs, data_analysis_output_t *d
 	return TRUE;
 }
 
+/**
+ * gnm_consolidate_add_source:
+ * @cs: #GnmConsolidate
+ * @range: (transfer full): #GnmValue representing a range
+ *
+ * Adds a source range to the consolidation.
+ *
+ * Returns: %TRUE on success.
+ **/
 gboolean
 gnm_consolidate_add_source (GnmConsolidate *cs, GnmValue *range)
 {
@@ -267,6 +316,12 @@ cb_tree_free (GnmValue const *key, TreeItem *ti,
 	return FALSE;
 }
 
+/**
+ * tree_free:
+ * @tree: (transfer full): #GTree
+ *
+ * Frees a tree used for consolidation.
+ **/
 static void
 tree_free (GTree *tree)
 {
@@ -404,12 +459,28 @@ retrieve_col_tree (GnmConsolidate *cs)
 	return tree;
 }
 
+/**
+ * cb_key_find:
+ * @current: #GnmValue
+ * @wanted: #GnmValue
+ *
+ * Helper for finding a key in a list.
+ *
+ * Returns: %TRUE if not equal.
+ **/
 static gboolean
 cb_key_find (GnmValue const *current, GnmValue const *wanted)
 {
 	return !(value_compare (current, wanted, TRUE) == IS_EQUAL);
 }
 
+/**
+ * key_list_get:
+ * @cs: #GnmConsolidate
+ * @is_cols: %TRUE for columns.
+ *
+ * Returns: (transfer full) (element-type GnmValue): list of unique keys.
+ **/
 static GSList *
 key_list_get (GnmConsolidate *cs, gboolean is_cols)
 {
@@ -554,10 +625,15 @@ typedef struct {
 } ConsolidateContext;
 
 /**
- * row_consolidate_row:
+ * cb_row_tree:
+ * @key: #GnmValue
+ * @ti: #TreeItem
+ * @cc: #ConsolidateContext
  *
  * Consolidates a list of regions which all specify a single
  * row and share the same key into a single target range.
+ *
+ * Returns: %FALSE.
  **/
 static int
 cb_row_tree (GnmValue const *key, TreeItem *ti, ConsolidateContext *cc)
@@ -576,6 +652,8 @@ cb_row_tree (GnmValue const *key, TreeItem *ti, ConsolidateContext *cc)
 
 /**
  * row_consolidate:
+ * @cs: #GnmConsolidate
+ * @dao: #data_analysis_output_t
  *
  * High level routine for row consolidation, retrieves
  * the row (name) hash and uses a callback routine to do a
@@ -603,9 +681,14 @@ row_consolidate (GnmConsolidate *cs, data_analysis_output_t *dao)
 
 /**
  * cb_col_tree:
+ * @key: #GnmValue
+ * @ti: #TreeItem
+ * @cc: #ConsolidateContext
  *
  * Consolidates a list of regions which all specify a single
  * column and share the same key into a single target range.
+ *
+ * Returns: %FALSE.
  **/
 static gboolean
 cb_col_tree (GnmValue const *key, TreeItem *ti, ConsolidateContext *cc)
@@ -624,6 +707,8 @@ cb_col_tree (GnmValue const *key, TreeItem *ti, ConsolidateContext *cc)
 
 /**
  * col_consolidate:
+ * @cs: #GnmConsolidate
+ * @dao: #data_analysis_output_t
  *
  * High level routine for column consolidation, retrieves
  * the column (name) hash and uses a callback routine to do a
@@ -650,6 +735,14 @@ col_consolidate (GnmConsolidate *cs, data_analysis_output_t *dao)
 	tree_free (tree);
 }
 
+/**
+ * colrow_formula_args_build:
+ * @row_name: #GnmValue
+ * @col_name: #GnmValue
+ * @granges: (element-type GnmSheetRange): sources.
+ *
+ * Returns: (transfer full): list of expressions for consolidation.
+ **/
 static GnmExprList *
 colrow_formula_args_build (GnmValue const *row_name, GnmValue const *col_name, GSList *granges)
 {
@@ -693,6 +786,13 @@ colrow_formula_args_build (GnmValue const *row_name, GnmValue const *col_name, G
 	return args;
 }
 
+/**
+ * colrow_consolidate:
+ * @cs: #GnmConsolidate
+ * @dao: #data_analysis_output_t
+ *
+ * Consolidation when both row and column labels are used.
+ **/
 static void
 colrow_consolidate (GnmConsolidate *cs, data_analysis_output_t *dao)
 {
@@ -744,6 +844,15 @@ colrow_consolidate (GnmConsolidate *cs, data_analysis_output_t *dao)
 	g_slist_free (cols);
 }
 
+/**
+ * consolidate_apply:
+ * @cs: #GnmConsolidate
+ * @dao: #data_analysis_output_t
+ *
+ * Applies the consolidation.
+ *
+ * Returns: %TRUE on failure.
+ **/
 static gboolean
 consolidate_apply (GnmConsolidate *cs,
 		   data_analysis_output_t *dao)
@@ -774,60 +883,109 @@ consolidate_apply (GnmConsolidate *cs,
 
 
 
-gboolean
-gnm_tool_consolidate_engine (G_GNUC_UNUSED GOCmdContext *gcc, data_analysis_output_t *dao, gpointer specs,
-			 analysis_tool_engine_t selector, gpointer result)
+G_DEFINE_TYPE (GnmConsolidateTool, gnm_consolidate_tool, GNM_ANALYSIS_TOOL_TYPE)
+
+static void
+gnm_consolidate_tool_init (G_GNUC_UNUSED GnmConsolidateTool *tool)
 {
-	GnmConsolidate *cs = specs;
+	tool->cs = NULL;
+}
 
-	switch (selector) {
-	case TOOL_ENGINE_UPDATE_DESCRIPTOR:
-		return (dao_command_descriptor (dao, _("Consolidating to (%s)"),
-						result) == NULL);
-	case TOOL_ENGINE_UPDATE_DAO:
-	{
-		GnmRange r;
-
-		range_init (&r, 0, 0, 0, 0);
-		get_bounding_box (cs->src, &r);
-
-		if ((cs->mode & CONSOLIDATE_ROW_LABELS) &&
-		    (cs->mode & CONSOLIDATE_COL_LABELS))
-			dao_adjust (dao, r.end.col + 1 +
-				    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
-				     1 : 0),
-				    r.end.row + 1 +
-				    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
-				     1 : 0));
-		else if (cs->mode & CONSOLIDATE_ROW_LABELS)
-			dao_adjust (dao, r.end.col + 1,
-				    r.end.row + 1 +
-				    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
-				     1 : 0));
-
-		else if (cs->mode & CONSOLIDATE_COL_LABELS)
-			dao_adjust (dao, r.end.col + 1 +
-				    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
-				     1 : 0),
-				    r.end.row + 1);
-		else
-			dao_adjust (dao, r.end.col + 1,
-				    r.end.row + 1);
-		return FALSE;
+static void
+gnm_consolidate_tool_finalize (GObject *obj)
+{
+	GnmConsolidateTool *tool = GNM_CONSOLIDATE_TOOL (obj);
+	if (tool->cs) {
+		gnm_consolidate_free (tool->cs, TRUE);
+		tool->cs = NULL;
 	}
-	case TOOL_ENGINE_CLEAN_UP:
-		gnm_consolidate_free (cs, TRUE);
-		return FALSE;
-	case TOOL_ENGINE_LAST_VALIDITY_CHECK:
-		return FALSE;
-	case TOOL_ENGINE_PREPARE_OUTPUT_RANGE:
-		dao_prepare_output (NULL, dao, _("Data Consolidation"));
-		return FALSE;
-	case TOOL_ENGINE_FORMAT_OUTPUT_RANGE:
-		return dao_format_output (dao, _("Data Consolidation"));
-	case TOOL_ENGINE_PERFORM_CALC:
-	default:
-		return consolidate_apply (cs, dao);
-	}
-	return TRUE;  /* We shouldn't get here */
+	G_OBJECT_CLASS (gnm_consolidate_tool_parent_class)->finalize (obj);
+}
+
+static gboolean
+gnm_consolidate_tool_update_dao (GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	GnmConsolidate *cs = GNM_CONSOLIDATE_TOOL (tool)->cs;
+	GnmRange r;
+
+	range_init (&r, 0, 0, 0, 0);
+	get_bounding_box (cs->src, &r);
+
+	if ((cs->mode & CONSOLIDATE_ROW_LABELS) &&
+	    (cs->mode & CONSOLIDATE_COL_LABELS))
+		dao_adjust (dao, r.end.col + 1 +
+			    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
+			     1 : 0),
+			    r.end.row + 1 +
+			    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
+			     1 : 0));
+	else if (cs->mode & CONSOLIDATE_ROW_LABELS)
+		dao_adjust (dao, r.end.col + 1,
+			    r.end.row + 1 +
+			    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
+			     1 : 0));
+
+	else if (cs->mode & CONSOLIDATE_COL_LABELS)
+		dao_adjust (dao, r.end.col + 1 +
+			    ((cs->mode & CONSOLIDATE_COPY_LABELS) ?
+			     1 : 0),
+			    r.end.row + 1);
+	else
+		dao_adjust (dao, r.end.col + 1,
+			    r.end.row + 1);
+	return FALSE;
+}
+
+static char *
+gnm_consolidate_tool_update_descriptor (G_GNUC_UNUSED GnmAnalysisTool *tool, data_analysis_output_t *dao)
+{
+	return dao_command_descriptor (dao, _("Consolidating to (%s)"));
+}
+
+static gboolean
+gnm_consolidate_tool_prepare_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	dao_prepare_output (wbc, dao, _("Data Consolidation"));
+	return FALSE;
+}
+
+static gboolean
+gnm_consolidate_tool_format_output_range (G_GNUC_UNUSED GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	return dao_format_output (wbc, dao, _("Data Consolidation"));
+}
+
+static gboolean
+gnm_consolidate_tool_perform_calc (GnmAnalysisTool *tool, WorkbookControl *wbc, data_analysis_output_t *dao)
+{
+	GnmConsolidate *cs = GNM_CONSOLIDATE_TOOL (tool)->cs;
+	return consolidate_apply (cs, dao);
+}
+
+static void
+gnm_consolidate_tool_class_init (GnmConsolidateToolClass *klass)
+{
+	GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+	GnmAnalysisToolClass *at_class = GNM_ANALYSIS_TOOL_CLASS (klass);
+
+	gobject_class->finalize = gnm_consolidate_tool_finalize;
+	at_class->update_dao = gnm_consolidate_tool_update_dao;
+	at_class->update_descriptor = gnm_consolidate_tool_update_descriptor;
+	at_class->prepare_output_range = gnm_consolidate_tool_prepare_output_range;
+	at_class->format_output_range = gnm_consolidate_tool_format_output_range;
+	at_class->perform_calc = gnm_consolidate_tool_perform_calc;
+}
+
+/**
+ * gnm_consolidate_tool_new:
+ * @cs: #GnmConsolidate
+ *
+ * Returns: (transfer full): a newly allocated #GnmAnalysisTool.
+ **/
+GnmAnalysisTool *
+gnm_consolidate_tool_new (GnmConsolidate *cs)
+{
+	GnmConsolidateTool *tool = g_object_new (GNM_TYPE_CONSOLIDATE_TOOL, NULL);
+	tool->cs = cs;
+	return GNM_ANALYSIS_TOOL (tool);
 }

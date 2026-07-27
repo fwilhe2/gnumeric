@@ -66,8 +66,8 @@ set_pending_convs (GOData *data, const GnmConventions *convs)
 {
 	g_object_set_data_full (G_OBJECT (data),
 				"unserialize-convs",
-				gnm_conventions_ref ((gpointer)convs),
-				(GDestroyNotify)gnm_conventions_unref);
+				convs ? g_object_ref ((gpointer)convs) : NULL,
+				(GDestroyNotify)g_object_unref);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -101,8 +101,7 @@ render_val (GnmValue const *v, int i, int j,
 		cell = sheet_cell_get (start_sheet, r.start.col, r.start.row);
 		if (cell == NULL)
 			return NULL;
-		gnm_cell_eval (cell);
-		v = cell->value;
+		v = gnm_cell_eval (cell);
 
 		if (fmt == NULL)
 			fmt = gnm_cell_get_format (cell);
@@ -124,8 +123,7 @@ gnm_go_data_dup (GOData const *src)
 	GnmDependent *dst_dep = gnm_go_data_get_dep (dst);
 
 	dst_dep->texpr = src_dep->texpr;
-	if (dst_dep->texpr)
-		gnm_expr_top_ref (dst_dep->texpr);
+	gnm_expr_top_ref (dst_dep->texpr);
 
 	if (src_dep->sheet)
 		dependent_set_sheet (dst_dep, src_dep->sheet);
@@ -255,6 +253,13 @@ gnm_go_data_unserialize (GOData *dat, char const *str, gpointer user)
 	return FALSE;
 }
 
+/**
+ * gnm_go_data_set_sheet:
+ * @dat: #GOData
+ * @sheet: (nullable): #Sheet
+ *
+ * Sets the sheet for @dat.
+ **/
 void
 gnm_go_data_set_sheet (GOData *dat, Sheet *sheet)
 {
@@ -304,6 +309,12 @@ gnm_go_data_get_sheet (GOData const *dat)
 	return dep->sheet;
 }
 
+/**
+ * gnm_go_data_get_expr:
+ * @dat: #GOData
+ *
+ * Returns: (transfer none) (nullable): the expression for @dat.
+ **/
 GnmExprTop const *
 gnm_go_data_get_expr (GOData const *dat)
 {
@@ -332,7 +343,7 @@ gnm_go_data_foreach_dep (GOData *dat, SheetObject *so,
 
 /**************************************************************************/
 
-struct _GnmGODataScalar {
+struct GnmGODataScalar_ {
 	GODataScalar	 base;
 	GnmDependent	 dep;
 	GnmValue	*val;
@@ -455,7 +466,10 @@ gnm_go_data_scalar_debug_name (GnmDependent const *dep, GString *target)
 	g_string_append_printf (target, "GraphScalar%p", (void *)dep);
 }
 
-static DEPENDENT_MAKE_TYPE (gnm_go_data_scalar, .eval = gnm_go_data_scalar_eval, .debug_name = gnm_go_data_scalar_debug_name)
+static DEPENDENT_MAKE_TYPE (gnm_go_data_scalar,
+			    .eval = gnm_go_data_scalar_eval,
+			    .debug_name = gnm_go_data_scalar_debug_name,
+			    .q_array_context = FALSE)
 
 static void
 gnm_go_data_scalar_init (GObject *obj)
@@ -464,10 +478,20 @@ gnm_go_data_scalar_init (GObject *obj)
 	scalar->dep.flags = gnm_go_data_scalar_get_dep_type ();
 }
 
+/**
+ * gnm_go_data_scalar_get_type:
+ *
+ * Returns: the #GType for #GnmGODataScalar.
+ **/
 GSF_CLASS (GnmGODataScalar, gnm_go_data_scalar,
 	   gnm_go_data_scalar_class_init, gnm_go_data_scalar_init,
 	   GO_TYPE_DATA_SCALAR)
 
+/**
+ * gnm_go_data_scalar_new_expr:
+ * @sheet: Sheet
+ * @texpr: (transfer full): expression
+ */
 GOData *
 gnm_go_data_scalar_new_expr (Sheet *sheet, GnmExprTop const *texpr)
 {
@@ -479,7 +503,7 @@ gnm_go_data_scalar_new_expr (Sheet *sheet, GnmExprTop const *texpr)
 
 /**************************************************************************/
 
-struct _GnmGODataVector {
+struct GnmGODataVector_ {
 	GODataVector	base;
 	GnmDependent	 dep;
 	GnmValue	*val;
@@ -594,7 +618,7 @@ gnm_go_data_vector_load_len (GODataVector *dat)
 			}
 			break;
 
-		case VALUE_ARRAY : {
+		case VALUE_ARRAY: {
 			GnmValue *v;
 			int i, j;
 			new_len = 0;
@@ -653,8 +677,7 @@ cb_assign_val (GnmCellIter const *iter, struct assign_closure *dat)
 		return NULL;
 
 	if (iter->cell != NULL) {
-		gnm_cell_eval (iter->cell);
-		v = iter->cell->value;
+		v = gnm_cell_eval (iter->cell);
 	} else
 		v = NULL;
 
@@ -750,7 +773,7 @@ gnm_go_data_vector_load_values (GODataVector *dat)
 			minimum = maximum = vals[0] = go_nan;
 		break;
 
-	case VALUE_ARRAY : {
+	case VALUE_ARRAY: {
 		guint64 last = 0, max = dat->len;
 		int len = vec->val->v_array.y * vec->val->v_array.x;
 		int x = 0, y = vec->val->v_array.y;
@@ -763,7 +786,7 @@ gnm_go_data_vector_load_values (GODataVector *dat)
 				y--;
 			}
 			x--;
-			v = vec->val->v_array.vals [x][y];
+			v = vec->val->v_array.vals[x][y];
 
 			if (VALUE_IS_CELLRANGE (v)) {
 				gnm_rangeref_normalize (&v->v_range.cell,
@@ -881,8 +904,7 @@ cb_assign_string (GnmCellIter const *iter, struct string_closure *closure)
 	char *str = NULL;
 
 	if (iter->cell != NULL) {
-		gnm_cell_eval (iter->cell);
-		v = iter->cell->value;
+		v = gnm_cell_eval (iter->cell);
 	}
 	if (v != NULL)
 		str = format_value (gnm_cell_get_format (iter->cell), v, -1, closure->date_conv);
@@ -920,7 +942,7 @@ gnm_go_data_vector_get_str (GODataVector *dat, unsigned i)
 					y--;
 				}
 				x--;
-				v = vec->val->v_array.vals [x][y];
+				v = vec->val->v_array.vals[x][y];
 
 				if (VALUE_IS_CELLRANGE (v)) {
 					/* actually we only need to cache in that case */
@@ -1059,8 +1081,8 @@ gnm_go_data_vector_get_markup (GODataVector *dat, unsigned i)
 			int len = vec->as_col? vec->val->v_array.y: vec->val->v_array.x;
 			while (len-- > 0) {
 				v = vec->as_col
-					? vec->val->v_array.vals [0][len]
-					: vec->val->v_array.vals [len][0];
+					? vec->val->v_array.vals[0][len]
+					: vec->val->v_array.vals[len][0];
 
 				if (VALUE_IS_CELLRANGE (v)) {
 					gnm_rangeref_normalize (&v->v_range.cell,
@@ -1119,7 +1141,10 @@ gnm_go_data_vector_debug_name (GnmDependent const *dep, GString *target)
 {
 	g_string_append_printf (target, "GraphVector%p", (void *)dep);
 }
-static DEPENDENT_MAKE_TYPE (gnm_go_data_vector, .eval = gnm_go_data_vector_eval, .debug_name = gnm_go_data_vector_debug_name)
+static DEPENDENT_MAKE_TYPE (gnm_go_data_vector,
+			    .eval = gnm_go_data_vector_eval,
+			    .debug_name = gnm_go_data_vector_debug_name,
+			    .q_array_context = TRUE)
 
 static void
 gnm_go_data_vector_init (GObject *obj)
@@ -1128,10 +1153,20 @@ gnm_go_data_vector_init (GObject *obj)
 	vec->dep.flags = gnm_go_data_vector_get_dep_type ();
 }
 
+/**
+ * gnm_go_data_vector_get_type:
+ *
+ * Returns: the #GType for #GnmGODataVector.
+ **/
 GSF_CLASS (GnmGODataVector, gnm_go_data_vector,
 	   gnm_go_data_vector_class_init, gnm_go_data_vector_init,
 	   GO_TYPE_DATA_VECTOR)
 
+/**
+ * gnm_go_data_vector_new_expr:
+ * @sheet: Sheet
+ * @texpr: (transfer full): expression
+ */
 GOData *
 gnm_go_data_vector_new_expr (Sheet *sheet, GnmExprTop const *texpr)
 {
@@ -1143,7 +1178,7 @@ gnm_go_data_vector_new_expr (Sheet *sheet, GnmExprTop const *texpr)
 
 /**************************************************************************/
 
-struct _GnmGODataMatrix {
+struct GnmGODataMatrix_ {
 	GODataMatrix	base;
 	GnmDependent	 dep;
 	GnmValue	*val;
@@ -1267,8 +1302,7 @@ cb_assign_matrix_val (GnmCellIter const *iter,
 	dat->row = iter->pp.eval.row - dat->first_row;
 
 	if (iter->cell != NULL) {
-		gnm_cell_eval (iter->cell);
-		v = iter->cell->value;
+		v = gnm_cell_eval (iter->cell);
 	} else
 		v = NULL;
 
@@ -1485,7 +1519,10 @@ gnm_go_data_matrix_debug_name (GnmDependent const *dep, GString *target)
 {
 	g_string_append_printf (target, "GraphMatrix%p", (void *)dep);
 }
-static DEPENDENT_MAKE_TYPE (gnm_go_data_matrix, .eval = gnm_go_data_matrix_eval, .debug_name = gnm_go_data_matrix_debug_name)
+static DEPENDENT_MAKE_TYPE (gnm_go_data_matrix,
+			    .eval = gnm_go_data_matrix_eval,
+			    .debug_name = gnm_go_data_matrix_debug_name,
+			    .q_array_context = TRUE)
 
 static void
 gnm_go_data_matrix_init (GObject *obj)
@@ -1494,10 +1531,20 @@ gnm_go_data_matrix_init (GObject *obj)
 	mat->dep.flags = gnm_go_data_matrix_get_dep_type ();
 }
 
+/**
+ * gnm_go_data_matrix_get_type:
+ *
+ * Returns: the #GType for #GnmGODataMatrix.
+ **/
 GSF_CLASS (GnmGODataMatrix, gnm_go_data_matrix,
 	   gnm_go_data_matrix_class_init, gnm_go_data_matrix_init,
 	   GO_TYPE_DATA_MATRIX)
 
+/**
+ * gnm_go_data_matrix_new_expr:
+ * @sheet: Sheet
+ * @texpr: (transfer full): expression
+ */
 GOData *
 gnm_go_data_matrix_new_expr (Sheet *sheet, GnmExprTop const *texpr)
 {

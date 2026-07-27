@@ -1,5 +1,5 @@
-#ifndef _GNM_COLLECT_H_
-# define _GNM_COLLECT_H_
+#ifndef GNM_COLLECT_H_
+#define GNM_COLLECT_H_
 
 #include <numbers.h>
 #include <gnumeric.h>
@@ -7,26 +7,39 @@
 G_BEGIN_DECLS
 
 typedef enum {
+	// String handling.  No flag means #VALUE!
 	COLLECT_IGNORE_STRINGS	= 0x01,
 	COLLECT_ZERO_STRINGS	= 0x02,
 	COLLECT_COERCE_STRINGS	= 0x04,
 
+	// Boolean handling.  No flag means #VALUE!
 	COLLECT_IGNORE_BOOLS	= 0x10,
 	COLLECT_ZEROONE_BOOLS	= 0x20,
 
+	// Error handling.  No flag means #VALUE!
+	// (But if strict, error is passed through regardless of flag.)
 	COLLECT_IGNORE_ERRORS	= 0x100,
 	COLLECT_ZERO_ERRORS	= 0x200,
 
+	// Empty handling.  No flag means #VALUE!
 	COLLECT_IGNORE_BLANKS	= 0x1000,
 	COLLECT_ZERO_BLANKS	= 0x2000,
 
 	COLLECT_IGNORE_SUBTOTAL	= 0x4000,
 
-	COLLECT_SORT            = 0x10000,
-	COLLECT_ORDER_IRRELEVANT = 0x20000,
+	COLLECT_STRINGS_DIRECT_COMBO_MASK = 0xf0000,
+	COLLECT_STRINGS_DIRECT_COMBO1 = 0x10000, // "and"
+	COLLECT_STRINGS_DIRECT_COMBO2 = 0x20000, // "sum"
+	COLLECT_STRINGS_DIRECT_COMBO3 = 0x30000, // "count"
+
+	COLLECT_BOOLS_DIRECT_COMBO_MASK = 0xf00000,
+	COLLECT_BOOLS_DIRECT_COMBO1 = 0x100000,
+
+	COLLECT_SORT            = 0x1000000,
+	COLLECT_ORDER_IRRELEVANT = 0x2000000,
 
 	/* Not for general usage.  */
-	COLLECT_INFO		= 0x1000000
+	COLLECT_INFO		= 0x10000000
 } CollectFlags;
 
 typedef int (*float_range_function_t) (gnm_float const *xs, int n, gnm_float *res);
@@ -52,6 +65,19 @@ GnmValue *collect_float_pairs (GnmValue const *v0, GnmValue const *v1,
 			       gnm_float **xs0, gnm_float **xs1, int *n,
 			       gboolean *constp);
 
+/* Utilities to interate through ranges and argument lists */
+typedef GnmValue * (*FunctionIterateCB) (GnmEvalPos const *ep, GnmValue const *value,
+					 gboolean direct, gpointer user_data);
+GnmValue *function_iterate_argument_values (GnmEvalPos const *ep,
+					    FunctionIterateCB callback,
+					    gpointer callback_closure,
+					    int argc,
+					    GnmExprConstPtr const *argv,
+					    gboolean strict,
+					    CellIterFlags iter_flags);
+
+
+
 GnmValue *float_range_function (int argc, GnmExprConstPtr const *argv,
 				GnmFuncEvalInfo *ei,
 				float_range_function_t func,
@@ -71,6 +97,12 @@ GnmValue *float_range_function2d (GnmValue const *val0, GnmValue const *val1,
 				  GnmStdError func_error,
 				  gpointer data);
 
+GnmValue *bool_range_function (int argc, GnmExprConstPtr const *argv,
+			       GnmFuncEvalInfo *ei,
+			       float_range_function_t func,
+			       CollectFlags flags,
+			       GnmStdError func_error);
+
 GnmValue *string_range_function (int argc, GnmExprConstPtr const *argv,
 				 GnmFuncEvalInfo *ei,
 				 string_range_function_t func,
@@ -85,4 +117,4 @@ void gnm_strip_missing (gnm_float* data, int *n, GSList *missing);
 
 G_END_DECLS
 
-#endif /* _GNM_COLLECT_H_ */
+#endif /* GNM_COLLECT_H_ */

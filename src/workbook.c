@@ -1,4 +1,3 @@
-
 /*
  * workbook.c: workbook model and manipulation utilities
  *
@@ -84,6 +83,13 @@ cb_exporter_finalize (Workbook *wb, GOFileSaver *saver)
 	workbook_set_file_exporter (wb, NULL);
 }
 
+/**
+ * workbook_update_history:
+ * @wb: #Workbook
+ * @type: #GnmFileSaveAsStyle
+ *
+ * Updates the file history for @wb.
+ **/
 void
 workbook_update_history (Workbook *wb, GnmFileSaveAsStyle type)
 {
@@ -111,6 +117,12 @@ workbook_update_history (Workbook *wb, GnmFileSaveAsStyle type)
 	}
 }
 
+/**
+ * workbook_update_graphs:
+ * @wb: #Workbook
+ *
+ * Updates all graphs in @wb.
+ **/
 void
 workbook_update_graphs (Workbook *wb)
 {
@@ -240,7 +252,7 @@ workbook_init (GObject *object)
 	/* default to no iteration */
 	wb->iteration.enabled = TRUE;
 	wb->iteration.max_number = 100;
-	wb->iteration.tolerance = .001;
+	wb->iteration.tolerance = GNM_const(.001);
 	wb->recalc_auto = TRUE;
 
 	workbook_set_1904 (wb, FALSE);
@@ -400,7 +412,7 @@ workbook_class_init (GObjectClass *gobject_class)
 /**
  * workbook_new:
  *
- * Returns: A new empty #Workbook with a unique name.
+ * Returns: (transfer full): A new empty #Workbook with a unique name.
  **/
 Workbook *
 workbook_new (void)
@@ -450,7 +462,7 @@ workbook_sheet_name_strip_number (char *name, unsigned int *number)
  * workbook_new_with_sheets:
  * @sheet_count: initial number of sheets to create.
  *
- * Returns: a #Workbook with @sheet_count allocated
+ * Returns: (transfer full): a #Workbook with @sheet_count allocated
  * sheets on it
  */
 Workbook *
@@ -469,6 +481,12 @@ workbook_new_with_sheets (int sheet_count)
 	return wb;
 }
 
+/**
+ * workbook_mark_dirty:
+ * @wb: #Workbook
+ *
+ * Marks @wb as dirty.
+ **/
 void
 workbook_mark_dirty (Workbook *wb)
 {
@@ -564,6 +582,13 @@ workbook_get_last_export_uri (Workbook *wb)
 	return wb->last_export_uri;
 }
 
+/**
+ * workbook_set_file_exporter:
+ * @wb: #Workbook
+ * @fs: (nullable): #GOFileSaver
+ *
+ * Sets the file exporter for @wb.
+ **/
 void
 workbook_set_file_exporter (Workbook *wb, GOFileSaver *fs)
 {
@@ -572,6 +597,13 @@ workbook_set_file_exporter (Workbook *wb, GOFileSaver *fs)
 				  wb_control_menu_state_update (wbc, MS_FILE_EXPORT_IMPORT););
 }
 
+/**
+ * workbook_set_last_export_uri:
+ * @wb: #Workbook
+ * @uri: (nullable): URI
+ *
+ * Sets the last export URI for @wb.
+ **/
 void
 workbook_set_last_export_uri (Workbook *wb, const gchar *uri)
 {
@@ -601,7 +633,7 @@ workbook_set_last_export_uri (Workbook *wb, const gchar *uri)
  * Note: this function does not honour the CELL_ITER_IGNORE_SUBTOTAL flag.
  *
  * Returns:
- *    non-%NULL on error, or VALUE_TERMINATE if some the handler requested
+ *    non-%NULL on error, or VALUE_TERMINATE if the handler requested
  *    to stop (by returning non-%NULL).
  */
 GnmValue *
@@ -742,6 +774,13 @@ workbook_foreach_name (Workbook const *wb, gboolean globals_only,
 }
 
 
+/**
+ * workbook_enable_recursive_dirty:
+ * @wb: #Workbook
+ * @enable: whether to enable recursive dirtying
+ *
+ * Returns: the previous state of recursive dirtying.
+ **/
 gboolean
 workbook_enable_recursive_dirty (Workbook *wb, gboolean enable)
 {
@@ -754,6 +793,13 @@ workbook_enable_recursive_dirty (Workbook *wb, gboolean enable)
 	return old;
 }
 
+/**
+ * workbook_set_recalcmode:
+ * @wb: #Workbook
+ * @enable: whether to enable automatic recalculation
+ *
+ * Sets the recalculation mode for @wb.
+ **/
 void
 workbook_set_recalcmode (Workbook *wb, gboolean is_auto)
 {
@@ -767,6 +813,12 @@ workbook_set_recalcmode (Workbook *wb, gboolean is_auto)
 	g_object_notify (G_OBJECT (wb), "recalc-mode");
 }
 
+/**
+ * workbook_get_recalcmode:
+ * @wb: #Workbook
+ *
+ * Returns: %TRUE if automatic recalculation is enabled for @wb.
+ **/
 gboolean
 workbook_get_recalcmode (Workbook const *wb)
 {
@@ -774,6 +826,13 @@ workbook_get_recalcmode (Workbook const *wb)
 	return wb->recalc_auto;
 }
 
+/**
+ * workbook_iteration_enabled:
+ * @wb: #Workbook
+ * @enable: whether to enable iterative calculation
+ *
+ * Sets whether iterative calculation is enabled for @wb.
+ **/
 void
 workbook_iteration_enabled (Workbook *wb, gboolean enable)
 {
@@ -781,6 +840,13 @@ workbook_iteration_enabled (Workbook *wb, gboolean enable)
 	wb->iteration.enabled = enable;
 }
 
+/**
+ * workbook_iteration_max_number:
+ * @wb: #Workbook
+ * @max_number: maximum number of iterations
+ *
+ * Sets the maximum number of iterations for @wb.
+ **/
 void
 workbook_iteration_max_number (Workbook *wb, int max_number)
 {
@@ -789,8 +855,15 @@ workbook_iteration_max_number (Workbook *wb, int max_number)
 	wb->iteration.max_number = max_number;
 }
 
+/**
+ * workbook_iteration_tolerance:
+ * @wb: #Workbook
+ * @tolerance: iterative calculation tolerance
+ *
+ * Sets the iterative calculation tolerance for @wb.
+ **/
 void
-workbook_iteration_tolerance (Workbook *wb, double tolerance)
+workbook_iteration_tolerance (Workbook *wb, gnm_float tolerance)
 {
 	g_return_if_fail (GNM_IS_WORKBOOK (wb));
 	g_return_if_fail (tolerance >= 0);
@@ -798,6 +871,12 @@ workbook_iteration_tolerance (Workbook *wb, double tolerance)
 	wb->iteration.tolerance = tolerance;
 }
 
+/**
+ * workbook_attach_view:
+ * @wbv: #WorkbookView
+ *
+ * Attaches @wbv to its associated workbook.
+ **/
 void
 workbook_attach_view (WorkbookView *wbv)
 {
@@ -813,6 +892,12 @@ workbook_attach_view (WorkbookView *wbv)
 	g_ptr_array_add (wb->wb_views, wbv);
 }
 
+/**
+ * workbook_detach_view:
+ * @wbv: #WorkbookView
+ *
+ * Detaches @wbv from its associated workbook.
+ **/
 void
 workbook_detach_view (WorkbookView *wbv)
 {
@@ -834,7 +919,7 @@ workbook_detach_view (WorkbookView *wbv)
 /*****************************************************************************/
 
 /**
- * workbook_sheets: (skip)
+ * workbook_sheets:
  * @wb: #Workbook
  *
  * Get an ordered list of the sheets in the workbook
@@ -875,6 +960,12 @@ gnm_workbook_sheets0 (Workbook const *wb)
 	return g_slist_reverse (res);
 }
 
+/**
+ * workbook_sheet_count:
+ * @wb: #Workbook
+ *
+ * Returns: the number of sheets in @wb.
+ **/
 int
 workbook_sheet_count (Workbook const *wb)
 {
@@ -927,7 +1018,7 @@ workbook_sheet_index_update (Workbook *wb, int start)
 
 /**
  * workbook_sheet_by_index:
- * @wb: workbook to lookup the sheet on
+ * @wb: workbook to look up the sheet in
  * @i: the sheet index we are looking for.
  *
  * Return value: (transfer none) (nullable): A #Sheet
@@ -947,7 +1038,7 @@ workbook_sheet_by_index (Workbook const *wb, int i)
 
 /**
  * workbook_sheet_by_name:
- * @wb: workbook to lookup the sheet on
+ * @wb: workbook to look up the sheet in
  * @sheet_name: the sheet name we are looking for.  This is case insensitive.
  *
  * Return value: (transfer none) (nullable): A #Sheet
@@ -1005,7 +1096,7 @@ workbook_focus_other_sheet (Workbook *wb, Sheet *sheet)
  *
  * Remove the visible #SheetControls of a sheet and shut them down politely.
  *
- * Returns %TRUE if there are any remaining sheets visible
+ * Returns: %TRUE if there are any remaining sheets visible
  **/
 static gboolean
 workbook_sheet_remove_controls (Workbook *wb, Sheet *sheet)
@@ -1250,7 +1341,7 @@ workbook_sheet_move (Sheet *sheet, int direction)
  * @always_suffix: if true, add suffix even if the name "base" is not in use.
  * @handle_counter: strip counter if necessary
  *
- * Gets a new unquoted name for a sheets such that it does not exist on the
+ * Gets a new unquoted name for a sheet such that it does not exist on the
  * workbook.
  *
  * Returns: (transfer full): a unique sheet name
@@ -1279,7 +1370,8 @@ workbook_sheet_get_free_name (Workbook *wb,
 		name_format = "%s%u";
 
 	limit = workbook_sheet_count (wb) + 2;
-	name = g_malloc (strlen (base_name) + strlen (name_format) + 10);
+	name = g_malloc (strlen (base_name) + strlen (name_format) +
+			 4 * sizeof (i));
 	while (limit-- > 0) {
 		i++;
 		sprintf (name, name_format, base_name, i);
@@ -1303,6 +1395,7 @@ workbook_sheet_get_free_name (Workbook *wb,
  * @wb: #Workbook in which to rename sheets
  * @sheet_indices: (element-type int): list of sheet indices (ignore -1)
  * @new_names: (element-type utf8): list of new names
+ * @cc: command context
  *
  * Adjusts the names of the sheets. We assume that everything is
  * valid. If in doubt call workbook_sheet_reorder_check first.
@@ -1375,7 +1468,7 @@ workbook_find_command (Workbook *wb, gboolean is_undo, gpointer cmd)
  *
  * Adjusts the order of the sheets.
  *
- * Returns %FALSE when it was successful
+ * Returns: %FALSE when it was successful
  **/
 gboolean
 workbook_sheet_reorder (Workbook *wb, GSList *new_order)
@@ -1431,6 +1524,13 @@ workbook_set_date_conv (Workbook *wb, GODateConventions const *date_conv)
 	wb->date_conv = date_conv;
 }
 
+/**
+ * workbook_set_1904:
+ * @wb: #Workbook
+ * @base1904: whether to use the 1904 date system
+ *
+ * Sets whether @wb uses the 1904 date system.
+ **/
 void
 workbook_set_1904 (Workbook *wb, gboolean base1904)
 {
@@ -1484,7 +1584,7 @@ typedef struct {
 	GSList *properties;
 } WorkbookSheetStateSheet;
 
-struct _WorkbookSheetState {
+struct WorkbookSheetState_ {
 	GSList *properties;
 	int n_sheets;
 	WorkbookSheetStateSheet *sheets;
@@ -1510,6 +1610,12 @@ workbook_sheet_state_new (const Workbook *wb)
 	return wss;
 }
 
+/**
+ * workbook_sheet_state_unref:
+ * @wss: (nullable) (transfer full): #WorkbookSheetState
+ *
+ * Decreases the reference count of @wss. If it reaches 0, the state is destroyed.
+ **/
 void
 workbook_sheet_state_unref (WorkbookSheetState *wss)
 {
@@ -1536,6 +1642,11 @@ workbook_sheet_state_ref (WorkbookSheetState *wss)
 	return wss;
 }
 
+/**
+ * workbook_sheet_state_get_type:
+ *
+ * Returns: the GType for #WorkbookSheetState.
+ **/
 GType
 workbook_sheet_state_get_type (void)
 {
@@ -1549,6 +1660,13 @@ workbook_sheet_state_get_type (void)
 	return t;
 }
 
+/**
+ * workbook_sheet_state_restore:
+ * @wb: #Workbook
+ * @wss: #WorkbookSheetState
+ *
+ * Restores the sheet state from @wss to @wb.
+ **/
 void
 workbook_sheet_state_restore (Workbook *wb, const WorkbookSheetState *wss)
 {
@@ -1589,6 +1707,12 @@ workbook_sheet_state_restore (Workbook *wb, const WorkbookSheetState *wss)
 	go_object_properties_apply (G_OBJECT (wb), wss->properties, TRUE);
 }
 
+/**
+ * workbook_sheet_state_size:
+ * @wss: #WorkbookSheetState
+ *
+ * Returns: the size of the state information in @wss.
+ **/
 int
 workbook_sheet_state_size (const WorkbookSheetState *wss)
 {

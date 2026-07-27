@@ -1,5 +1,5 @@
-#ifndef _GNM_SHEET_OBJECT_H_
-# define _GNM_SHEET_OBJECT_H_
+#ifndef GNM_SHEET_OBJECT_H_
+#define GNM_SHEET_OBJECT_H_
 
 #include <gnumeric.h>
 #include <gsf/gsf-output.h>
@@ -23,7 +23,7 @@ typedef enum {
 GType gnm_sheet_object_anchor_mode_get_type (void);
 #define GNM_SHEET_OBJECT_ANCHOR_MODE_TYPE (gnm_sheet_object_anchor_mode_get_type ())
 
-struct _SheetObjectAnchor {
+struct SheetObjectAnchor_ {
 	GODrawingAnchor	base;
 
 	GnmRange cell_bound; /* cellpos containing corners */
@@ -103,7 +103,7 @@ GOUndo *sheet_object_move_do     (GSList *objects, GSList *anchors,
 				  gboolean objects_created);
 GSList *sheet_objects_get        (Sheet const *sheet, GnmRange const *r,
 				  GType t);
-void    sheet_objects_dup	 (Sheet const *src, Sheet *dst, GnmRange *range);
+void    sheet_objects_dup	 (Sheet const *src, Sheet *dst, GnmRange const *range);
 
 void     sheet_object_direction_set (SheetObject *so, gdouble const *coords);
 gboolean sheet_object_rubber_band_directly (SheetObject const *so);
@@ -153,4 +153,4 @@ void sheet_objects_init (void);
 void sheet_objects_shutdown (void);
 G_END_DECLS
 
-#endif /* _GNM_SHEET_OBJECT_H_ */
+#endif /* GNM_SHEET_OBJECT_H_ */
