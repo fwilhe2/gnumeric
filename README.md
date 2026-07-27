@@ -9,11 +9,27 @@ This is a fork of http://www.gnumeric.org/ used for educational purposes.
 
 ## Building
 
+Gnumeric requires `libgoffice >= 0.10.61`, which is newer than any current
+distribution package (Ubuntu 24.04 ships 0.10.56), so goffice has to be built
+from source first:
+
+```
+git clone --depth 1 https://gitlab.gnome.org/GNOME/goffice.git
+cd goffice
+NOCONFIGURE=1 ./autogen.sh
+./configure --prefix=/usr/local
+make && sudo make install && sudo ldconfig
+```
+
+Then build gnumeric itself:
+
 ```
 ./autogen.sh
 ./configure
 make
 ```
+
+The [DevContainer](.devcontainer/Dockerfile) does all of this for you.
 
 ## Running the locally built version
 
