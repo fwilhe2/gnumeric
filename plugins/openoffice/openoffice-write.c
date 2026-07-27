@@ -28,6 +28,7 @@
 
 #include <gnumeric-config.h>
 #include <gnumeric.h>
+#include "openoffice.h"
 #include <workbook-view.h>
 #include <goffice/goffice.h>
 #include <gnm-format.h>
@@ -114,8 +115,6 @@ typedef struct {
 	Workbook const	   *wb;
 	Sheet const	   *sheet;
 	GnmConventions *conv;
-	GHashTable *openformula_namemap;
-	GHashTable *openformula_handlermap;
 	GSList *row_styles;
 	GSList *col_styles;
 	GHashTable *cell_styles;
@@ -157,10 +156,20 @@ typedef struct {
 	float sheet_progress;
 } GnmOOExport;
 
-static inline GnmOOExport *
+/*
+ * What hangs off the OpenFormula export conventions.  Only the memoized
+ * function name maps, so that the sfods exporter can use the same conventions
+ * without a GnmOOExport around.
+ */
+typedef struct {
+	GHashTable *namemap;
+	GHashTable *handlermap;
+} ODFExprConvData;
+
+static inline ODFExprConvData *
 odf_get_data (GnmConventions const *convs)
 {
-	return (GnmOOExport *)convs->pdata;
+	return (ODFExprConvData *)convs->pdata;
 }
 
 
@@ -1525,7 +1534,7 @@ odf_save_style_map_double_f (GnmOOExport *state, GString *str, GnmStyleCond cons
 	g_string_append_c (str, ')');
 }
 
-static char *
+char *
 odf_strip_brackets (char *string)
 {
 	char *closing;
@@ -2661,14 +2670,14 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 		{ "ZTEST","ZTEST" },
 		{ NULL, NULL }
 	};
-	GnmOOExport *state = odf_get_data (out->convs);
+	ODFExprConvData *cd = odf_get_data (out->convs);
 	GHashTable *namemap;
 	GHashTable *handlermap;
 
 	char const *name = gnm_func_get_name (func->func, FALSE);
 	gboolean (*handler) (GnmConventionsOut *out, GnmExprFunction const *func);
 
-	if (NULL == state->openformula_namemap) {
+	if (NULL == cd->namemap) {
 		guint i;
 		namemap = g_hash_table_new (go_ascii_strcase_hash,
 					    go_ascii_strcase_equal);
@@ -2676,11 +2685,11 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 			g_hash_table_insert (namemap,
 					     (gchar *) sc_func_renames[i].gnm_name,
 					     (gchar *) sc_func_renames[i].odf_name);
-		state->openformula_namemap = namemap;
+		cd->namemap = namemap;
 	} else
-		namemap = state->openformula_namemap;
+		namemap = cd->namemap;
 
-	if (NULL == state->openformula_handlermap) {
+	if (NULL == cd->handlermap) {
 		guint i;
 		handlermap = g_hash_table_new (go_ascii_strcase_hash,
 					       go_ascii_strcase_equal);
@@ -2688,9 +2697,9 @@ odf_expr_func_handler (GnmConventionsOut *out, GnmExprFunction const *func)
 			g_hash_table_insert (handlermap,
 					     (gchar *) sc_func_handlers[i].gnm_name,
 					     sc_func_handlers[i].handler);
-		state->openformula_handlermap = handlermap;
+		cd->handlermap = handlermap;
 	} else
-		handlermap = state->openformula_handlermap;
+		handlermap = cd->handlermap;
 
 	handler = g_hash_table_lookup (handlermap, name);
 
@@ -2738,8 +2747,26 @@ odf_boolean_handler (GnmConventionsOut *out, gboolean val)
 }
 
 
-static GnmConventions *
-odf_expr_conventions_new (GnmOOExport *state)
+static void
+odf_expr_conv_data_free (gpointer data)
+{
+	ODFExprConvData *cd = data;
+
+	if (cd->namemap)
+		g_hash_table_destroy (cd->namemap);
+	if (cd->handlermap)
+		g_hash_table_destroy (cd->handlermap);
+	g_free (cd);
+}
+
+/**
+ * odf_expr_conventions_new:
+ *
+ * Returns: (transfer full): OpenFormula conventions for writing expressions.
+ * Shared with the sfods exporter.
+ **/
+GnmConventions *
+odf_expr_conventions_new (void)
 {
 	GnmConventions *conv = gnm_conventions_new ();
 
@@ -2763,7 +2790,8 @@ odf_expr_conventions_new (GnmOOExport *state)
 			(l10 == (int)l10 ? 0 : 1);
 	}
 
-	gnm_conventions_set_extension (conv, state, NULL);
+	gnm_conventions_set_extension (conv, g_new0 (ODFExprConvData, 1),
+				       odf_expr_conv_data_free);
 
 	return conv;
 }
@@ -9037,9 +9065,7 @@ openoffice_file_save_real (G_GNUC_UNUSED  GOFileSaver const *fs, GOIOContext *io
 	state.ioc = ioc;
 	state.wbv = wbv;
 	state.wb  = wb_view_get_workbook (wbv);
-	state.conv = odf_expr_conventions_new (&state);
-	state.openformula_namemap = NULL;
-	state.openformula_handlermap = NULL;
+	state.conv = odf_expr_conventions_new ();
 	state.graphs = g_hash_table_new_full (g_direct_hash, g_direct_equal,
 					       NULL, (GDestroyNotify) g_free);
 	state.images = g_hash_table_new_full (g_direct_hash, g_direct_equal,
@@ -9172,10 +9198,6 @@ openoffice_file_save_real (G_GNUC_UNUSED  GOFileSaver const *fs, GOIOContext *io
 	}
 
 	g_object_unref (state.conv);
-	if (state.openformula_namemap)
-		g_hash_table_destroy (state.openformula_namemap);
-	if (state.openformula_handlermap)
-		g_hash_table_destroy (state.openformula_handlermap);
 
 	go_io_value_progress_update (state.ioc, PROGRESS_STEPS);
 	go_io_progress_unset (state.ioc);

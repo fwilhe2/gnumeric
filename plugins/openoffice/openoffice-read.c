@@ -24,6 +24,7 @@
 
 #include <gnumeric-config.h>
 #include <gnumeric.h>
+#include "openoffice.h"
 
 #include <gnm-plugin.h>
 #include <workbook-view.h>
@@ -480,8 +481,6 @@ struct OOParseState_ {
 	GnmFilter	*filter;
 
 	GnmConventions  *convs[NUM_FORMULAE_SUPPORTED];
-	GHashTable *openformula_namemap;
-	GHashTable *openformula_handlermap;
 
 	struct {
 		struct {
@@ -516,10 +515,29 @@ typedef struct {
 	char *style_name;
 } span_style_info_t;
 
-static inline OOParseState *
+/*
+ * What hangs off the OpenFormula import conventions.  The parse state is
+ * optional: the sfods importer needs the same conventions without a full ODF
+ * import in progress.  The function name maps live here rather than in
+ * OOParseState so that both users get the memoization.
+ */
+typedef struct {
+	OOParseState *state;	/* NULL when not importing ODF */
+	GHashTable *namemap;
+	GHashTable *handlermap;
+} ODFConvData;
+
+static inline ODFConvData *
 odf_get_data (GnmConventions const *convs)
 {
-	return (OOParseState *)convs->pdata;
+	return (ODFConvData *)convs->pdata;
+}
+
+static inline OOParseState *
+odf_get_state (GnmConventions const *convs)
+{
+	ODFConvData *cd = convs ? odf_get_data (convs) : NULL;
+	return cd ? cd->state : NULL;
 }
 
 typedef struct {
@@ -1692,7 +1710,7 @@ oo_rangeref_parse (GnmRangeRef *ref, char const *start, GnmParsePos const *pp,
 	char *external = NULL;
 	char *external_sheet_1 = NULL;
 	char *external_sheet_2 = NULL;
-	OOParseState *state = convs ? odf_get_data (convs) : NULL;
+	OOParseState *state = odf_get_state (convs);
 
 	ptr = odf_parse_external (start, &external, convs);
 
@@ -2305,9 +2323,22 @@ static GnmExpr const *
 oo_func_map_in (GnmConventions const *convs, Workbook *scope,
 		char const *name, GnmExprList *args);
 
-static GnmConventions *
-oo_conventions_new (OOParseState *state, GsfXMLIn *xin)
+static void
+odf_conv_data_free (gpointer data)
 {
+	ODFConvData *cd = data;
+
+	if (cd->namemap)
+		g_hash_table_destroy (cd->namemap);
+	if (cd->handlermap)
+		g_hash_table_destroy (cd->handlermap);
+	g_free (cd);
+}
+
+static GnmConventions *
+oo_conventions_new (OOParseState *state)
+{
+	ODFConvData *cd;
 	GnmConventions *conv = gnm_conventions_new ();
 	conv->decode_ampersands	= TRUE;
 	conv->exp_is_left_associative = TRUE;
@@ -2325,13 +2356,28 @@ oo_conventions_new (OOParseState *state, GsfXMLIn *xin)
 	conv->input.name        = odf_name_parser;
 	conv->input.name_validate = odf_expr_name_validate;
 	conv->sheet_name_sep	= '.';
-	gnm_conventions_set_extension (conv, state, NULL);
+
+	cd = g_new0 (ODFConvData, 1);
+	cd->state = state;
+	gnm_conventions_set_extension (conv, cd, odf_conv_data_free);
 
 	return conv;
 }
 
+/**
+ * odf_conventions_new:
+ *
+ * Returns: (transfer full): OpenFormula conventions for reading expressions,
+ * not tied to an ODF import in progress.  Shared with the sfods importer.
+ **/
+GnmConventions *
+odf_conventions_new (void)
+{
+	return oo_conventions_new (NULL);
+}
+
 static void
-oo_load_convention (OOParseState *state, GsfXMLIn *xin, OOFormula type)
+oo_load_convention (OOParseState *state, OOFormula type)
 {
 	GnmConventions *convs;
 
@@ -2343,13 +2389,13 @@ oo_load_convention (OOParseState *state, GsfXMLIn *xin, OOFormula type)
 		convs->exp_is_left_associative = TRUE;
 		break;
 	case FORMULA_OLD_OPENOFFICE:
-		convs = oo_conventions_new (state, xin);
+		convs = oo_conventions_new (state);
 		convs->sheet_name_sep	= '!'; /* Note that we are using this also as a marker*/
 		                               /* in the function handlers */
 		break;
 	case FORMULA_OPENFORMULA:
 	default:
-		convs = oo_conventions_new (state, xin);
+		convs = oo_conventions_new (state);
 		break;
 	}
 
@@ -2364,7 +2410,7 @@ oo_expr_parse_str_try (GsfXMLIn *xin, char const *str,
 	OOParseState *state = (OOParseState *)xin->user_state;
 
 	if (state->convs[type] == NULL)
-		oo_load_convention (state, xin, type);
+		oo_load_convention (state, type);
 	return gnm_expr_parse_str (str, pp, flags | GNM_EXPR_PARSE_UNKNOWN_NAMES_ARE_INVALID,
 				    state->convs[type], perr);
 }
@@ -13904,22 +13950,22 @@ oo_func_map_in (GnmConventions const *convs, Workbook *scope,
 	GnmFunc  *f = NULL;
 	int i;
 	GnmExpr const * (*handler) (GnmConventions const *convs, Workbook *scope, GnmExprList *args);
-	OOParseState *state = odf_get_data (convs);
+	ODFConvData *cd = odf_get_data (convs);
 	GHashTable *namemap;
 	GHashTable *handlermap;
 
-	if (NULL == state->openformula_namemap) {
+	if (NULL == cd->namemap) {
 		namemap = g_hash_table_new (go_ascii_strcase_hash,
 					    go_ascii_strcase_equal);
 		for (i = 0; sc_func_renames[i].oo_name; i++)
 			g_hash_table_insert (namemap,
 				(gchar *) sc_func_renames[i].oo_name,
 				(gchar *) sc_func_renames[i].gnm_name);
-		state->openformula_namemap = namemap;
+		cd->namemap = namemap;
 	} else
-		namemap = state->openformula_namemap;
+		namemap = cd->namemap;
 
-	if (NULL == state->openformula_handlermap) {
+	if (NULL == cd->handlermap) {
 		guint i;
 		handlermap = g_hash_table_new (go_ascii_strcase_hash,
 					       go_ascii_strcase_equal);
@@ -13927,9 +13973,9 @@ oo_func_map_in (GnmConventions const *convs, Workbook *scope,
 			g_hash_table_insert (handlermap,
 					     (gchar *) sc_func_handlers[i].gnm_name,
 					     sc_func_handlers[i].handler);
-		state->openformula_handlermap = handlermap;
+		cd->handlermap = handlermap;
 	} else
-		handlermap = state->openformula_handlermap;
+		handlermap = cd->handlermap;
 
 	handler = g_hash_table_lookup (handlermap, name);
 	if (handler != NULL) {
@@ -14183,8 +14229,6 @@ openoffice_file_open (G_GNUC_UNUSED GOFileOpener const *fo, GOIOContext *io_cont
 	state.sheet_order = NULL;
 	for (i = 0; i<NUM_FORMULAE_SUPPORTED; i++)
 		state.convs[i] = NULL;
-	state.openformula_namemap = NULL;
-	state.openformula_handlermap = NULL;
 	state.cur_format.accum = NULL;
 	state.cur_format.percentage = FALSE;
 	state.filter = NULL;
@@ -14371,10 +14415,6 @@ openoffice_file_open (G_GNUC_UNUSED GOFileOpener const *fo, GOIOContext *io_cont
 	g_hash_table_destroy (state.strings);
 	g_hash_table_destroy (state.chart.arrow_markers);
 	g_slist_free_full (state.sheet_order, (GDestroyNotify)g_free);
-	if (state.openformula_namemap)
-		g_hash_table_destroy (state.openformula_namemap);
-	if (state.openformula_handlermap)
-		g_hash_table_destroy (state.openformula_handlermap);
 	g_object_unref (contents);
 	gnm_expr_sharer_unref (state.sharer);
 	g_free (state.chart.cs_enhanced_path);
