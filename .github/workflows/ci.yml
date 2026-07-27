@@ -3,33 +3,65 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  # Everything (goffice + gnumeric) is installed into this prefix so the
+  # uploaded artifact is self-contained.
+  PREFIX: ${{ github.workspace }}/mybuild
+  PKG_CONFIG_PATH: ${{ github.workspace }}/mybuild/lib/pkgconfig
+
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v3
-    - name: add custom deb repository
-      uses: myci-actions/add-deb-repo@10
-      with:
-        repo: deb-src http://azure.archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse
-        repo-name: sources
+    - uses: actions/checkout@v4
+
+    - name: Enable deb-src repositories
+      run: |
+        if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+        else
+          sudo sed -i 's/^# *deb-src/deb-src/' /etc/apt/sources.list
+        fi
+        sudo apt-get update -y
+
     - name: Install build dependencies
-      run: sudo apt-get update -y && sudo apt-get -y build-dep gnumeric && sudo apt-get -y install gtk-doc-tools yelp yelp-tools
-    - run: mkdir mybuild
+      run: |
+        sudo apt-get -y build-dep goffice gnumeric
+        sudo apt-get -y install gtk-doc-tools yelp yelp-tools
+
+    # Ubuntu ships at most goffice 0.10.57 (24.04 has 0.10.56), but gnumeric
+    # master requires >= 0.10.61, so the distro package cannot be used.
+    - name: Build goffice from source
+      run: |
+        git clone --depth 1 https://gitlab.gnome.org/GNOME/goffice.git /tmp/goffice
+        cd /tmp/goffice
+        NOCONFIGURE=1 ./autogen.sh
+        ./configure --prefix="$PREFIX"
+        make -j"$(nproc)"
+        make install
+
     - name: Autogen
-      run: ./autogen.sh
+      run: NOCONFIGURE=1 ./autogen.sh
+
     - name: Configure
-      run: ./configure --prefix=$PWD/mybuild
+      run: ./configure --prefix="$PREFIX"
+
     - name: Make
-      run: make
+      run: make -j"$(nproc)"
+
     - name: Make install to a local directory
-      run: sudo make install
-    - run: echo 'LD_LIBRARY_PATH=$PWD/lib ./bin/gnumeric' > $PWD/mybuild/run.sh
-    - run: chmod +x $PWD/mybuild/run.sh
+      run: make install
+
+    - name: Add launcher script
+      run: |
+        echo 'LD_LIBRARY_PATH=$PWD/lib ./bin/gnumeric' > "$PREFIX/run.sh"
+        chmod +x "$PREFIX/run.sh"
+
     - name: Tar files to preserve file permissions
-      run: tar -cvf my-gnumeric-build.tar mybuild
+      run: tar -cf my-gnumeric-build.tar -C "$GITHUB_WORKSPACE" mybuild
+
     - name: Upload built Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: my-gnumeric-build
         path: my-gnumeric-build.tar
